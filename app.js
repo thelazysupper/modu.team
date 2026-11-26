@@ -720,7 +720,7 @@ function setActiveNavHighlight(activeId) {
 }
 
 function hideAllViews() {
-  ['view-hub', 'view-app-group', 'view-channels', 'view-budget', 'view-contacts', 'view-leads', 'view-integrations', 'view-competitors', 'view-aeo-seo', 'view-marketing-reports', 'view-app-detail', 'view-generic-section'].forEach(id => {
+  ['view-hub', 'view-app-group', 'view-channels', 'view-budget', 'view-contacts', 'view-leads', 'view-integrations', 'view-competitors', 'view-aeo-seo', 'view-marketing-reports', 'view-app-detail', 'view-wishlist', 'view-generic-section'].forEach(id => {
     document.getElementById(id)?.classList.add('hidden');
   });
 }
@@ -981,15 +981,278 @@ function openApp(appId) {
   setActiveNavHighlight(`side-app-${app.id}`);
 }
 
+let wishlistStatusFilter = 'all';
+let wishlistItems = [
+  {
+    id: 1,
+    title: 'Campaign Calendar',
+    category: 'New App',
+    priority: 'High',
+    status: 'Planned',
+    author: 'Marketing Team',
+    description: 'Shared monthly calendar for launches, newsletters, and paid campaigns across channels.',
+    votes: 6,
+    voted: false,
+    createdAt: '2026-11-20'
+  },
+  {
+    id: 2,
+    title: 'HubSpot & Pipedrive Sync',
+    category: 'Integration',
+    priority: 'High',
+    status: 'In Progress',
+    author: 'Growth Ops',
+    description: 'Two-way sync between Leads stages and external CRM pipelines.',
+    votes: 4,
+    voted: false,
+    createdAt: '2026-11-22'
+  },
+  {
+    id: 3,
+    title: 'UTM Link Builder',
+    category: 'Automation',
+    priority: 'Medium',
+    status: 'Requested',
+    author: 'Performance Team',
+    description: 'Generate and track standardized UTM parameters per channel and campaign.',
+    votes: 3,
+    voted: false,
+    createdAt: '2026-11-24'
+  }
+];
+
+function toggleWishlistForm(show, editId = null) {
+  const panel = document.getElementById('wishlist-form-panel');
+  if (!panel) return;
+  if (!show) {
+    panel.classList.add('hidden');
+    return;
+  }
+  if (editId) {
+    const item = wishlistItems.find(w => w.id === editId);
+    if (!item) return;
+    document.getElementById('wishlist-form-title').textContent = 'Edit Wishlist Item';
+    document.getElementById('wish-edit-id').value = String(item.id);
+    document.getElementById('wish-title').value = item.title || '';
+    document.getElementById('wish-category').value = item.category || 'New App';
+    document.getElementById('wish-priority').value = item.priority || 'Medium';
+    document.getElementById('wish-status').value = item.status || 'Requested';
+    document.getElementById('wish-author').value = item.author || '';
+    document.getElementById('wish-desc').value = item.description || '';
+  } else {
+    document.getElementById('wishlist-form-title').textContent = 'Add App or Feature Request';
+    document.getElementById('wish-edit-id').value = '';
+    document.getElementById('wish-title').value = '';
+    document.getElementById('wish-category').value = 'New App';
+    document.getElementById('wish-priority').value = 'Medium';
+    document.getElementById('wish-status').value = 'Requested';
+    document.getElementById('wish-author').value = '';
+    document.getElementById('wish-desc').value = '';
+  }
+  panel.classList.remove('hidden');
+  document.getElementById('wish-title')?.focus();
+}
+
+function saveWishlistItem() {
+  const editId = document.getElementById('wish-edit-id').value;
+  const title = (document.getElementById('wish-title').value || '').trim();
+  const category = document.getElementById('wish-category').value || 'New App';
+  const priority = document.getElementById('wish-priority').value || 'Medium';
+  const status = document.getElementById('wish-status').value || 'Requested';
+  const author = (document.getElementById('wish-author').value || '').trim() || 'Team';
+  const description = (document.getElementById('wish-desc').value || '').trim();
+
+  if (!title) {
+    document.getElementById('wish-title').focus();
+    return;
+  }
+
+  if (editId) {
+    const item = wishlistItems.find(w => w.id === Number(editId));
+    if (item) {
+      item.title = title;
+      item.category = category;
+      item.priority = priority;
+      item.status = status;
+      item.author = author;
+      item.description = description;
+    }
+  } else {
+    wishlistItems.unshift({
+      id: Date.now(),
+      title,
+      category,
+      priority,
+      status,
+      author,
+      description,
+      votes: 1,
+      voted: true,
+      createdAt: new Date().toISOString().slice(0, 10)
+    });
+  }
+
+  toggleWishlistForm(false);
+  renderWishlistView();
+  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+}
+
+function toggleWishVote(id) {
+  const item = wishlistItems.find(w => w.id === id);
+  if (!item) return;
+  if (item.voted) {
+    item.voted = false;
+    item.votes = Math.max(0, (item.votes || 0) - 1);
+  } else {
+    item.voted = true;
+    item.votes = (item.votes || 0) + 1;
+  }
+  renderWishlistView();
+  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+}
+
+function updateWishStatus(id, newStatus) {
+  const item = wishlistItems.find(w => w.id === id);
+  if (!item) return;
+  item.status = newStatus;
+  renderWishlistView();
+  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+}
+
+function deleteWishlistItem(id) {
+  const item = wishlistItems.find(w => w.id === id);
+  confirmDeleteAction(`Delete "${item?.title || 'this wishlist item'}"?`, () => {
+    wishlistItems = wishlistItems.filter(w => w.id !== id);
+    renderWishlistView();
+    if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+  });
+}
+
+function setWishlistStatusFilter(status) {
+  wishlistStatusFilter = status;
+  document.querySelectorAll('#wishlist-status-filters button[data-wish-filter]').forEach(btn => {
+    const active = btn.getAttribute('data-wish-filter') === status;
+    btn.className = active
+      ? 'px-3 py-1.5 rounded-lg text-xs font-medium bg-[#0f172a] text-white'
+      : 'px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-slate-200 text-slate-600 hover:bg-slate-50';
+  });
+  renderWishlistView();
+}
+
+function renderWishlistView() {
+  const total = wishlistItems.length;
+  const requestedCount = wishlistItems.filter(w => w.status === 'Requested').length;
+  const plannedCount = wishlistItems.filter(w => w.status === 'Planned' || w.status === 'In Progress').length;
+  const shippedCount = wishlistItems.filter(w => w.status === 'Shipped').length;
+
+  const kTotal = document.getElementById('wish-kpi-total');
+  const kReq = document.getElementById('wish-kpi-requested');
+  const kPlan = document.getElementById('wish-kpi-planned');
+  const kShip = document.getElementById('wish-kpi-shipped');
+  if (kTotal) kTotal.textContent = String(total);
+  if (kReq) kReq.textContent = String(requestedCount);
+  if (kPlan) kPlan.textContent = String(plannedCount);
+  if (kShip) kShip.textContent = String(shippedCount);
+
+  const query = (document.getElementById('wishlist-search')?.value || '').trim().toLowerCase();
+  const sortBy = document.getElementById('wishlist-sort')?.value || 'votes';
+
+  let rows = wishlistItems.filter(w => {
+    if (wishlistStatusFilter !== 'all' && w.status !== wishlistStatusFilter) return false;
+    if (query) {
+      const hay = `${w.title} ${w.category} ${w.description} ${w.author}`.toLowerCase();
+      if (!hay.includes(query)) return false;
+    }
+    return true;
+  });
+
+  const prioRank = { High: 3, Medium: 2, Low: 1 };
+  if (sortBy === 'votes') {
+    rows = [...rows].sort((a, b) => (b.votes || 0) - (a.votes || 0) || b.id - a.id);
+  } else if (sortBy === 'newest') {
+    rows = [...rows].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')) || b.id - a.id);
+  } else if (sortBy === 'priority') {
+    rows = [...rows].sort((a, b) => (prioRank[b.priority] || 0) - (prioRank[a.priority] || 0) || (b.votes || 0) - (a.votes || 0));
+  }
+
+  const emptyEl = document.getElementById('wishlist-empty-state');
+  const gridEl = document.getElementById('wishlist-grid');
+  if (!emptyEl || !gridEl) return;
+
+  if (rows.length === 0) {
+    emptyEl.classList.remove('hidden');
+    gridEl.classList.add('hidden');
+    return;
+  }
+  emptyEl.classList.add('hidden');
+  gridEl.classList.remove('hidden');
+
+  const prioCls = {
+    High: 'bg-[#fef2f2] text-[#b91c1c] border-[#fecaca]',
+    Medium: 'bg-[#fffbeb] text-[#b45309] border-[#fde68a]',
+    Low: 'bg-slate-100 text-slate-600 border-slate-200'
+  };
+  const statusCls = {
+    Requested: 'bg-slate-100 text-slate-700 border-slate-200',
+    Planned: 'bg-[#ede9fe] text-[#6d28d9] border-[#ddd6fe]',
+    'In Progress': 'bg-[#eff6ff] text-[#1d4ed8] border-[#bfdbfe]',
+    Shipped: 'bg-[#d1fae5] text-[#047857] border-[#a7f3d0]'
+  };
+
+  gridEl.innerHTML = rows.map(w => `
+    <div class="group rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 card-shadow flex items-start justify-between gap-4">
+      <div class="flex items-start gap-3.5 min-w-0 flex-1">
+        <button
+          type="button"
+          onclick="toggleWishVote(${w.id})"
+          class="w-12 py-2 rounded-xl border text-center shrink-0 transition-colors ${w.voted ? 'bg-[#0f172a] border-[#0f172a] text-white' : 'bg-[#fbfcfd] border-slate-200 text-slate-700 hover:bg-slate-100'}"
+          title="Upvote request"
+        >
+          <div class="text-[10px] leading-none">▲</div>
+          <div class="text-xs font-bold tabular-nums mt-1">${w.votes || 0}</div>
+        </button>
+
+        <div class="min-w-0 flex-1 space-y-1.5">
+          <div class="flex flex-wrap items-center gap-2">
+            <h4 class="text-sm font-bold text-slate-900">${w.title}</h4>
+            <span class="px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200/70">${w.category}</span>
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold border ${prioCls[w.priority] || prioCls.Medium}">${w.priority}</span>
+          </div>
+          ${w.description ? `<p class="text-xs text-slate-600">${w.description}</p>` : ''}
+          <div class="flex flex-wrap items-center gap-3 text-[11px] text-slate-400 pt-0.5">
+            <span>Requested by <strong class="font-medium text-slate-600">${w.author || 'Team'}</strong></span>
+            ${w.createdAt ? `<span>· ${w.createdAt}</span>` : ''}
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 shrink-0">
+        <select
+          onchange="updateWishStatus(${w.id}, this.value)"
+          class="h-7 px-2 rounded-lg border text-[11px] font-semibold cursor-pointer focus:outline-none ${statusCls[w.status] || statusCls.Requested}"
+        >
+          ${['Requested', 'Planned', 'In Progress', 'Shipped'].map(st => `<option value="${st}" ${w.status === st ? 'selected' : ''}>${st}</option>`).join('')}
+        </select>
+        ${renderActionMenuHtml(`toggleWishlistForm(true, ${w.id})`, `deleteWishlistItem(${w.id})`)}
+      </div>
+    </div>
+  `).join('');
+}
+
 function openSection(sec) {
   hideAllViews();
-  document.getElementById('view-generic-section').classList.remove('hidden');
-  const titles = {
-    wishlist: { t: 'Wishlist', d: 'Add proposals and requests for new marketing apps.' },
-    settings: { t: 'Settings', d: 'Configure workspace preferences and access.' }
-  };
-  document.getElementById('generic-section-title').textContent = titles[sec].t;
-  document.getElementById('generic-section-desc').textContent = titles[sec].d;
+  if (sec === 'wishlist') {
+    document.getElementById('view-wishlist').classList.remove('hidden');
+    renderWishlistView();
+  } else {
+    document.getElementById('view-generic-section').classList.remove('hidden');
+    const titles = {
+      wishlist: { t: 'Wishlist', d: 'Add proposals and requests for new marketing apps.' },
+      settings: { t: 'Settings', d: 'Configure workspace preferences and access.' }
+    };
+    document.getElementById('generic-section-title').textContent = titles[sec].t;
+    document.getElementById('generic-section-desc').textContent = titles[sec].d;
+  }
   setActiveNavHighlight(`nav-${sec}`);
   syncRouteUrl(`/${sec}`);
 }
@@ -6014,6 +6277,7 @@ function getWorkspaceSnapshot() {
     integrationsList,
     competitorsList,
     aeoSeoEntries,
+    wishlistItems,
     appGroups,
     appGroupMap
   };
@@ -6044,6 +6308,7 @@ function applyWorkspaceSnapshot(snap) {
     if (Array.isArray(snap.integrationsList)) integrationsList = snap.integrationsList;
     if (Array.isArray(snap.competitorsList)) competitorsList = snap.competitorsList;
     if (Array.isArray(snap.aeoSeoEntries)) aeoSeoEntries = snap.aeoSeoEntries;
+    if (Array.isArray(snap.wishlistItems)) wishlistItems = snap.wishlistItems;
     if (Array.isArray(snap.appGroups)) appGroups = snap.appGroups;
     if (snap.appGroupMap && typeof snap.appGroupMap === 'object') {
       apps.forEach(a => {

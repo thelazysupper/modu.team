@@ -2285,6 +2285,156 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
         </div>
       </section>
 
+      <!-- VIEW 3J: WISHLIST -->
+      <section id="view-wishlist" class="hidden max-w-6xl mx-auto space-y-6 animate-fade">
+        <div class="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-200/80">
+          <div class="flex items-center gap-2 text-xs">
+            <button onclick="openHub()" class="text-slate-500 hover:text-slate-900 font-medium flex items-center gap-1.5 transition-colors">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+              </svg>
+              <span>Apps</span>
+            </button>
+            <span class="text-slate-300">/</span>
+            <span class="font-semibold text-slate-900">Wishlist</span>
+          </div>
+
+          <button
+            onclick="toggleWishlistForm(true)"
+            class="h-8 px-3.5 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium flex items-center gap-1.5 transition-colors"
+          >
+            <span>+ Add Wish</span>
+          </button>
+        </div>
+
+        <div class="space-y-1">
+          <h2 class="text-xl font-bold tracking-tight text-slate-900">Wishlist</h2>
+          <p class="text-xs text-slate-500">Propose, upvote, and track requests for new marketing apps and workspace features.</p>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+          <div class="rounded-2xl border border-slate-200/80 bg-white p-4 card-shadow">
+            <div class="text-[11px] text-slate-500">Total Requests</div>
+            <div id="wish-kpi-total" class="text-xl font-bold text-slate-900 tabular-nums mt-1">0</div>
+          </div>
+          <div class="rounded-2xl border border-slate-200/80 bg-white p-4 card-shadow">
+            <div class="text-[11px] text-slate-500">Requested</div>
+            <div id="wish-kpi-requested" class="text-xl font-bold text-slate-900 tabular-nums mt-1">0</div>
+          </div>
+          <div class="rounded-2xl border border-slate-200/80 bg-white p-4 card-shadow">
+            <div class="text-[11px] text-slate-500">Planned / In Progress</div>
+            <div id="wish-kpi-planned" class="text-xl font-bold text-[#7c3aed] tabular-nums mt-1">0</div>
+          </div>
+          <div class="rounded-2xl border border-slate-200/80 bg-white p-4 card-shadow">
+            <div class="text-[11px] text-slate-500">Shipped</div>
+            <div id="wish-kpi-shipped" class="text-xl font-bold text-[#059669] tabular-nums mt-1">0</div>
+          </div>
+        </div>
+
+        <div id="wishlist-form-panel" class="hidden rounded-2xl border border-slate-200 bg-[#fbfcfd] p-5 space-y-4 animate-fade">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-200/80">
+            <h3 id="wishlist-form-title" class="text-sm font-semibold text-slate-900">Add App or Feature Request</h3>
+            <button type="button" onclick="toggleWishlistForm(false)" class="text-xs text-slate-400 hover:text-slate-700">✕ Close</button>
+          </div>
+          <input type="hidden" id="wish-edit-id" value="" />
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <div class="sm:col-span-2">
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Title</label>
+              <input
+                id="wish-title"
+                type="text"
+                placeholder="e.g. Campaign Calendar, Email Builder..."
+                onkeydown="if(event.key==='Enter'){event.preventDefault();saveWishlistItem();}"
+                class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400"
+              />
+            </div>
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Category</label>
+              <select id="wish-category" class="w-full h-9 px-2.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-slate-400">
+                <option value="New App">New App</option>
+                <option value="Integration">Integration</option>
+                <option value="Analytics &amp; Charts">Analytics &amp; Charts</option>
+                <option value="Automation">Automation</option>
+                <option value="UI / UX">UI / UX</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Priority</label>
+              <select id="wish-priority" class="w-full h-9 px-2.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-slate-400">
+                <option value="High">High</option>
+                <option value="Medium" selected>Medium</option>
+                <option value="Low">Low</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Status</label>
+              <select id="wish-status" class="w-full h-9 px-2.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-slate-400">
+                <option value="Requested">Requested</option>
+                <option value="Planned">Planned</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Shipped">Shipped</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Requested By</label>
+              <input
+                id="wish-author"
+                type="text"
+                placeholder="e.g. Marketing Team"
+                class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400"
+              />
+            </div>
+            <div class="sm:col-span-2">
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Description / Use Case</label>
+              <input
+                id="wish-desc"
+                type="text"
+                placeholder="Describe what problem it solves or what it should include..."
+                class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400"
+              />
+            </div>
+          </div>
+          <div class="flex items-center justify-end gap-2 pt-1">
+            <button type="button" onclick="toggleWishlistForm(false)" class="h-8 px-3.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700">Cancel</button>
+            <button type="button" onclick="saveWishlistItem()" class="h-8 px-4 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium">Save Wish</button>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div id="wishlist-status-filters" class="flex flex-wrap items-center gap-1.5">
+            <button type="button" onclick="setWishlistStatusFilter('all')" data-wish-filter="all" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-[#0f172a] text-white">All</button>
+            <button type="button" onclick="setWishlistStatusFilter('Requested')" data-wish-filter="Requested" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-slate-200 text-slate-600 hover:bg-slate-50">Requested</button>
+            <button type="button" onclick="setWishlistStatusFilter('Planned')" data-wish-filter="Planned" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-slate-200 text-slate-600 hover:bg-slate-50">Planned</button>
+            <button type="button" onclick="setWishlistStatusFilter('In Progress')" data-wish-filter="In Progress" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-slate-200 text-slate-600 hover:bg-slate-50">In Progress</button>
+            <button type="button" onclick="setWishlistStatusFilter('Shipped')" data-wish-filter="Shipped" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-slate-200 text-slate-600 hover:bg-slate-50">Shipped</button>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <input
+              id="wishlist-search"
+              type="text"
+              placeholder="Search wishlist..."
+              oninput="renderWishlistView()"
+              class="h-8 w-44 sm:w-56 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400"
+            />
+            <select id="wishlist-sort" onchange="renderWishlistView()" class="h-8 px-2.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:border-slate-400">
+              <option value="votes">Most Upvoted</option>
+              <option value="newest">Newest</option>
+              <option value="priority">Priority</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="wishlist-empty-state" class="hidden rounded-2xl border border-dashed border-slate-200 bg-[#fbfcfd] p-12 flex flex-col items-center justify-center text-center">
+          <p class="text-sm font-semibold text-slate-800">No wishlist items match</p>
+          <p class="text-xs text-slate-500 mt-1 mb-4">Add a new app proposal or adjust your filters.</p>
+          <button onclick="toggleWishlistForm(true)" class="h-8 px-3.5 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium">+ Add Wish</button>
+        </div>
+
+        <div id="wishlist-grid" class="space-y-3"></div>
+      </section>
+
       <!-- VIEW 4: GENERIC SECTION -->
       <section id="view-generic-section" class="hidden max-w-6xl mx-auto space-y-6 animate-fade">
         <div class="space-y-1">
