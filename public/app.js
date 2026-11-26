@@ -3781,11 +3781,15 @@ function syncAuthState() {
   if (!authScreen || !appShell) return;
   if (authed) {
     authScreen.classList.add('hidden');
+    authScreen.style.display = 'none';
     appShell.classList.remove('hidden');
+    appShell.style.display = 'flex';
     window.dispatchEvent(new Event('resize'));
   } else {
     appShell.classList.add('hidden');
+    appShell.style.display = 'none';
     authScreen.classList.remove('hidden');
+    authScreen.style.display = 'flex';
   }
 }
 

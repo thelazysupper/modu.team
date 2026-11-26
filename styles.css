@@ -32,3 +32,7 @@ body {
 .animate-fade {
   animation: fadeIn 0.15s ease-out forwards;
 }
+
+.hidden {
+  display: none !important;
+}
