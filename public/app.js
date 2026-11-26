@@ -1241,6 +1241,63 @@ function deleteChannelAccount(accountId) {
   });
 }
 
+const CHANNEL_GOAL_DEFS = [
+  { key: 'leads', label: 'Leads', unit: '', format: 'int', agg: 'sum', color: '#0ea5e9', step: '1' },
+  { key: 'ctr', label: 'CTR (%)', unit: '%', format: 'pct', agg: 'avg', color: '#f59e0b', step: '0.01' },
+  { key: 'engagement_rate', label: 'Engagement Rate (%)', unit: '%', format: 'pct', agg: 'avg', color: '#8b5cf6', step: '0.01' },
+  { key: 'clicks', label: 'Clicks', unit: '', format: 'int', agg: 'sum', color: '#6366f1', step: '1' },
+  { key: 'impressions', label: 'Impressions', unit: '', format: 'int', agg: 'sum', color: '#14b8a6', step: '1' },
+  { key: 'conversions', label: 'Conversions', unit: '', format: 'int', agg: 'sum', color: '#10b981', step: '1' },
+  { key: 'roas', label: 'ROAS (x)', unit: 'x', format: 'dec', agg: 'avg', color: '#f43f5e', step: '0.1' }
+];
+let channelGoalsByName = {};
+
+function getGoalDef(key) {
+  return CHANNEL_GOAL_DEFS.find(g => g.key === key) || CHANNEL_GOAL_DEFS[0];
+}
+
+function getChannelGoals(channelName) {
+  const saved = channelGoalsByName[channelName];
+  const primary = saved && saved.primary && CHANNEL_GOAL_DEFS.some(g => g.key === saved.primary)
+    ? saved.primary
+    : 'leads';
+  const secondary = saved && Array.isArray(saved.secondary)
+    ? saved.secondary.filter(k => k !== primary && CHANNEL_GOAL_DEFS.some(g => g.key === k))
+    : [];
+  return { primary, secondary };
+}
+
+function getChannelMeasuredGoalKeys(channelName) {
+  const { primary, secondary } = getChannelGoals(channelName);
+  return [primary, ...secondary];
+}
+
+function updateChannelPrimaryGoal(goalKey) {
+  if (!activeChannelDetailName) return;
+  const current = getChannelGoals(activeChannelDetailName);
+  channelGoalsByName[activeChannelDetailName] = {
+    primary: goalKey,
+    secondary: current.secondary.filter(k => k !== goalKey)
+  };
+  renderChannelDetailView();
+  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+}
+
+function toggleChannelSecondaryGoal(goalKey) {
+  if (!activeChannelDetailName) return;
+  const current = getChannelGoals(activeChannelDetailName);
+  if (goalKey === current.primary) return;
+  const exists = current.secondary.includes(goalKey);
+  channelGoalsByName[activeChannelDetailName] = {
+    primary: current.primary,
+    secondary: exists
+      ? current.secondary.filter(k => k !== goalKey)
+      : [...current.secondary, goalKey]
+  };
+  renderChannelDetailView();
+  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+}
+
 function renderChannelDetailView() {
   const name = activeChannelDetailName;
   if (!name) return;
@@ -1272,6 +1329,29 @@ function renderChannelDetailView() {
   document.getElementById('ch-detail-year-lbl').textContent = `Year ${budgetYear}`;
   document.getElementById('ch-detail-actual').textContent = `${Math.round(actualNok).toLocaleString()} NOK`;
   document.getElementById('ch-detail-leads').textContent = String(leadCount);
+
+  const goals = getChannelGoals(ch.name);
+  const primarySel = document.getElementById('ch-primary-goal');
+  if (primarySel) {
+    primarySel.innerHTML = CHANNEL_GOAL_DEFS.map(g =>
+      `<option value="${g.key}" ${g.key === goals.primary ? 'selected' : ''}>${g.label}</option>`
+    ).join('');
+  }
+  const secContainer = document.getElementById('ch-secondary-goals');
+  if (secContainer) {
+    secContainer.innerHTML = CHANNEL_GOAL_DEFS.filter(g => g.key !== goals.primary).map(g => {
+      const active = goals.secondary.includes(g.key);
+      return `
+        <button
+          type="button"
+          onclick="toggleChannelSecondaryGoal('${g.key}')"
+          class="h-8 px-3 rounded-lg text-xs font-medium border transition-colors ${active ? 'bg-[#0f172a] text-white border-[#0f172a]' : 'bg-[#fbfcfd] text-slate-600 border-slate-200 hover:border-slate-300 hover:text-slate-900'}"
+        >
+          ${active ? '✓ ' : '+ '}${g.label}
+        </button>
+      `;
+    }).join('');
+  }
 
   const listEl = document.getElementById('ch-accounts-list');
   if (!listEl) return;
@@ -4142,12 +4222,12 @@ let reportsMetricsByYear = {};
 
 function ensureReportsChannelMetrics(year, channel) {
   if (!reportsMetricsByYear[year]) reportsMetricsByYear[year] = {};
-  if (!reportsMetricsByYear[year][channel]) {
-    reportsMetricsByYear[year][channel] = {
-      leads: Array(12).fill(0),
-      ctr: Array(12).fill(0)
-    };
-  }
+  if (!reportsMetricsByYear[year][channel]) reportsMetricsByYear[year][channel] = {};
+  CHANNEL_GOAL_DEFS.forEach(g => {
+    if (!Array.isArray(reportsMetricsByYear[year][channel][g.key]) || reportsMetricsByYear[year][channel][g.key].length !== 12) {
+      reportsMetricsByYear[year][channel][g.key] = Array(12).fill(0);
+    }
+  });
   return reportsMetricsByYear[year][channel];
 }
 
@@ -4160,6 +4240,27 @@ function ensureReportsBudgetRow(year, channel) {
     };
   }
   return budgetData[year][channel];
+}
+
+function formatGoalValue(goalDef, val) {
+  const num = Number(val) || 0;
+  if (goalDef.format === 'pct') return `${num.toFixed(2)}%`;
+  if (goalDef.format === 'dec') return `${num.toFixed(2)}x`;
+  return Math.round(num).toLocaleString();
+}
+
+function aggregateChannelGoalValue(channelName, mRow, goalKey) {
+  const def = getGoalDef(goalKey);
+  const arr = (mRow && Array.isArray(mRow[goalKey])) ? mRow[goalKey] : Array(12).fill(0);
+  if (def.agg === 'avg') {
+    const nonZero = arr.filter(v => v > 0);
+    return nonZero.length > 0 ? nonZero.reduce((a, b) => a + b, 0) / nonZero.length : 0;
+  }
+  let total = arr.reduce((a, b) => a + b, 0);
+  if (goalKey === 'leads') {
+    total += (leadEntries || []).filter(l => String(l.source || l.channel || '').toLowerCase() === channelName.toLowerCase()).length;
+  }
+  return total;
 }
 
 function handleReportsYearChange() {
@@ -4193,6 +4294,7 @@ function openChannelReportSubpage(channelName) {
 
 function openReportChannelDetail(channelName) {
   activeReportChannel = channelName;
+  reportsChannelMetric = 'cost';
   renderMarketingReportsView();
 }
 
@@ -4207,8 +4309,9 @@ function updateReportChannelValue(channelName, monthIdx, field, rawVal) {
   if (field === 'planned' || field === 'actual') {
     const row = ensureReportsBudgetRow(reportsYear, channelName);
     row[field][monthIdx] = val;
-  } else if (field === 'leads' || field === 'ctr') {
+  } else {
     const mRow = ensureReportsChannelMetrics(reportsYear, channelName);
+    if (!Array.isArray(mRow[field])) mRow[field] = Array(12).fill(0);
     mRow[field][monthIdx] = val;
   }
   renderReportChannelDetail();
@@ -4219,6 +4322,8 @@ function drawReportsBarChart(canvasId, mode, seriesA, seriesB = null, chartHeigh
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
   canvas._barMeta = { mode, seriesA, seriesB, chartHeight, hoverIdx: -1 };
+
+  const goalDef = mode === 'cost' ? null : getGoalDef(mode);
 
   const renderBars = (hoverIdx = -1) => {
     const ctx = canvas.getContext('2d');
@@ -4232,7 +4337,7 @@ function drawReportsBarChart(canvasId, mode, seriesA, seriesB = null, chartHeigh
     ctx.clearRect(0, 0, width, height);
 
     const allVals = seriesB ? [...seriesA, ...seriesB] : [...seriesA];
-    const minPeak = mode === 'ctr' ? 5 : mode === 'leads' ? 10 : 100;
+    const minPeak = goalDef ? (goalDef.format === 'pct' || goalDef.format === 'dec' ? 5 : 10) : 100;
     const maxVal = Math.max(minPeak, ...allVals) * 1.15;
     const padL = 48, padR = 14, padT = 14, padB = 30;
     const plotW = width - padL - padR;
@@ -4257,8 +4362,8 @@ function drawReportsBarChart(canvasId, mode, seriesA, seriesB = null, chartHeigh
       ctx.lineTo(width - padR, y);
       ctx.stroke();
       let label = '';
-      if (mode === 'ctr') label = val.toFixed(1) + '%';
-      else if (mode === 'leads') label = String(Math.round(val));
+      if (goalDef?.format === 'pct') label = val.toFixed(1) + '%';
+      else if (goalDef?.format === 'dec') label = val.toFixed(1) + 'x';
       else label = val >= 1000 ? Math.round(val / 1000) + 'k' : String(Math.round(val));
       ctx.fillText(label, 4, y + 3);
     });
@@ -4270,7 +4375,7 @@ function drawReportsBarChart(canvasId, mode, seriesA, seriesB = null, chartHeigh
       ? Math.min(13, Math.max(5, (groupW - 12) / 2))
       : Math.min(20, Math.max(8, groupW - 16));
     const pillR = barW / 2;
-    const singleColor = mode === 'leads' ? '#0ea5e9' : '#f59e0b';
+    const singleColor = goalDef ? goalDef.color : '#0ea5e9';
 
     monthNames.forEach((mLbl, idx) => {
       const colX = padL + idx * groupW;
@@ -4349,10 +4454,9 @@ function drawReportsBarChart(canvasId, mode, seriesA, seriesB = null, chartHeigh
         const utilPct = vA > 0 ? ((vB / vA) * 100).toFixed(1) : '0.0';
         html += `<div class="flex items-center justify-between gap-4"><span class="text-emerald-300">Planned</span><span class="tabular-nums font-medium">${Math.round(vA).toLocaleString()} NOK</span></div>
                  <div class="flex items-center justify-between gap-4"><span class="text-violet-300">Actual</span><span class="tabular-nums font-medium">${Math.round(vB).toLocaleString()} NOK (${utilPct}%)</span></div>`;
-      } else if (meta.mode === 'leads') {
-        html += `<div class="flex items-center justify-between gap-4"><span class="text-sky-300">Leads</span><span class="tabular-nums font-medium">${Math.round(vA).toLocaleString()}</span></div>`;
       } else {
-        html += `<div class="flex items-center justify-between gap-4"><span class="text-amber-300">CTR</span><span class="tabular-nums font-medium">${vA.toFixed(2)}%</span></div>`;
+        const gDef = getGoalDef(meta.mode);
+        html += `<div class="flex items-center justify-between gap-4"><span style="color:${gDef.color}">${gDef.label}</span><span class="tabular-nums font-medium">${formatGoalValue(gDef, vA)}</span></div>`;
       }
       showChartTooltip(e.clientX, e.clientY, html);
     });
@@ -4371,6 +4475,8 @@ function renderReportChannelDetail() {
   const channelName = activeReportChannel;
   const chObj = channelsList.find(c => c.name.toLowerCase() === channelName.toLowerCase());
   const color = getChannelColor(channelName, 0);
+  const goals = getChannelGoals(channelName);
+  const measuredKeys = getChannelMeasuredGoalKeys(channelName);
 
   document.getElementById('mr-crumb-sep')?.classList.remove('hidden');
   const crumbCh = document.getElementById('mr-crumb-channel');
@@ -4383,35 +4489,36 @@ function renderReportChannelDetail() {
   const dotEl = document.getElementById('mr-ch-dot');
   if (dotEl) dotEl.style.background = color;
   document.getElementById('mr-ch-title').textContent = channelName;
-  document.getElementById('mr-ch-subtitle').textContent = `${chObj?.type || 'Channel'} · ${reportsYear} monthly performance and data entry`;
+  const primaryDef = getGoalDef(goals.primary);
+  document.getElementById('mr-ch-subtitle').textContent = `${chObj?.type || 'Channel'} · Main goal: ${primaryDef.label}${goals.secondary.length ? ` · Secondary: ${goals.secondary.map(k => getGoalDef(k).label).join(', ')}` : ''}`;
   document.getElementById('mr-ch-chart-year').textContent = reportsYear;
   document.getElementById('mr-ch-table-year').textContent = reportsYear;
 
   const metricSel = document.getElementById('mr-ch-chart-metric');
-  if (metricSel && metricSel.value !== reportsChannelMetric) {
-    metricSel.value = reportsChannelMetric;
+  if (metricSel) {
+    const validMetrics = ['cost', ...measuredKeys];
+    if (!validMetrics.includes(reportsChannelMetric)) {
+      reportsChannelMetric = 'cost';
+    }
+    metricSel.innerHTML = [
+      `<option value="cost" ${reportsChannelMetric === 'cost' ? 'selected' : ''}>Cost (NOK)</option>`,
+      ...measuredKeys.map(k => {
+        const gd = getGoalDef(k);
+        const tag = k === goals.primary ? ' (Main)' : '';
+        return `<option value="${k}" ${reportsChannelMetric === k ? 'selected' : ''}>${gd.label}${tag}</option>`;
+      })
+    ].join('');
   }
 
   const row = (budgetData[reportsYear] && budgetData[reportsYear][channelName]) || {
     planned: Array(12).fill(0),
     actual: Array(12).fill(0)
   };
-  const mRow = (reportsMetricsByYear[reportsYear] && reportsMetricsByYear[reportsYear][channelName]) || {
-    leads: Array(12).fill(0),
-    ctr: Array(12).fill(0)
-  };
+  const mRow = ensureReportsChannelMetrics(reportsYear, channelName);
 
   const chartLegend = document.getElementById('mr-ch-chart-legend');
   const chartTitle = document.getElementById('mr-ch-chart-title');
-  if (reportsChannelMetric === 'leads') {
-    if (chartTitle) chartTitle.textContent = `${channelName} Leads`;
-    if (chartLegend) chartLegend.innerHTML = `<span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#0ea5e9] inline-block"></span><span>Leads</span></span>`;
-    drawReportsBarChart('mrChannelChart', 'leads', mRow.leads, null, 200);
-  } else if (reportsChannelMetric === 'ctr') {
-    if (chartTitle) chartTitle.textContent = `${channelName} CTR (%)`;
-    if (chartLegend) chartLegend.innerHTML = `<span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#f59e0b] inline-block"></span><span>CTR (%)</span></span>`;
-    drawReportsBarChart('mrChannelChart', 'ctr', mRow.ctr, null, 200);
-  } else {
+  if (reportsChannelMetric === 'cost') {
     if (chartTitle) chartTitle.textContent = `${channelName} Cost (NOK)`;
     if (chartLegend) {
       chartLegend.innerHTML = `
@@ -4420,33 +4527,56 @@ function renderReportChannelDetail() {
       `;
     }
     drawReportsBarChart('mrChannelChart', 'cost', row.planned, row.actual, 200);
+  } else {
+    const gd = getGoalDef(reportsChannelMetric);
+    if (chartTitle) chartTitle.textContent = `${channelName} ${gd.label}`;
+    if (chartLegend) chartLegend.innerHTML = `<span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full inline-block" style="background:${gd.color}"></span><span>${gd.label}</span></span>`;
+    drawReportsBarChart('mrChannelChart', gd.key, mRow[gd.key] || Array(12).fill(0), null, 200);
   }
 
   const escCh = channelName.replace(/'/g, "\\'");
+  const thead = document.getElementById('mr-ch-table-head');
+  if (thead) {
+    thead.innerHTML = `
+      <tr class="border-b border-slate-200/80 bg-[#fbfcfd] text-slate-500">
+        <th class="py-3 px-4 font-medium">Month</th>
+        <th class="py-3 px-4 font-medium text-right">Planned (NOK)</th>
+        <th class="py-3 px-4 font-medium text-right">Actual Cost (NOK)</th>
+        ${measuredKeys.map(k => {
+          const gd = getGoalDef(k);
+          const badge = k === goals.primary
+            ? '<span class="ml-1 px-1.5 py-0.5 rounded bg-slate-900 text-white text-[9px] font-semibold">Main</span>'
+            : '<span class="ml-1 px-1.5 py-0.5 rounded bg-slate-200/80 text-slate-600 text-[9px] font-medium">2nd</span>';
+          return `<th class="py-3 px-4 font-medium text-right whitespace-nowrap">${gd.label}${badge}</th>`;
+        }).join('')}
+      </tr>
+    `;
+  }
+
   const tbody = document.getElementById('mr-ch-table-body');
   if (!tbody) return;
 
   const totalPlanned = row.planned.reduce((a, b) => a + b, 0);
   const totalActual = row.actual.reduce((a, b) => a + b, 0);
-  const totalLeads = mRow.leads.reduce((a, b) => a + b, 0);
-  const nonZeroCtrs = mRow.ctr.filter(v => v > 0);
-  const avgCtr = nonZeroCtrs.length > 0 ? nonZeroCtrs.reduce((a, b) => a + b, 0) / nonZeroCtrs.length : 0;
 
   const rowsHtml = monthNames.map((mName, mIdx) => `
     <tr class="hover:bg-slate-50/70 transition-colors">
-      <td class="py-2.5 px-4 font-medium text-slate-900">${mName} ${reportsYear}</td>
+      <td class="py-2.5 px-4 font-medium text-slate-900 whitespace-nowrap">${mName} ${reportsYear}</td>
       <td class="py-2 px-4 text-right tabular-nums">
         <input type="number" min="0" step="any" value="${row.planned[mIdx] || ''}" placeholder="0" onchange="updateReportChannelValue('${escCh}', ${mIdx}, 'planned', this.value)" class="w-24 text-right bg-white border border-slate-200 rounded-md px-2 py-1 text-xs font-medium text-slate-900 focus:outline-none focus:border-slate-400 tabular-nums" />
       </td>
       <td class="py-2 px-4 text-right tabular-nums">
         <input type="number" min="0" step="any" value="${row.actual[mIdx] || ''}" placeholder="0" onchange="updateReportChannelValue('${escCh}', ${mIdx}, 'actual', this.value)" class="w-24 text-right bg-white border border-slate-200 rounded-md px-2 py-1 text-xs font-medium text-slate-900 focus:outline-none focus:border-slate-400 tabular-nums" />
       </td>
-      <td class="py-2 px-4 text-right tabular-nums">
-        <input type="number" min="0" step="1" value="${mRow.leads[mIdx] || ''}" placeholder="0" onchange="updateReportChannelValue('${escCh}', ${mIdx}, 'leads', this.value)" class="w-20 text-right bg-white border border-slate-200 rounded-md px-2 py-1 text-xs font-medium text-slate-900 focus:outline-none focus:border-slate-400 tabular-nums" />
-      </td>
-      <td class="py-2 px-4 text-right tabular-nums">
-        <input type="number" min="0" max="100" step="0.01" value="${mRow.ctr[mIdx] || ''}" placeholder="0.00" onchange="updateReportChannelValue('${escCh}', ${mIdx}, 'ctr', this.value)" class="w-20 text-right bg-white border border-slate-200 rounded-md px-2 py-1 text-xs font-medium text-slate-900 focus:outline-none focus:border-slate-400 tabular-nums" />
-      </td>
+      ${measuredKeys.map(k => {
+        const gd = getGoalDef(k);
+        const val = (mRow[k] && mRow[k][mIdx]) || '';
+        return `
+          <td class="py-2 px-4 text-right tabular-nums">
+            <input type="number" min="0" step="${gd.step}" value="${val}" placeholder="0" onchange="updateReportChannelValue('${escCh}', ${mIdx}, '${k}', this.value)" class="w-20 text-right bg-white border border-slate-200 rounded-md px-2 py-1 text-xs font-medium text-slate-900 focus:outline-none focus:border-slate-400 tabular-nums" />
+          </td>
+        `;
+      }).join('')}
     </tr>
   `).join('');
 
@@ -4455,8 +4585,11 @@ function renderReportChannelDetail() {
       <td class="py-3 px-4">Total / Avg</td>
       <td class="py-3 px-4 text-right tabular-nums">${Math.round(totalPlanned).toLocaleString()} NOK</td>
       <td class="py-3 px-4 text-right tabular-nums">${Math.round(totalActual).toLocaleString()} NOK</td>
-      <td class="py-3 px-4 text-right tabular-nums">${Math.round(totalLeads).toLocaleString()}</td>
-      <td class="py-3 px-4 text-right tabular-nums">${avgCtr.toFixed(2)}%</td>
+      ${measuredKeys.map(k => {
+        const gd = getGoalDef(k);
+        const aggVal = aggregateChannelGoalValue(channelName, mRow, k);
+        return `<td class="py-3 px-4 text-right tabular-nums">${formatGoalValue(gd, aggVal)}</td>`;
+      }).join('')}
     </tr>
   `;
 
@@ -4501,9 +4634,13 @@ function renderMarketingReportsView() {
 
   const monthlyPlanned = Array(12).fill(0);
   const monthlyActual = Array(12).fill(0);
-  const monthlyLeads = Array(12).fill(0);
-  const monthlyCtrSum = Array(12).fill(0);
-  const monthlyCtrCount = Array(12).fill(0);
+  const monthlyMetricSum = {};
+  const monthlyMetricCount = {};
+  CHANNEL_GOAL_DEFS.forEach(g => {
+    monthlyMetricSum[g.key] = Array(12).fill(0);
+    monthlyMetricCount[g.key] = Array(12).fill(0);
+  });
+
   let totalPlanned = 0;
   let totalActual = 0;
 
@@ -4521,13 +4658,15 @@ function renderMarketingReportsView() {
     }
     const mRow = metricsYearObj[name];
     if (mRow) {
-      for (let m = 0; m < 12; m++) {
-        monthlyLeads[m] += mRow.leads[m] || 0;
-        if ((mRow.ctr[m] || 0) > 0) {
-          monthlyCtrSum[m] += mRow.ctr[m];
-          monthlyCtrCount[m] += 1;
+      CHANNEL_GOAL_DEFS.forEach(g => {
+        const arr = mRow[g.key];
+        if (!Array.isArray(arr)) return;
+        for (let m = 0; m < 12; m++) {
+          const val = arr[m] || 0;
+          monthlyMetricSum[g.key][m] += val;
+          if (val > 0) monthlyMetricCount[g.key][m] += 1;
         }
-      }
+      });
     }
   });
 
@@ -4535,33 +4674,17 @@ function renderMarketingReportsView() {
     const d = l.createdAt ? new Date(l.createdAt) : null;
     if (d && !isNaN(d.getTime())) {
       if (String(d.getFullYear()) === reportsYear) {
-        monthlyLeads[d.getMonth()] += 1;
+        monthlyMetricSum.leads[d.getMonth()] += 1;
       }
     }
   });
-
-  const monthlyCtr = monthlyCtrSum.map((sum, m) => (monthlyCtrCount[m] > 0 ? sum / monthlyCtrCount[m] : 0));
 
   document.getElementById('mr-chart-year').textContent = reportsYear;
   const subtitleEl = document.getElementById('mr-chart-subtitle');
   const legendEl = document.getElementById('mr-chart-legend');
   let hasChartData = false;
 
-  if (reportsMetric === 'leads') {
-    if (subtitleEl) subtitleEl.textContent = 'Monthly leads generated across all channels';
-    if (legendEl) {
-      legendEl.innerHTML = `<span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#0ea5e9] inline-block"></span><span>Leads</span></span>`;
-    }
-    hasChartData = monthlyLeads.some(v => v > 0);
-    drawReportsBarChart('marketingReportsChart', 'leads', monthlyLeads, null, 220);
-  } else if (reportsMetric === 'ctr') {
-    if (subtitleEl) subtitleEl.textContent = 'Monthly average Click-Through Rate (%) across channels';
-    if (legendEl) {
-      legendEl.innerHTML = `<span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#f59e0b] inline-block"></span><span>Avg. CTR (%)</span></span>`;
-    }
-    hasChartData = monthlyCtr.some(v => v > 0);
-    drawReportsBarChart('marketingReportsChart', 'ctr', monthlyCtr, null, 220);
-  } else {
+  if (reportsMetric === 'cost') {
     if (subtitleEl) subtitleEl.textContent = 'Monthly planned budget vs. actual spend across all channels';
     if (legendEl) {
       legendEl.innerHTML = `
@@ -4571,6 +4694,17 @@ function renderMarketingReportsView() {
     }
     hasChartData = totalPlanned > 0 || totalActual > 0;
     drawReportsBarChart('marketingReportsChart', 'cost', monthlyPlanned, monthlyActual, 220);
+  } else {
+    const gd = getGoalDef(reportsMetric);
+    const series = gd.agg === 'avg'
+      ? monthlyMetricSum[gd.key].map((sum, m) => (monthlyMetricCount[gd.key][m] > 0 ? sum / monthlyMetricCount[gd.key][m] : 0))
+      : monthlyMetricSum[gd.key];
+    if (subtitleEl) subtitleEl.textContent = `Monthly ${gd.label} across channels`;
+    if (legendEl) {
+      legendEl.innerHTML = `<span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full inline-block" style="background:${gd.color}"></span><span>${gd.label}</span></span>`;
+    }
+    hasChartData = series.some(v => v > 0);
+    drawReportsBarChart('marketingReportsChart', gd.key, series, null, 220);
   }
 
   document.getElementById('mr-chart-empty-note')?.classList.toggle('hidden', hasChartData);
@@ -4592,14 +4726,23 @@ function renderMarketingReportsView() {
     const mRow = metricsYearObj[name];
     const chPlanned = row ? row.planned.reduce((a, b) => a + b, 0) : 0;
     const chActual = row ? row.actual.reduce((a, b) => a + b, 0) : 0;
-    const loggedLeads = mRow ? mRow.leads.reduce((a, b) => a + b, 0) : 0;
-    const pipelineLeads = (leadEntries || []).filter(l => String(l.source || l.channel || '').toLowerCase() === name.toLowerCase()).length;
-    const leadCount = Math.round(loggedLeads + pipelineLeads);
-    const nonZeroCtrs = mRow ? mRow.ctr.filter(v => v > 0) : [];
-    const avgCtr = nonZeroCtrs.length > 0 ? (nonZeroCtrs.reduce((a, b) => a + b, 0) / nonZeroCtrs.length).toFixed(2) : '0.00';
     const sharePct = totalPlanned > 0 ? ((chPlanned / shareDenom) * 100).toFixed(1) : '0.0';
     const chUtilPct = chPlanned > 0 ? Math.min(100, (chActual / chPlanned) * 100) : 0;
     const escName = name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+
+    const goals = getChannelGoals(name);
+    const measuredKeys = getChannelMeasuredGoalKeys(name).slice(0, 2);
+    const goalCellsHtml = measuredKeys.map(k => {
+      const gd = getGoalDef(k);
+      const val = aggregateChannelGoalValue(name, mRow, k);
+      const isMain = k === goals.primary;
+      return `
+        <div>
+          <div class="text-[10px] ${isMain ? 'text-slate-700 font-semibold' : 'text-slate-400'} truncate">${gd.label}${isMain ? ' ★' : ''}</div>
+          <div class="text-xs font-semibold tabular-nums text-slate-900">${formatGoalValue(gd, val)}</div>
+        </div>
+      `;
+    }).join('');
 
     return `
       <div onclick="openReportChannelDetail('${escName}')" class="cursor-pointer rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow flex flex-col justify-between gap-4 hover:border-slate-300 hover:shadow-md transition-all">
@@ -4623,14 +4766,7 @@ function renderMarketingReportsView() {
             <div class="text-[10px] text-slate-400">Actual</div>
             <div class="text-xs font-semibold tabular-nums text-slate-900">${Math.round(chActual).toLocaleString()}</div>
           </div>
-          <div>
-            <div class="text-[10px] text-slate-400">Leads</div>
-            <div class="text-xs font-semibold tabular-nums text-slate-900">${leadCount}</div>
-          </div>
-          <div>
-            <div class="text-[10px] text-slate-400">CTR</div>
-            <div class="text-xs font-semibold tabular-nums text-slate-900">${avgCtr}%</div>
-          </div>
+          ${goalCellsHtml}
         </div>
 
         <div class="space-y-1.5">
@@ -4883,6 +5019,7 @@ function getWorkspaceSnapshot() {
   return {
     channelsList,
     channelAccountsByName,
+    channelGoalsByName,
     budgetData,
     budgetTotalByYear,
     budgetMonthlyCapByYear,
@@ -4907,6 +5044,7 @@ function applyWorkspaceSnapshot(snap) {
   try {
     if (Array.isArray(snap.channelsList)) channelsList = snap.channelsList;
     if (snap.channelAccountsByName && typeof snap.channelAccountsByName === 'object') channelAccountsByName = snap.channelAccountsByName;
+    if (snap.channelGoalsByName && typeof snap.channelGoalsByName === 'object') channelGoalsByName = snap.channelGoalsByName;
     if (snap.budgetData && typeof snap.budgetData === 'object') budgetData = snap.budgetData;
     if (snap.budgetTotalByYear && typeof snap.budgetTotalByYear === 'object') budgetTotalByYear = snap.budgetTotalByYear;
     if (snap.budgetMonthlyCapByYear && typeof snap.budgetMonthlyCapByYear === 'object') budgetMonthlyCapByYear = snap.budgetMonthlyCapByYear;
