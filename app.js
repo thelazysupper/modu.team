@@ -417,6 +417,7 @@ function openAppGroup(groupId) {
   document.getElementById('view-app-group').classList.remove('hidden');
   renderAppGroupView();
   setActiveNavHighlight('nav-hub');
+  syncRouteUrl(`/groups/${slugifyRouteSegment(grp.name)}`);
 }
 
 function renderAppGroupView() {
@@ -699,41 +700,245 @@ function hideAllViews() {
   });
 }
 
+let isRestoringRoute = false;
+const WORKSPACE_YEAR_STORAGE_KEY = 'modu_workspace_year';
+let pendingYearConfirm = null;
+
+function slugifyRouteSegment(str) {
+  return String(str || '')
+    .toLowerCase()
+    .trim()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function syncRouteUrl(path, { replace = false } = {}) {
+  if (isRestoringRoute) return;
+  const normalized = path.startsWith('/') ? path : `/${path}`;
+  try {
+    if (window.location.protocol === 'file:') {
+      const targetHash = `#${normalized}`;
+      if (window.location.hash !== targetHash) {
+        window.location.hash = targetHash;
+      }
+      return;
+    }
+    if (window.location.pathname !== normalized) {
+      window.history[replace ? 'replaceState' : 'pushState'](null, '', normalized);
+    }
+  } catch {
+    // Ignore history errors in restricted frames
+  }
+}
+
+function getCurrentRoutePath() {
+  try {
+    if (window.location.protocol === 'file:') {
+      return (window.location.hash || '').replace(/^#/, '') || '/';
+    }
+    return window.location.pathname || '/';
+  } catch {
+    return '/';
+  }
+}
+
+function readSavedWorkspaceYear() {
+  try {
+    const saved = window.localStorage.getItem(WORKSPACE_YEAR_STORAGE_KEY);
+    if (saved && ['2025', '2026', '2027'].includes(saved)) return saved;
+  } catch {
+    // Ignore storage errors
+  }
+  return null;
+}
+
+function writeSavedWorkspaceYear(yr) {
+  try {
+    window.localStorage.setItem(WORKSPACE_YEAR_STORAGE_KEY, String(yr));
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+function syncAllYearSelects(yr = budgetYear) {
+  const yearStr = String(yr || '2026');
+  budgetYear = yearStr;
+  reportsYear = yearStr;
+  ['channels-year', 'budget-year-select', 'reports-year-select'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = yearStr;
+  });
+}
+
+function closeYearConfirmModal() {
+  pendingYearConfirm = null;
+  document.getElementById('modu-year-confirm-modal')?.classList.add('hidden');
+}
+
+function applyConfirmedWorkspaceYear(nextYear) {
+  syncAllYearSelects(nextYear);
+  writeSavedWorkspaceYear(nextYear);
+  const annualInput = document.getElementById('budget-annual-total');
+  if (annualInput) {
+    const saved = budgetTotalByYear[budgetYear];
+    annualInput.value = saved > 0 ? saved : '';
+  }
+  if (!document.getElementById('view-channels')?.classList.contains('hidden')) renderChannelsView();
+  if (!document.getElementById('view-budget')?.classList.contains('hidden')) renderBudgetView();
+  if (!document.getElementById('view-marketing-reports')?.classList.contains('hidden')) renderMarketingReportsView();
+  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+}
+
+function requestYearChange(nextYear, sourceSelectEl) {
+  const targetYear = String(nextYear || '');
+  if (!targetYear || targetYear === String(budgetYear)) return;
+  if (sourceSelectEl) sourceSelectEl.value = budgetYear;
+
+  pendingYearConfirm = targetYear;
+  let modal = document.getElementById('modu-year-confirm-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'modu-year-confirm-modal';
+    modal.className = 'hidden fixed inset-0 z-50 bg-slate-900/35 backdrop-blur-[1px] flex items-center justify-center p-4';
+    modal.innerHTML = `
+      <div class="w-full max-w-xs rounded-2xl border border-slate-200 bg-white card-shadow p-5 space-y-4 animate-fade" onclick="event.stopPropagation()">
+        <div class="space-y-1">
+          <h3 id="modu-year-confirm-title" class="text-sm font-bold text-slate-900">Change workspace year?</h3>
+          <p id="modu-year-confirm-msg" class="text-xs text-slate-500 leading-relaxed"></p>
+        </div>
+        <div class="flex items-center justify-end gap-2 pt-1">
+          <button type="button" onclick="closeYearConfirmModal()" class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-600">Cancel</button>
+          <button type="button" id="modu-year-confirm-yes" class="h-8 px-3.5 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium transition-colors">Switch year</button>
+        </div>
+      </div>
+    `;
+    modal.addEventListener('click', closeYearConfirmModal);
+    document.body.appendChild(modal);
+    document.getElementById('modu-year-confirm-yes').addEventListener('click', () => {
+      const yr = pendingYearConfirm;
+      closeYearConfirmModal();
+      if (yr) applyConfirmedWorkspaceYear(yr);
+    });
+  }
+  document.getElementById('modu-year-confirm-title').textContent = `Switch year to ${targetYear}?`;
+  document.getElementById('modu-year-confirm-msg').textContent = `You are currently in ${budgetYear}. Switching to ${targetYear} updates Channels, Budget, and Marketing Reports.`;
+  document.getElementById('modu-year-confirm-yes').textContent = `Switch to ${targetYear}`;
+  modal.classList.remove('hidden');
+}
+
+function navigateToRoute(rawPath, { push = false } = {}) {
+  const clean = String(rawPath || '/').split('?')[0].replace(/\/+$/, '') || '/';
+  const parts = clean.slice(1).split('/').filter(Boolean).map(p => decodeURIComponent(p));
+  isRestoringRoute = true;
+  try {
+    if (parts.length === 0 || (parts.length === 1 && parts[0] === 'apps')) {
+      openHub();
+      return;
+    }
+    const [head, sub] = parts;
+    if (head === 'groups' && sub) {
+      const grp = appGroups.find(g => String(g.id) === sub || slugifyRouteSegment(g.name) === sub);
+      if (grp) openAppGroup(grp.id);
+      else openHub();
+      return;
+    }
+    if (head === 'channels') {
+      openApp('channels');
+      if (sub) {
+        const ch = channelsList.find(c => slugifyRouteSegment(c.name) === sub || c.name.toLowerCase() === sub.toLowerCase());
+        if (ch) openChannelDetail(ch.name);
+      }
+      return;
+    }
+    if (head === 'budget') {
+      openApp('budget');
+      if (sub && ['summary', 'total', 'allocated', 'actual', 'variance'].includes(sub)) {
+        setBudgetSubView(sub);
+      }
+      return;
+    }
+    if (head === 'marketing-reports') {
+      openApp('marketing-reports');
+      if (sub) {
+        const ch = channelsList.find(c => slugifyRouteSegment(c.name) === sub || c.name.toLowerCase() === sub.toLowerCase());
+        if (ch) openReportChannelDetail(ch.name);
+      }
+      return;
+    }
+    if (['contacts', 'leads', 'competitors', 'aeo-seo'].includes(head)) {
+      openApp(head);
+      return;
+    }
+    if (head === 'apps' && sub) {
+      openApp(sub);
+      return;
+    }
+    if (head === 'wishlist' || head === 'settings') {
+      openSection(head);
+      return;
+    }
+    openHub();
+  } finally {
+    isRestoringRoute = false;
+    if (push) syncRouteUrl(clean);
+  }
+}
+
+window.addEventListener('popstate', () => {
+  navigateToRoute(getCurrentRoutePath(), { push: false });
+});
+
+window.addEventListener('hashchange', () => {
+  if (window.location.protocol === 'file:') {
+    navigateToRoute(getCurrentRoutePath(), { push: false });
+  }
+});
+
 function openHub() {
   activeGroupViewId = null;
   hideAllViews();
   document.getElementById('view-hub').classList.remove('hidden');
   setActiveNavHighlight('nav-hub');
+  syncRouteUrl('/');
 }
 
 function openApp(appId) {
   const app = apps.find(a => a.id === appId);
   if (!app) return;
   hideAllViews();
+  syncAllYearSelects(budgetYear);
 
   if (appId === 'channels') {
     activeChannelDetailName = null;
     document.getElementById('view-channels').classList.remove('hidden');
     renderChannelsView();
+    syncRouteUrl('/channels');
   } else if (appId === 'budget') {
     document.getElementById('view-budget').classList.remove('hidden');
     renderBudgetView();
+    syncRouteUrl(budgetSubView === 'summary' ? '/budget' : `/budget/${budgetSubView}`);
   } else if (appId === 'contacts') {
     document.getElementById('view-contacts').classList.remove('hidden');
     renderContactsView();
+    syncRouteUrl('/contacts');
   } else if (appId === 'leads') {
     document.getElementById('view-leads').classList.remove('hidden');
     renderLeadsView();
+    syncRouteUrl('/leads');
   } else if (appId === 'competitors') {
     document.getElementById('view-competitors').classList.remove('hidden');
     renderCompetitorsView();
+    syncRouteUrl('/competitors');
   } else if (appId === 'aeo-seo') {
     document.getElementById('view-aeo-seo').classList.remove('hidden');
     renderAeoSeoView();
+    syncRouteUrl('/aeo-seo');
   } else if (appId === 'marketing-reports') {
     activeReportChannel = null;
     document.getElementById('view-marketing-reports').classList.remove('hidden');
     renderMarketingReportsView();
+    syncRouteUrl('/marketing-reports');
   } else {
     document.getElementById('view-app-detail').classList.remove('hidden');
     document.getElementById('active-app-breadcrumb').textContent = app.title;
@@ -741,6 +946,7 @@ function openApp(appId) {
     document.getElementById('active-app-desc').textContent = app.description;
     document.getElementById('active-app-status').textContent = app.status;
     document.getElementById('active-app-empty-title').textContent = `${app.title} Workspace`;
+    syncRouteUrl(`/apps/${app.id}`);
   }
 
   setActiveNavHighlight(`side-app-${app.id}`);
@@ -756,6 +962,7 @@ function openSection(sec) {
   document.getElementById('generic-section-title').textContent = titles[sec].t;
   document.getElementById('generic-section-desc').textContent = titles[sec].d;
   setActiveNavHighlight(`nav-${sec}`);
+  syncRouteUrl(`/${sec}`);
 }
 
 function formatCurrency(amount) {
@@ -877,10 +1084,7 @@ function renderActionMenuHtml(editCode, delCode, extraBtnClass = '') {
 }
 
 function changeChannelsYear(yr) {
-  budgetYear = yr;
-  const bYearSel = document.getElementById('budget-year');
-  if (bYearSel) bYearSel.value = yr;
-  renderChannelsView();
+  requestYearChange(yr, document.getElementById('channels-year'));
 }
 
 function getConnectedBudgetTotals(year = budgetYear) {
@@ -1172,12 +1376,14 @@ let channelAccountsByName = {};
 function openChannelDetail(channelName) {
   activeChannelDetailName = channelName;
   renderChannelsView();
+  syncRouteUrl(`/channels/${slugifyRouteSegment(channelName)}`);
 }
 
 function closeChannelDetail() {
   activeChannelDetailName = null;
   toggleChannelAccountForm(false);
   renderChannelsView();
+  syncRouteUrl('/channels');
 }
 
 function toggleChannelAccountForm(show) {
@@ -1644,6 +1850,9 @@ function setBudgetSubView(sv) {
   if (descEl) descEl.textContent = m.desc;
 
   renderBudgetView();
+  if (!document.getElementById('view-budget')?.classList.contains('hidden')) {
+    syncRouteUrl(sv === 'summary' ? '/budget' : `/budget/${sv}`);
+  }
 }
 
 function toggleAnnualBudgetLock() {
@@ -1701,13 +1910,8 @@ function updateMonthlyCap(mIdx, val) {
 }
 
 function handleBudgetYearChange() {
-  budgetYear = document.getElementById('budget-year-select').value;
-  const annualInput = document.getElementById('budget-annual-total');
-  if (annualInput) {
-    const saved = budgetTotalByYear[budgetYear];
-    annualInput.value = saved > 0 ? saved : '';
-  }
-  renderBudgetView();
+  const sel = document.getElementById('budget-year-select');
+  if (sel) requestYearChange(sel.value, sel);
 }
 
 function renderBudgetChannelOptions(selectedValue = '') {
@@ -4265,8 +4469,7 @@ function aggregateChannelGoalValue(channelName, mRow, goalKey) {
 
 function handleReportsYearChange() {
   const sel = document.getElementById('reports-year-select');
-  if (sel) reportsYear = sel.value;
-  renderMarketingReportsView();
+  if (sel) requestYearChange(sel.value, sel);
 }
 
 function handleReportsMetricChange() {
@@ -4290,17 +4493,20 @@ function openChannelReportSubpage(channelName) {
   document.getElementById('view-marketing-reports')?.classList.remove('hidden');
   renderMarketingReportsView();
   setActiveNavHighlight('side-app-marketing-reports');
+  syncRouteUrl(`/marketing-reports/${slugifyRouteSegment(channelName)}`);
 }
 
 function openReportChannelDetail(channelName) {
   activeReportChannel = channelName;
   reportsChannelMetric = 'cost';
   renderMarketingReportsView();
+  syncRouteUrl(`/marketing-reports/${slugifyRouteSegment(channelName)}`);
 }
 
 function closeReportChannelDetail() {
   activeReportChannel = null;
   renderMarketingReportsView();
+  syncRouteUrl('/marketing-reports');
 }
 
 function updateReportChannelValue(channelName, monthIdx, field, rawVal) {
@@ -5051,7 +5257,11 @@ function applyWorkspaceSnapshot(snap) {
     if (snap.budgetTotalLockByYear && typeof snap.budgetTotalLockByYear === 'object') budgetTotalLockByYear = snap.budgetTotalLockByYear;
     if (snap.budgetMonthLocksByYear && typeof snap.budgetMonthLocksByYear === 'object') budgetMonthLocksByYear = snap.budgetMonthLocksByYear;
     if (snap.reportsMetricsByYear && typeof snap.reportsMetricsByYear === 'object') reportsMetricsByYear = snap.reportsMetricsByYear;
-    if (snap.budgetYear) budgetYear = String(snap.budgetYear);
+    if (snap.budgetYear) {
+      budgetYear = String(snap.budgetYear);
+      syncAllYearSelects(budgetYear);
+      writeSavedWorkspaceYear(budgetYear);
+    }
     if (Array.isArray(snap.contactGroups)) contactGroups = snap.contactGroups;
     if (Array.isArray(snap.availableCountries)) availableCountries = snap.availableCountries;
     if (Array.isArray(snap.leadStages)) leadStages = snap.leadStages;
@@ -5066,12 +5276,18 @@ function applyWorkspaceSnapshot(snap) {
     }
     renderSidebarApps();
     renderCards();
-    if (!document.getElementById('view-channels')?.classList.contains('hidden')) renderChannelsView();
-    if (!document.getElementById('view-budget')?.classList.contains('hidden')) renderBudgetView();
-    if (!document.getElementById('view-contacts')?.classList.contains('hidden')) renderContactsView();
-    if (!document.getElementById('view-leads')?.classList.contains('hidden')) renderLeadsView();
-    if (!document.getElementById('view-competitors')?.classList.contains('hidden')) renderCompetitorsView();
-    if (!document.getElementById('view-aeo-seo')?.classList.contains('hidden')) renderAeoSeoView();
+    const currentPath = getCurrentRoutePath();
+    if (currentPath && currentPath !== '/') {
+      navigateToRoute(currentPath, { push: false });
+    } else {
+      if (!document.getElementById('view-channels')?.classList.contains('hidden')) renderChannelsView();
+      if (!document.getElementById('view-budget')?.classList.contains('hidden')) renderBudgetView();
+      if (!document.getElementById('view-contacts')?.classList.contains('hidden')) renderContactsView();
+      if (!document.getElementById('view-leads')?.classList.contains('hidden')) renderLeadsView();
+      if (!document.getElementById('view-competitors')?.classList.contains('hidden')) renderCompetitorsView();
+      if (!document.getElementById('view-aeo-seo')?.classList.contains('hidden')) renderAeoSeoView();
+      if (!document.getElementById('view-marketing-reports')?.classList.contains('hidden')) renderMarketingReportsView();
+    }
   } finally {
     isHydratingState = false;
   }
@@ -5203,9 +5419,14 @@ async function initWorkspacePersistence() {
 });
 
 window.addEventListener('DOMContentLoaded', () => {
+  const savedYear = readSavedWorkspaceYear();
+  if (savedYear) syncAllYearSelects(savedYear);
+  else syncAllYearSelects(budgetYear);
+
   document.getElementById('sidebar-app-count').textContent = String(apps.length);
   renderSidebarApps();
   renderCards();
   syncAuthState();
+  navigateToRoute(getCurrentRoutePath(), { push: false });
   initWorkspacePersistence();
 });
