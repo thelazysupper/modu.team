@@ -1,25 +1,23 @@
--- Run this in your Supabase SQL Editor to enable cloud persistence for Modu
-create table if not exists public.workspace_state (
-  id text primary key,
+-- Run this in your Supabase SQL Editor to enable Supabase Auth + per-user workspace persistence
+drop table if exists public.workspace_state;
+
+create table public.workspace_state (
+  user_id uuid primary key references auth.users(id) on delete cascade,
   data jsonb not null default '{}'::jsonb,
   updated_at timestamptz not null default now()
 );
 
 alter table public.workspace_state enable row level security;
 
--- Allow workspace read/write with your project's anon key
-drop policy if exists "Allow workspace read" on public.workspace_state;
-create policy "Allow workspace read"
+create policy "Users can read own workspace"
   on public.workspace_state for select
-  using (true);
+  using (auth.uid() = user_id);
 
-drop policy if exists "Allow workspace insert" on public.workspace_state;
-create policy "Allow workspace insert"
+create policy "Users can insert own workspace"
   on public.workspace_state for insert
-  with check (true);
+  with check (auth.uid() = user_id);
 
-drop policy if exists "Allow workspace update" on public.workspace_state;
-create policy "Allow workspace update"
+create policy "Users can update own workspace"
   on public.workspace_state for update
-  using (true)
-  with check (true);
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);

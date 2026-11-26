@@ -25,16 +25,16 @@
           <span class="text-base font-bold tracking-tight text-slate-900">Modu</span>
           <span class="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200/60">Workspace</span>
         </div>
-        <h1 class="text-xl font-bold tracking-tight text-slate-900 pt-1">Sign in</h1>
-        <p class="text-xs text-slate-500">Enter your credentials to access your marketing workspace.</p>
+        <h1 id="auth-title" class="text-xl font-bold tracking-tight text-slate-900 pt-1">Sign in</h1>
+        <p id="auth-subtitle" class="text-xs text-slate-500">Enter your credentials to access your marketing workspace.</p>
       </div>
 
       <form onsubmit="handleLogin(event)" class="space-y-4">
         <div>
-          <label for="login-username" class="block text-[11px] font-medium text-slate-600 mb-1">Username</label>
+          <label for="login-username" class="block text-[11px] font-medium text-slate-600 mb-1">Email</label>
           <input
             id="login-username"
-            type="text"
+            type="email"
             autocomplete="username"
             placeholder="name@company.com"
             class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400"
@@ -63,8 +63,10 @@
         </div>
 
         <div id="login-error" class="hidden rounded-lg bg-rose-50 border border-rose-200/80 px-3 py-2 text-xs text-rose-600">
-          Invalid username or password.
+          Invalid email or password.
         </div>
+
+        <div id="login-info" class="hidden rounded-lg bg-emerald-50 border border-emerald-200/80 px-3 py-2 text-xs text-emerald-700"></div>
 
         <button
           id="login-submit-btn"
@@ -75,6 +77,12 @@
           Sign in
         </button>
       </form>
+
+      <div class="pt-2 border-t border-slate-200/70 text-center">
+        <button type="button" id="auth-mode-toggle" onclick="toggleAuthMode()" class="text-[11px] text-slate-500 hover:text-slate-900 transition-colors">
+          Don't have an account? <span class="font-semibold text-slate-900 underline underline-offset-2">Create account</span>
+        </button>
+      </div>
     </div>
   </div>
 

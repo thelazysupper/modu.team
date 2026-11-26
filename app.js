@@ -3754,6 +3754,22 @@ const AUTH_USERNAME = 'marcus.saltvik@bxsoftware.no';
 const AUTH_PASSWORD = 'SvenToreBowling123@';
 const AUTH_STORAGE_KEY = 'modu_auth_session';
 let isAuthenticated = false;
+let authMode = 'signin';
+let currentAuthUser = null;
+let authStateListenerRegistered = false;
+
+function initSupabaseClient() {
+  if (supabaseClient) return supabaseClient;
+  const cfg = window.__MODU_SUPABASE__;
+  if (cfg && cfg.url && cfg.anonKey && window.supabase && typeof window.supabase.createClient === 'function') {
+    try {
+      supabaseClient = window.supabase.createClient(cfg.url, cfg.anonKey);
+    } catch (err) {
+      console.warn('Supabase client init failed:', err);
+    }
+  }
+  return supabaseClient;
+}
 
 function readAuthSession() {
   try {
@@ -3773,9 +3789,49 @@ function writeAuthSession(val) {
   }
 }
 
+function updateSidebarUserLabel(email) {
+  const label = document.querySelector('#sidebar-footer-row .sidebar-label');
+  if (label) {
+    label.textContent = email || 'Modu Workspace';
+  }
+}
+
+function setAuthModeUI(mode, { clearMessages = true } = {}) {
+  authMode = mode === 'signup' ? 'signup' : 'signin';
+  const titleEl = document.getElementById('auth-title');
+  const subtitleEl = document.getElementById('auth-subtitle');
+  const submitBtn = document.getElementById('login-submit-btn');
+  const toggleBtn = document.getElementById('auth-mode-toggle');
+  const errEl = document.getElementById('login-error');
+  const infoEl = document.getElementById('login-info');
+
+  if (authMode === 'signup') {
+    if (titleEl) titleEl.textContent = 'Create account';
+    if (subtitleEl) subtitleEl.textContent = 'Sign up with your email to save your workspace';
+    if (submitBtn) submitBtn.textContent = 'Create account';
+    if (toggleBtn) toggleBtn.textContent = 'Already have an account? Sign in';
+  } else {
+    if (titleEl) titleEl.textContent = 'Sign in';
+    if (subtitleEl) subtitleEl.textContent = 'Enter your credentials to access Modu';
+    if (submitBtn) submitBtn.textContent = 'Sign in';
+    if (toggleBtn) toggleBtn.textContent = 'Need an account? Create one';
+  }
+
+  if (clearMessages) {
+    if (errEl) errEl.classList.add('hidden');
+    if (infoEl) infoEl.classList.add('hidden');
+  }
+}
+
+function toggleAuthMode() {
+  setAuthModeUI(authMode === 'signin' ? 'signup' : 'signin', { clearMessages: true });
+}
+
 function syncAuthState() {
-  const authed = isAuthenticated || readAuthSession();
+  const hasSupabase = Boolean(initSupabaseClient());
+  const authed = hasSupabase ? Boolean(currentAuthUser) : (isAuthenticated || readAuthSession());
   isAuthenticated = authed;
+  updateSidebarUserLabel(currentAuthUser?.email || (authed && !hasSupabase ? AUTH_USERNAME : ''));
   const authScreen = document.getElementById('auth-screen');
   const appShell = document.getElementById('app-shell');
   if (!authScreen || !appShell) return;
@@ -3802,34 +3858,111 @@ function toggleLoginPasswordVisibility() {
   btn.textContent = isPw ? 'Hide' : 'Show';
 }
 
-function handleLogin(e) {
+async function handleLogin(e) {
   if (e && typeof e.preventDefault === 'function') e.preventDefault();
-  const user = (document.getElementById('login-username')?.value || '').trim().toLowerCase();
-  const pass = document.getElementById('login-password')?.value || '';
+  const email = (document.getElementById('login-username')?.value || '').trim().toLowerCase();
+  const password = document.getElementById('login-password')?.value || '';
   const errEl = document.getElementById('login-error');
+  const infoEl = document.getElementById('login-info');
+  const submitBtn = document.getElementById('login-submit-btn');
 
-  if (user === AUTH_USERNAME.toLowerCase() && pass === AUTH_PASSWORD) {
+  if (errEl) errEl.classList.add('hidden');
+  if (infoEl) infoEl.classList.add('hidden');
+
+  const client = initSupabaseClient();
+  if (client) {
+    if (!email || !password) {
+      if (errEl) {
+        errEl.textContent = 'Please enter both email and password.';
+        errEl.classList.remove('hidden');
+      }
+      return;
+    }
+    if (submitBtn) submitBtn.disabled = true;
+    try {
+      if (authMode === 'signup') {
+        const { data, error } = await client.auth.signUp({ email, password });
+        if (error) {
+          if (errEl) {
+            errEl.textContent = error.message || 'Unable to create account.';
+            errEl.classList.remove('hidden');
+          }
+          return;
+        }
+        if (data?.session?.user) {
+          currentAuthUser = data.session.user;
+          if (document.getElementById('login-password')) document.getElementById('login-password').value = '';
+          syncAuthState();
+          await loadWorkspaceForUser(currentAuthUser.id);
+        } else {
+          if (infoEl) {
+            infoEl.textContent = 'Account created. Check your email to confirm your address, then sign in.';
+            infoEl.classList.remove('hidden');
+          }
+          setAuthModeUI('signin', { clearMessages: false });
+        }
+      } else {
+        const { data, error } = await client.auth.signInWithPassword({ email, password });
+        if (error) {
+          if (errEl) {
+            errEl.textContent = error.message || 'Incorrect email or password.';
+            errEl.classList.remove('hidden');
+          }
+          document.getElementById('login-password')?.focus();
+          return;
+        }
+        if (data?.user) {
+          currentAuthUser = data.user;
+          if (document.getElementById('login-password')) document.getElementById('login-password').value = '';
+          syncAuthState();
+          await loadWorkspaceForUser(currentAuthUser.id);
+        }
+      }
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
+    }
+    return;
+  }
+
+  if (email === AUTH_USERNAME.toLowerCase() && password === AUTH_PASSWORD) {
     writeAuthSession(true);
-    if (errEl) errEl.classList.add('hidden');
     if (document.getElementById('login-password')) document.getElementById('login-password').value = '';
     syncAuthState();
+    await loadWorkspaceForUser('local');
   } else {
-    if (errEl) errEl.classList.remove('hidden');
+    if (errEl) {
+      errEl.textContent = 'Incorrect email or password.';
+      errEl.classList.remove('hidden');
+    }
     document.getElementById('login-password')?.focus();
   }
 }
 
-function handleLogout() {
+async function handleLogout() {
+  clearTimeout(saveWorkspaceTimer);
+  const client = initSupabaseClient();
+  if (client) {
+    try {
+      await client.auth.signOut();
+    } catch (err) {
+      console.warn('Supabase signOut failed:', err);
+    }
+  }
+  currentAuthUser = null;
+  hasHydratedOnce = false;
   writeAuthSession(false);
   syncAuthState();
 }
 
-const WORKSPACE_STORAGE_KEY = 'modu_workspace_state_v1';
-const SUPABASE_ROW_ID = 'default';
+const WORKSPACE_STORAGE_PREFIX = 'modu_workspace_state_';
 let supabaseClient = null;
 let isHydratingState = false;
 let hasHydratedOnce = false;
 let saveWorkspaceTimer = null;
+
+function getWorkspaceStorageKey(userId) {
+  return `${WORKSPACE_STORAGE_PREFIX}${userId || 'local'}`;
+}
 
 function getWorkspaceSnapshot() {
   const appGroupMap = {};
@@ -3889,50 +4022,105 @@ function applyWorkspaceSnapshot(snap) {
 
 function scheduleWorkspaceSave() {
   if (isHydratingState || !hasHydratedOnce) return;
+  const client = initSupabaseClient();
+  const userId = currentAuthUser?.id || (client ? null : 'local');
+  if (!userId) return;
+
   const snapshot = getWorkspaceSnapshot();
   try {
-    window.localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(snapshot));
+    window.localStorage.setItem(getWorkspaceStorageKey(userId), JSON.stringify(snapshot));
   } catch {
     // Ignore storage errors in restricted contexts
   }
-  if (!supabaseClient) return;
+
+  if (!client || !currentAuthUser?.id) return;
   clearTimeout(saveWorkspaceTimer);
   saveWorkspaceTimer = setTimeout(async () => {
     try {
-      await supabaseClient
+      await client
         .from('workspace_state')
-        .upsert({ id: SUPABASE_ROW_ID, data: snapshot, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+        .upsert(
+          { user_id: currentAuthUser.id, data: snapshot, updated_at: new Date().toISOString() },
+          { onConflict: 'user_id' }
+        );
     } catch (err) {
       console.warn('Supabase sync failed:', err);
     }
   }, 350);
 }
 
-async function initWorkspacePersistence() {
+async function loadWorkspaceForUser(userId) {
+  if (!userId) return;
+  hasHydratedOnce = false;
   try {
-    const cached = window.localStorage.getItem(WORKSPACE_STORAGE_KEY);
+    const cached = window.localStorage.getItem(getWorkspaceStorageKey(userId));
     if (cached) applyWorkspaceSnapshot(JSON.parse(cached));
   } catch {
     // Ignore storage errors
   }
 
-  const cfg = window.__MODU_SUPABASE__;
-  if (cfg && cfg.url && cfg.anonKey && window.supabase && typeof window.supabase.createClient === 'function') {
+  const client = initSupabaseClient();
+  if (client && userId !== 'local') {
     try {
-      supabaseClient = window.supabase.createClient(cfg.url, cfg.anonKey);
-      const { data, error } = await supabaseClient
+      const { data, error } = await client
         .from('workspace_state')
         .select('data')
-        .eq('id', SUPABASE_ROW_ID)
+        .eq('user_id', userId)
         .maybeSingle();
       if (!error && data && data.data) {
         applyWorkspaceSnapshot(data.data);
+        try {
+          window.localStorage.setItem(getWorkspaceStorageKey(userId), JSON.stringify(data.data));
+        } catch {
+          // Ignore storage errors
+        }
       }
     } catch (err) {
       console.warn('Supabase load failed:', err);
     }
   }
   hasHydratedOnce = true;
+}
+
+async function initWorkspacePersistence() {
+  const client = initSupabaseClient();
+  if (client) {
+    try {
+      const { data } = await client.auth.getSession();
+      if (data?.session?.user) {
+        currentAuthUser = data.session.user;
+        syncAuthState();
+        await loadWorkspaceForUser(currentAuthUser.id);
+      } else {
+        currentAuthUser = null;
+        syncAuthState();
+      }
+    } catch (err) {
+      console.warn('Supabase getSession failed:', err);
+      syncAuthState();
+    }
+
+    if (!authStateListenerRegistered) {
+      authStateListenerRegistered = true;
+      client.auth.onAuthStateChange(async (_event, session) => {
+        const nextUser = session?.user || null;
+        const sameUser = nextUser && currentAuthUser && nextUser.id === currentAuthUser.id;
+        currentAuthUser = nextUser;
+        syncAuthState();
+        if (nextUser) {
+          if (!sameUser || !hasHydratedOnce) {
+            await loadWorkspaceForUser(nextUser.id);
+          }
+        } else {
+          hasHydratedOnce = false;
+        }
+      });
+    }
+    return;
+  }
+
+  syncAuthState();
+  await loadWorkspaceForUser('local');
 }
 
 [
