@@ -1536,6 +1536,19 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
               <label class="block text-[11px] font-medium text-slate-600 mb-1">Value (NOK, optional)</label>
               <input id="l-value" type="number" min="0" step="any" placeholder="0" class="w-full h-9 px-3 text-xs tabular-nums bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
             </div>
+
+            <div class="sm:col-span-2">
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Website (auto-fetches company logo)</label>
+              <div class="flex items-center gap-2">
+                <input id="l-website" type="url" placeholder="https://company.com" onkeydown="if(event.key==='Enter'){event.preventDefault();fetchNewLeadLogo();}" class="flex-1 min-w-0 h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+                <button id="l-fetch-logo-btn" type="button" onclick="fetchNewLeadLogo()" class="h-9 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 shrink-0 transition-colors">Fetch Logo</button>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Logo URL (optional)</label>
+              <input id="l-logo" type="url" placeholder="Auto-filled from website" class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+            </div>
           </div>
 
           <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200/70">
@@ -2447,6 +2460,98 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
       </section>
 
     </main>
+  </div>
+
+  <div id="lead-detail-drawer" onclick="if(event.target===this) closeLeadDrawer()" style="width:100vw;height:100vh;" class="hidden fixed inset-0 z-50 w-screen h-screen bg-slate-900/45 backdrop-blur-[2px] flex justify-end">
+    <aside class="w-full max-w-md h-full bg-white shadow-2xl border-l border-slate-200 flex flex-col overflow-hidden animate-fade">
+      <div class="flex items-start justify-between gap-3 px-6 py-4 border-b border-slate-200/80 bg-[#fbfcfd]">
+        <div class="flex items-center gap-3 min-w-0">
+          <div id="ld-header-logo" class="w-10 h-10 rounded-xl border border-slate-200 bg-white flex items-center justify-center overflow-hidden shrink-0"></div>
+          <div class="min-w-0">
+            <h3 id="ld-header-title" class="text-sm font-bold text-slate-900 truncate">Lead Details</h3>
+            <a id="ld-header-website" href="#" target="_blank" rel="noopener noreferrer" class="hidden text-[11px] text-slate-500 hover:text-slate-900 underline underline-offset-2 truncate block mt-0.5"></a>
+          </div>
+        </div>
+        <button type="button" onclick="closeLeadDrawer()" class="text-xs text-slate-400 hover:text-slate-700 p-1">✕</button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-6 space-y-4">
+        <input type="hidden" id="ld-id" value="" />
+
+        <div class="rounded-xl border border-slate-200/80 bg-[#fbfcfd] p-3.5 space-y-2.5">
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-[11px] font-semibold text-slate-700">Website &amp; Logo</label>
+            <span id="ld-fetch-status" class="hidden text-[10px] text-slate-500"></span>
+          </div>
+          <div class="flex items-center gap-2">
+            <input
+              id="ld-website"
+              type="url"
+              placeholder="https://company.com"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();fetchLeadWebsiteLogo();}"
+              oninput="syncLeadDrawerHeaderPreview()"
+              class="flex-1 min-w-0 h-8 px-2.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400"
+            />
+            <button id="ld-fetch-logo-btn" type="button" onclick="fetchLeadWebsiteLogo()" class="h-8 px-3 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-[11px] font-medium shrink-0 transition-colors">Fetch Logo</button>
+          </div>
+          <div>
+            <label class="block text-[10px] font-medium text-slate-500 mb-1">Logo URL</label>
+            <input
+              id="ld-logo"
+              type="url"
+              placeholder="Auto-filled from website or paste image URL"
+              oninput="syncLeadDrawerHeaderPreview()"
+              class="w-full h-8 px-2.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-medium text-slate-600 mb-1">Company Name</label>
+          <input id="ld-company" type="text" oninput="syncLeadDrawerHeaderPreview()" class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-slate-400" />
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-[11px] font-medium text-slate-600 mb-1">Stage</label>
+            <select id="ld-stage" class="w-full h-9 px-2.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-slate-400"></select>
+          </div>
+          <div>
+            <label class="block text-[11px] font-medium text-slate-600 mb-1">Value (NOK)</label>
+            <input id="ld-value" type="number" min="0" step="any" placeholder="0" class="w-full h-9 px-3 text-xs tabular-nums bg-white border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-slate-400" />
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-medium text-slate-600 mb-1">Channel</label>
+          <select id="ld-channel" class="w-full h-9 px-2.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-slate-400"></select>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-[11px] font-medium text-slate-600 mb-1">ERP-system</label>
+            <select id="ld-erp" class="w-full h-9 px-2.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-slate-400"></select>
+          </div>
+          <div>
+            <label class="block text-[11px] font-medium text-slate-600 mb-1">Other Integration</label>
+            <select id="ld-integration" class="w-full h-9 px-2.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-slate-400"></select>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-medium text-slate-600 mb-1">Notes</label>
+          <textarea id="ld-notes" rows="3" placeholder="Add context, next steps, or key contacts..." class="w-full p-2.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400"></textarea>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between gap-2 px-6 py-4 border-t border-slate-200/80 bg-[#fbfcfd]">
+        <button type="button" onclick="deleteLeadFromDrawer()" class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-red-50 hover:text-red-700 hover:border-red-200 text-xs font-medium text-slate-600 transition-colors">Delete</button>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="closeLeadDrawer()" class="h-8 px-3.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition-colors">Cancel</button>
+          <button type="button" onclick="saveLeadFromDrawer()" class="h-8 px-4 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium transition-colors">Save Changes</button>
+        </div>
+      </div>
+    </aside>
   </div>
 
   <input type="file" id="csv-file-input" accept=".csv,text/csv" class="hidden" onchange="handleCsvFileSelected(event)" />

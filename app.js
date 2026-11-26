@@ -4385,6 +4385,10 @@ function toggleLeadForm(show, editId = null, presetStageId = null) {
     document.getElementById('lead-form-title').textContent = 'Edit Lead';
     document.getElementById('l-edit-id').value = String(item.id);
     document.getElementById('l-company').value = item.company;
+    const lWeb = document.getElementById('l-website');
+    const lLogo = document.getElementById('l-logo');
+    if (lWeb) lWeb.value = item.website || '';
+    if (lLogo) lLogo.value = item.logo || '';
     populateLeadIntegrationSelect('erp', item.erp || '');
     populateLeadIntegrationSelect('integration', item.integration || '');
     document.getElementById('l-value').value = item.value > 0 ? String(item.value) : '';
@@ -4395,6 +4399,10 @@ function toggleLeadForm(show, editId = null, presetStageId = null) {
     document.getElementById('lead-form-title').textContent = 'New Lead';
     document.getElementById('l-edit-id').value = '';
     document.getElementById('l-company').value = '';
+    const lWeb = document.getElementById('l-website');
+    const lLogo = document.getElementById('l-logo');
+    if (lWeb) lWeb.value = '';
+    if (lLogo) lLogo.value = '';
     populateLeadIntegrationSelect('erp', '');
     populateLeadIntegrationSelect('integration', '');
     document.getElementById('l-value').value = '';
@@ -4404,9 +4412,38 @@ function toggleLeadForm(show, editId = null, presetStageId = null) {
   document.getElementById('l-company').focus();
 }
 
+async function fetchNewLeadLogo() {
+  const webInput = document.getElementById('l-website');
+  const logoInput = document.getElementById('l-logo');
+  const btn = document.getElementById('l-fetch-logo-btn');
+  const rawUrl = (webInput?.value || '').trim();
+  if (!rawUrl) {
+    webInput?.focus();
+    return;
+  }
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Fetching...';
+  }
+  const info = await fetchSocialProfileInfo(rawUrl);
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = 'Fetch Logo';
+  }
+  if (!info) return;
+  if (webInput) webInput.value = info.url;
+  if (logoInput && info.logo) logoInput.value = info.logo;
+  const compInput = document.getElementById('l-company');
+  if (compInput && !compInput.value.trim() && info.name) {
+    compInput.value = info.name.replace(/^@/, '');
+  }
+}
+
 function saveLead() {
   const editId = document.getElementById('l-edit-id').value;
   const company = (document.getElementById('l-company').value || '').trim();
+  const website = normalizeWebsiteUrl(document.getElementById('l-website')?.value || '');
+  const logo = (document.getElementById('l-logo')?.value || '').trim() || (website ? getLogoUrl(website) : '');
   let erp = document.getElementById('l-erp').value;
   if (erp === '__add_new__') {
     const customErp = (document.getElementById('l-erp-custom').value || '').trim();
@@ -4448,14 +4485,18 @@ function saveLead() {
   }
   if (!stageId) return;
 
+  const existingLead = editId ? leadEntries.find(l => l.id === Number(editId)) : null;
   const data = {
     id: editId ? Number(editId) : Date.now(),
     company,
+    website,
+    logo,
     erp,
     integration,
     channel,
     stageId,
-    value
+    value,
+    notes: existingLead?.notes || ''
   };
 
   if (editId) {
@@ -4467,6 +4508,157 @@ function saveLead() {
 
   toggleLeadForm(false);
   renderLeadsView();
+}
+
+function populateLeadDrawerSelects(lead) {
+  const stageSel = document.getElementById('ld-stage');
+  if (stageSel) {
+    stageSel.innerHTML = leadStages.map(s => `<option value="${s.id}" ${s.id === lead.stageId ? 'selected' : ''}>${s.name}</option>`).join('');
+  }
+  const chSel = document.getElementById('ld-channel');
+  if (chSel) {
+    const chNames = getChannelNames();
+    chSel.innerHTML = chNames.map(ch => `<option value="${ch}" ${ch === lead.channel ? 'selected' : ''}>${ch}</option>`).join('');
+  }
+  const erpSel = document.getElementById('ld-erp');
+  if (erpSel) {
+    const list = integrationsList.map(i => i.name);
+    erpSel.innerHTML = `<option value="">None</option>` + list.map(n => `<option value="${n}" ${n === lead.erp ? 'selected' : ''}>${n}</option>`).join('');
+  }
+  const intSel = document.getElementById('ld-integration');
+  if (intSel) {
+    const list = integrationsList.map(i => i.name);
+    intSel.innerHTML = `<option value="">None</option>` + list.map(n => `<option value="${n}" ${n === lead.integration ? 'selected' : ''}>${n}</option>`).join('');
+  }
+}
+
+function syncLeadDrawerHeaderPreview() {
+  const company = (document.getElementById('ld-company')?.value || '').trim() || 'Lead Details';
+  const website = normalizeWebsiteUrl(document.getElementById('ld-website')?.value || '');
+  const logoInput = (document.getElementById('ld-logo')?.value || '').trim();
+  const logoUrl = logoInput || (website ? getLogoUrl(website) : '');
+  const initials = company.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase() || '?';
+
+  const titleEl = document.getElementById('ld-header-title');
+  if (titleEl) titleEl.textContent = company;
+
+  const webEl = document.getElementById('ld-header-website');
+  if (webEl) {
+    if (website) {
+      webEl.href = website;
+      webEl.textContent = `${getDomainFromUrl(website) || website} ↗`;
+      webEl.classList.remove('hidden');
+    } else {
+      webEl.classList.add('hidden');
+    }
+  }
+
+  const logoEl = document.getElementById('ld-header-logo');
+  if (logoEl) {
+    logoEl.innerHTML = logoUrl
+      ? `<img src="${logoUrl}" alt="${company}" class="w-6 h-6 object-contain" onerror="this.parentElement.innerHTML='<span class=\\'text-xs font-bold text-slate-600\\'>${initials}</span>'" />`
+      : `<span class="text-xs font-bold text-slate-600">${initials}</span>`;
+  }
+}
+
+function openLeadDrawer(leadId) {
+  const lead = leadEntries.find(l => l.id === leadId);
+  if (!lead) return;
+  document.getElementById('ld-id').value = String(lead.id);
+  document.getElementById('ld-company').value = lead.company || '';
+  document.getElementById('ld-website').value = lead.website || '';
+  document.getElementById('ld-logo').value = lead.logo || '';
+  document.getElementById('ld-value').value = lead.value > 0 ? String(lead.value) : '';
+  document.getElementById('ld-notes').value = lead.notes || '';
+  const statusEl = document.getElementById('ld-fetch-status');
+  if (statusEl) {
+    statusEl.textContent = '';
+    statusEl.classList.add('hidden');
+  }
+  if (lead.channel) ensureChannelExists(lead.channel);
+  populateLeadDrawerSelects(lead);
+  syncLeadDrawerHeaderPreview();
+  document.getElementById('lead-detail-drawer')?.classList.remove('hidden');
+}
+
+function closeLeadDrawer() {
+  document.getElementById('lead-detail-drawer')?.classList.add('hidden');
+}
+
+async function fetchLeadWebsiteLogo() {
+  const webInput = document.getElementById('ld-website');
+  const logoInput = document.getElementById('ld-logo');
+  const btn = document.getElementById('ld-fetch-logo-btn');
+  const statusEl = document.getElementById('ld-fetch-status');
+  const rawUrl = (webInput?.value || '').trim();
+  if (!rawUrl) {
+    webInput?.focus();
+    return;
+  }
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Fetching...';
+  }
+  if (statusEl) {
+    statusEl.textContent = 'Fetching website & logo...';
+    statusEl.classList.remove('hidden');
+  }
+
+  const info = await fetchSocialProfileInfo(rawUrl);
+
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = 'Fetch Logo';
+  }
+  if (!info) {
+    if (statusEl) {
+      statusEl.textContent = 'Invalid website URL';
+      statusEl.classList.remove('hidden');
+    }
+    return;
+  }
+
+  if (webInput) webInput.value = info.url;
+  if (logoInput && info.logo) logoInput.value = info.logo;
+  syncLeadDrawerHeaderPreview();
+
+  if (statusEl) {
+    statusEl.textContent = info.fromApi ? 'Fetched logo & metadata' : 'Logo detected from domain';
+    statusEl.classList.remove('hidden');
+  }
+}
+
+function saveLeadFromDrawer() {
+  const leadId = Number(document.getElementById('ld-id')?.value);
+  const lead = leadEntries.find(l => l.id === leadId);
+  if (!lead) return;
+  const company = (document.getElementById('ld-company')?.value || '').trim();
+  if (!company) {
+    document.getElementById('ld-company')?.focus();
+    return;
+  }
+  const website = normalizeWebsiteUrl(document.getElementById('ld-website')?.value || '');
+  const logo = (document.getElementById('ld-logo')?.value || '').trim() || (website ? getLogoUrl(website) : '');
+  lead.company = company;
+  lead.website = website;
+  lead.logo = logo;
+  lead.stageId = Number(document.getElementById('ld-stage')?.value) || lead.stageId;
+  lead.channel = document.getElementById('ld-channel')?.value || lead.channel;
+  lead.erp = document.getElementById('ld-erp')?.value || '';
+  lead.integration = document.getElementById('ld-integration')?.value || '';
+  lead.value = Math.max(0, parseFloat(document.getElementById('ld-value')?.value) || 0);
+  lead.notes = (document.getElementById('ld-notes')?.value || '').trim();
+
+  closeLeadDrawer();
+  renderLeadsView();
+  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+}
+
+function deleteLeadFromDrawer() {
+  const leadId = Number(document.getElementById('ld-id')?.value);
+  if (!leadId) return;
+  closeLeadDrawer();
+  deleteLead(leadId);
 }
 
 function deleteLead(leadId) {
@@ -4712,31 +4904,47 @@ function renderLeadsView() {
 
     const cardsHtml = stageLeads.length === 0
       ? `<div class="rounded-xl border border-dashed border-slate-200/80 bg-white/60 p-5 text-center text-[11px] text-slate-400">Drop lead here or click +</div>`
-      : stageLeads.map(l => `
-          <div
-            draggable="true"
-            ondragstart="onLeadDragStart(event, ${l.id})"
-            onclick="toggleLeadForm(true, ${l.id})"
-            class="group rounded-xl border border-slate-200/80 bg-white p-3.5 card-shadow space-y-2.5 cursor-pointer hover:border-slate-300 transition-all"
-          >
-            <div class="flex items-start justify-between gap-2">
-              <div class="font-semibold text-xs text-slate-900 leading-snug">${l.company}</div>
-              ${renderActionMenuHtml(`toggleLeadForm(true, ${l.id})`, `deleteLead(${l.id})`, 'w-6 h-6 shrink-0')}
-            </div>
-
-            ${(l.erp || l.integration) ? `
-              <div class="flex flex-wrap items-center gap-1.5 text-[11px]">
-                ${l.erp ? `<span class="px-2 py-0.5 rounded-md bg-[#f5f7fa] text-slate-700 border border-slate-200/60">${l.erp}</span>` : ''}
-                ${l.integration ? `<span class="px-2 py-0.5 rounded-md bg-white text-slate-500 border border-slate-200/70">+ ${l.integration}</span>` : ''}
+      : stageLeads.map(l => {
+          const logoUrl = l.logo || (l.website ? getLogoUrl(l.website) : '');
+          const initials = (l.company || '?').split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
+          const logoHtml = logoUrl
+            ? `<div class="w-7 h-7 rounded-lg border border-slate-200 bg-white flex items-center justify-center overflow-hidden shrink-0">
+                 <img src="${logoUrl}" alt="${l.company}" class="w-4 h-4 object-contain" onerror="this.parentElement.innerHTML='<span class=\\'text-[10px] font-bold text-slate-600\\'>${initials}</span>'" />
+               </div>`
+            : '';
+          const domain = l.website ? getDomainFromUrl(l.website) : '';
+          return `
+            <div
+              draggable="true"
+              ondragstart="onLeadDragStart(event, ${l.id})"
+              onclick="openLeadDrawer(${l.id})"
+              class="group rounded-xl border border-slate-200/80 bg-white p-3.5 card-shadow space-y-2.5 cursor-pointer hover:border-slate-300 transition-all"
+            >
+              <div class="flex items-start justify-between gap-2">
+                <div class="flex items-center gap-2 min-w-0">
+                  ${logoHtml}
+                  <div class="min-w-0">
+                    <div class="font-semibold text-xs text-slate-900 leading-snug truncate">${l.company}</div>
+                    ${l.website ? `<a href="${l.website}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" class="text-[10px] text-slate-500 hover:text-slate-900 underline underline-offset-2 truncate block">${domain || l.website} ↗</a>` : ''}
+                  </div>
+                </div>
+                ${renderActionMenuHtml(`openLeadDrawer(${l.id})`, `deleteLead(${l.id})`, 'w-6 h-6 shrink-0')}
               </div>
-            ` : ''}
 
-            <div class="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-100">
-              <span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-700">${l.channel}</span>
-              ${l.value > 0 ? `<span class="text-[11px] font-semibold tabular-nums text-slate-900">${Math.round(l.value).toLocaleString()} NOK</span>` : ''}
+              ${(l.erp || l.integration) ? `
+                <div class="flex flex-wrap items-center gap-1.5 text-[11px]">
+                  ${l.erp ? `<span class="px-2 py-0.5 rounded-md bg-[#f5f7fa] text-slate-700 border border-slate-200/60">${l.erp}</span>` : ''}
+                  ${l.integration ? `<span class="px-2 py-0.5 rounded-md bg-white text-slate-500 border border-slate-200/70">+ ${l.integration}</span>` : ''}
+                </div>
+              ` : ''}
+
+              <div class="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-100">
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-700">${l.channel}</span>
+                ${l.value > 0 ? `<span class="text-[11px] font-semibold tabular-nums text-slate-900">${Math.round(l.value).toLocaleString()} NOK</span>` : ''}
+              </div>
             </div>
-          </div>
-        `).join('');
+          `;
+        }).join('');
 
     return `
       <div
