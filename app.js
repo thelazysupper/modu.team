@@ -1317,6 +1317,9 @@ function renderChannelsView() {
 let budgetData = {};
 let budgetTotalByYear = {};
 let budgetMonthlyCapByYear = {};
+let budgetTotalLockByYear = {};
+let budgetMonthLocksByYear = {};
+let budgetPlannedUnit = 'nok';
 let budgetYear = '2026';
 let budgetSubView = 'summary';
 const budgetCurrency = 'NOK';
@@ -1329,6 +1332,17 @@ function ensureMonthlyCaps(year) {
   return budgetMonthlyCapByYear[year];
 }
 
+function ensureMonthLocks(year) {
+  if (!Array.isArray(budgetMonthLocksByYear[year]) || budgetMonthLocksByYear[year].length !== 12) {
+    budgetMonthLocksByYear[year] = Array(12).fill(false);
+  }
+  return budgetMonthLocksByYear[year];
+}
+
+function isAnnualBudgetLocked(year) {
+  return Boolean(budgetTotalLockByYear[year]);
+}
+
 function setBudgetSubView(sv) {
   budgetSubView = sv;
   const views = ['summary', 'total', 'allocated', 'actual', 'variance'];
@@ -1336,30 +1350,37 @@ function setBudgetSubView(sv) {
     document.getElementById('budget-sub-' + v)?.classList.toggle('hidden', v !== sv);
   });
 
+  document.querySelectorAll('.budget-flow-tab').forEach(btn => {
+    const active = btn.getAttribute('data-budget-tab') === sv;
+    btn.className = active
+      ? 'budget-flow-tab h-8 px-3 rounded-lg text-xs font-medium transition-colors bg-[#0f172a] text-white'
+      : 'budget-flow-tab h-8 px-3 rounded-lg text-xs font-medium transition-colors bg-[#fbfcfd] border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50';
+  });
+
   const meta = {
     summary: {
       crumb: '',
       title: 'Budget',
-      desc: 'Summary of your marketing budget in NOK. Select any card below to open its detailed view.'
+      desc: 'Follow the steps below: set your Total & Monthly budget, lock targets if needed, then allocate by NOK or % across channels.'
     },
     total: {
-      crumb: 'Total Budget',
-      title: 'Total Budget per Year',
-      desc: 'Set your annual or monthly budget in NOK and manually divide each month across channels.'
+      crumb: '1. Total & Monthly Plan',
+      title: 'Total & Monthly Plan',
+      desc: 'Set and lock your Annual Total and Monthly budgets in NOK, then allocate each month by NOK or %.'
     },
     allocated: {
-      crumb: 'Allocated to Channels',
-      title: 'Allocated to Channels',
-      desc: 'Planned monthly budgets by channel in NOK.'
+      crumb: '2. Channel Allocation',
+      title: 'Channel Allocation',
+      desc: 'Planned monthly budgets and % share by channel in NOK.'
     },
     actual: {
-      crumb: 'Total Actual Spend',
-      title: 'Total Actual Spend',
+      crumb: '3. Actual Spend',
+      title: 'Actual Spend',
       desc: 'Record and review actual monthly spend per channel in NOK.'
     },
     variance: {
-      crumb: 'Net Variance',
-      title: 'Net Variance',
+      crumb: '4. Variance',
+      title: 'Variance',
       desc: 'Compare allocated budget vs. actual spend per channel in NOK.'
     }
   };
@@ -1372,7 +1393,7 @@ function setBudgetSubView(sv) {
     crumbEl.classList.toggle('hidden', isSummary);
     crumbEl.textContent = m.crumb;
   }
-  document.getElementById('budget-back-btn')?.classList.toggle('hidden', isSummary);
+  document.getElementById('budget-back-btn')?.classList.add('hidden');
   const titleEl = document.getElementById('budget-page-title');
   if (titleEl) titleEl.textContent = m.title;
   const descEl = document.getElementById('budget-page-desc');
@@ -1381,7 +1402,19 @@ function setBudgetSubView(sv) {
   renderBudgetView();
 }
 
+function toggleAnnualBudgetLock() {
+  budgetTotalLockByYear[budgetYear] = !isAnnualBudgetLocked(budgetYear);
+  renderBudgetView();
+}
+
+function toggleMonthBudgetLock(mIdx) {
+  const locks = ensureMonthLocks(budgetYear);
+  locks[mIdx] = !locks[mIdx];
+  renderBudgetView();
+}
+
 function handleAnnualBudgetChange() {
+  if (isAnnualBudgetLocked(budgetYear)) return;
   const val = parseFloat(document.getElementById('budget-annual-total').value);
   budgetTotalByYear[budgetYear] = isNaN(val) || val < 0 ? 0 : val;
   renderBudgetView();
@@ -1390,19 +1423,35 @@ function handleAnnualBudgetChange() {
 function distributeAnnualEvenly() {
   const annual = budgetTotalByYear[budgetYear] || 0;
   const caps = ensureMonthlyCaps(budgetYear);
-  const perMonth = annual > 0 ? Math.round((annual / 12) * 100) / 100 : 0;
-  for (let m = 0; m < 12; m++) caps[m] = perMonth;
+  const locks = ensureMonthLocks(budgetYear);
+  let lockedSum = 0;
+  const unlockedIndices = [];
+  for (let m = 0; m < 12; m++) {
+    if (locks[m]) lockedSum += caps[m] || 0;
+    else unlockedIndices.push(m);
+  }
+  if (unlockedIndices.length > 0) {
+    const remaining = Math.max(0, annual - lockedSum);
+    const perMonth = remaining > 0 ? Math.round((remaining / unlockedIndices.length) * 100) / 100 : 0;
+    unlockedIndices.forEach(m => {
+      caps[m] = perMonth;
+    });
+  }
   renderBudgetView();
 }
 
 function updateMonthlyCap(mIdx, val) {
+  const locks = ensureMonthLocks(budgetYear);
+  if (locks[mIdx]) return;
   const num = parseFloat(val);
   const caps = ensureMonthlyCaps(budgetYear);
   caps[mIdx] = isNaN(num) || num < 0 ? 0 : num;
-  budgetTotalByYear[budgetYear] = caps.reduce((a, b) => a + b, 0);
-  const annualInput = document.getElementById('budget-annual-total');
-  if (annualInput) {
-    annualInput.value = budgetTotalByYear[budgetYear] > 0 ? Math.round(budgetTotalByYear[budgetYear]) : '';
+  if (!isAnnualBudgetLocked(budgetYear)) {
+    budgetTotalByYear[budgetYear] = caps.reduce((a, b) => a + b, 0);
+    const annualInput = document.getElementById('budget-annual-total');
+    if (annualInput) {
+      annualInput.value = budgetTotalByYear[budgetYear] > 0 ? Math.round(budgetTotalByYear[budgetYear]) : '';
+    }
   }
   renderBudgetView();
 }
@@ -1456,6 +1505,71 @@ function confirmAddBudgetCustomChannel() {
   document.getElementById('b-channel-custom-wrap').classList.add('hidden');
 }
 
+function setBudgetPlannedUnit(unit) {
+  budgetPlannedUnit = unit === 'pct' ? 'pct' : 'nok';
+  const nokBtn = document.getElementById('b-planned-unit-nok');
+  const pctBtn = document.getElementById('b-planned-unit-pct');
+  const lbl = document.getElementById('b-planned-label');
+  if (nokBtn && pctBtn) {
+    if (budgetPlannedUnit === 'nok') {
+      nokBtn.className = 'px-1.5 py-0.5 rounded bg-[#0f172a] text-white font-semibold';
+      pctBtn.className = 'px-1.5 py-0.5 rounded text-slate-600 hover:text-slate-900 font-medium';
+    } else {
+      pctBtn.className = 'px-1.5 py-0.5 rounded bg-[#0f172a] text-white font-semibold';
+      nokBtn.className = 'px-1.5 py-0.5 rounded text-slate-600 hover:text-slate-900 font-medium';
+    }
+  }
+  if (lbl) {
+    lbl.textContent = budgetPlannedUnit === 'pct' ? 'Planned Share (% of Total)' : 'Planned Budget (NOK)';
+  }
+  updateBudgetFormHint();
+}
+
+function updateBudgetFormHint() {
+  const hintEl = document.getElementById('b-form-hint');
+  if (!hintEl) return;
+  const monthVal = document.getElementById('b-month')?.value || 'all';
+  const rawPlanned = parseFloat(document.getElementById('b-planned')?.value) || 0;
+  const caps = ensureMonthlyCaps(budgetYear);
+  const capSum = caps.reduce((a, b) => a + b, 0);
+  const annualBudget = budgetTotalByYear[budgetYear] || capSum || 0;
+
+  if (monthVal === 'all') {
+    if (budgetPlannedUnit === 'pct') {
+      if (annualBudget <= 0) {
+        hintEl.textContent = 'All Months selected (% of Total): set an Annual Total or Monthly budgets first so % can be converted to NOK and divided by 12.';
+      } else {
+        const totalNok = (rawPlanned / 100) * annualBudget;
+        const perMonth = Math.round((totalNok / 12) * 100) / 100;
+        hintEl.textContent = `All Months selected: ${rawPlanned}% of ${Math.round(annualBudget).toLocaleString()} NOK = ${Math.round(totalNok).toLocaleString()} NOK total → ${perMonth.toLocaleString()} NOK / month (÷ 12).`;
+      }
+    } else {
+      if (rawPlanned > 0) {
+        const perMonth = Math.round((rawPlanned / 12) * 100) / 100;
+        hintEl.textContent = `All Months selected: ${rawPlanned.toLocaleString()} NOK will be divided evenly across 12 months → ${perMonth.toLocaleString()} NOK / month.`;
+      } else {
+        hintEl.textContent = 'All Months selected: the planned amount will be divided evenly across 12 months (÷ 12).';
+      }
+    }
+  } else {
+    const mIdx = parseInt(monthVal, 10);
+    const mName = monthNames[mIdx] || 'selected month';
+    const monthBase = caps[mIdx] > 0 ? caps[mIdx] : (annualBudget > 0 ? annualBudget / 12 : 0);
+    if (budgetPlannedUnit === 'pct') {
+      if (monthBase <= 0) {
+        hintEl.textContent = `${mName} selected (% of Total): set ${mName}'s budget or an Annual Total first to calculate NOK.`;
+      } else {
+        const nokVal = Math.round(((rawPlanned / 100) * monthBase) * 100) / 100;
+        hintEl.textContent = `${mName} selected: ${rawPlanned}% of ${Math.round(monthBase).toLocaleString()} NOK = ${nokVal.toLocaleString()} NOK applied only to ${mName}.`;
+      }
+    } else {
+      hintEl.textContent = rawPlanned > 0
+        ? `${mName} selected: ${rawPlanned.toLocaleString()} NOK will be applied only to ${mName}.`
+        : `${mName} selected: the planned amount will be applied only to ${mName}.`;
+    }
+  }
+}
+
 function toggleBudgetForm(show) {
   const panel = document.getElementById('budget-form-panel');
   if (!show) {
@@ -1469,6 +1583,7 @@ function toggleBudgetForm(show) {
   document.getElementById('b-month').value = 'all';
   document.getElementById('b-planned').value = '';
   document.getElementById('b-actual').value = '';
+  setBudgetPlannedUnit('nok');
   document.getElementById('b-channel').focus();
 }
 
@@ -1477,7 +1592,7 @@ function saveBudgetEntry() {
   const customVal = (document.getElementById('b-channel-custom').value || '').trim();
   const channel = selVal === '__add_new__' ? customVal : (selVal || '').trim();
   const monthVal = document.getElementById('b-month').value;
-  const planned = parseFloat(document.getElementById('b-planned').value) || 0;
+  const rawPlanned = parseFloat(document.getElementById('b-planned').value) || 0;
   const actual = parseFloat(document.getElementById('b-actual').value) || 0;
 
   if (!channel) {
@@ -1486,6 +1601,21 @@ function saveBudgetEntry() {
     return;
   }
   ensureChannelExists(channel);
+
+  const caps = ensureMonthlyCaps(budgetYear);
+  const capSum = caps.reduce((a, b) => a + b, 0);
+  const annualBudget = budgetTotalByYear[budgetYear] || capSum || 0;
+
+  let plannedAmount = rawPlanned;
+  if (budgetPlannedUnit === 'pct') {
+    if (monthVal === 'all') {
+      plannedAmount = annualBudget > 0 ? (rawPlanned / 100) * annualBudget : 0;
+    } else {
+      const mIdx = parseInt(monthVal, 10);
+      const monthBase = caps[mIdx] > 0 ? caps[mIdx] : (annualBudget > 0 ? annualBudget / 12 : 0);
+      plannedAmount = monthBase > 0 ? (rawPlanned / 100) * monthBase : 0;
+    }
+  }
 
   if (!budgetData[budgetYear]) budgetData[budgetYear] = {};
   if (!budgetData[budgetYear][channel]) {
@@ -1496,13 +1626,15 @@ function saveBudgetEntry() {
   }
 
   if (monthVal === 'all') {
+    const plannedPerMonth = Math.round((plannedAmount / 12) * 100) / 100;
+    const actualPerMonth = Math.round((actual / 12) * 100) / 100;
     for (let m = 0; m < 12; m++) {
-      budgetData[budgetYear][channel].planned[m] = planned;
-      budgetData[budgetYear][channel].actual[m] = actual;
+      budgetData[budgetYear][channel].planned[m] = plannedPerMonth;
+      budgetData[budgetYear][channel].actual[m] = actualPerMonth;
     }
   } else {
     const mIdx = parseInt(monthVal, 10);
-    budgetData[budgetYear][channel].planned[mIdx] = planned;
+    budgetData[budgetYear][channel].planned[mIdx] = Math.round(plannedAmount * 100) / 100;
     budgetData[budgetYear][channel].actual[mIdx] = actual;
   }
 
@@ -1514,6 +1646,23 @@ function updateBudgetCell(channel, monthIdx, val) {
   const num = parseFloat(val);
   if (!budgetData[budgetYear] || !budgetData[budgetYear][channel]) return;
   budgetData[budgetYear][channel].planned[monthIdx] = isNaN(num) || num < 0 ? 0 : num;
+  renderBudgetView();
+}
+
+function updateBudgetCellPct(channel, monthIdx, pctVal) {
+  const pct = parseFloat(pctVal);
+  if (!budgetData[budgetYear] || !budgetData[budgetYear][channel]) return;
+  if (isNaN(pct) || pct < 0) return;
+  const caps = ensureMonthlyCaps(budgetYear);
+  const capSum = caps.reduce((a, b) => a + b, 0);
+  const annualBudget = budgetTotalByYear[budgetYear] || capSum || 0;
+  let monthAllocated = 0;
+  Object.keys(budgetData[budgetYear]).forEach(ch => {
+    monthAllocated += budgetData[budgetYear][ch].planned[monthIdx] || 0;
+  });
+  const monthBase = caps[monthIdx] > 0 ? caps[monthIdx] : (annualBudget > 0 ? annualBudget / 12 : monthAllocated);
+  if (monthBase <= 0) return;
+  budgetData[budgetYear][channel].planned[monthIdx] = Math.round(((pct / 100) * monthBase) * 100) / 100;
   renderBudgetView();
 }
 
@@ -1651,33 +1800,71 @@ function renderBudgetSubTotal(channels, yearObj, caps, monthlyPlanned) {
     });
   }
 
+  const annualLocked = isAnnualBudgetLocked(budgetYear);
+  const monthLocks = ensureMonthLocks(budgetYear);
+
   document.getElementById('bt-year-lbl').textContent = budgetYear;
   const annualInput = document.getElementById('budget-annual-total');
-  if (annualInput && document.activeElement !== annualInput) {
-    const saved = budgetTotalByYear[budgetYear];
-    annualInput.value = saved > 0 ? saved : '';
+  const annualWrap = document.getElementById('budget-annual-total-wrap');
+  const annualLockBtn = document.getElementById('budget-annual-lock-btn');
+  if (annualInput) {
+    if (document.activeElement !== annualInput) {
+      const saved = budgetTotalByYear[budgetYear];
+      annualInput.value = saved > 0 ? saved : '';
+    }
+    annualInput.disabled = annualLocked;
+  }
+  if (annualWrap) {
+    annualWrap.className = annualLocked
+      ? 'flex items-center gap-1.5 bg-slate-100 border border-slate-300 rounded-lg px-3 h-8 text-xs'
+      : 'flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-3 h-8 text-xs';
+  }
+  if (annualLockBtn) {
+    annualLockBtn.className = annualLocked
+      ? 'h-8 px-2.5 rounded-lg border border-slate-900 bg-[#0f172a] text-white text-xs font-medium flex items-center gap-1.5 transition-colors'
+      : 'h-8 px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 flex items-center gap-1.5 transition-colors';
+    annualLockBtn.innerHTML = annualLocked
+      ? `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg><span>Locked</span>`
+      : `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg><span>Lock Total</span>`;
   }
 
   const capSum = caps.reduce((a, b) => a + b, 0);
   document.getElementById('bt-monthly-sum-lbl').textContent = `Monthly sum: ${Math.round(capSum).toLocaleString()} NOK`;
 
-  document.getElementById('bt-month-inputs').innerHTML = monthNames.map((mName, mIdx) => `
-    <div class="p-2.5 rounded-xl bg-white border border-slate-200/80 space-y-1">
-      <div class="flex items-center justify-between text-[11px] text-slate-500">
-        <span class="font-medium text-slate-700">${mName}</span>
-        <span>NOK</span>
+  document.getElementById('bt-month-inputs').innerHTML = monthNames.map((mName, mIdx) => {
+    const isLocked = Boolean(monthLocks[mIdx]);
+    return `
+      <div class="p-2.5 rounded-xl ${isLocked ? 'bg-slate-100/90 border-slate-300' : 'bg-white border-slate-200/80'} border space-y-1 transition-colors">
+        <div class="flex items-center justify-between text-[11px] text-slate-500">
+          <span class="font-medium text-slate-700">${mName}</span>
+          <div class="flex items-center gap-1.5">
+            <span>NOK</span>
+            <button
+              type="button"
+              onclick="toggleMonthBudgetLock(${mIdx})"
+              title="${isLocked ? 'Unlock month budget' : 'Lock month budget'}"
+              class="p-0.5 rounded ${isLocked ? 'text-slate-900 bg-white border border-slate-300' : 'text-slate-400 hover:text-slate-700'}"
+            >
+              ${isLocked
+                ? `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>`
+                : `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg>`
+              }
+            </button>
+          </div>
+        </div>
+        <input
+          type="number"
+          min="0"
+          step="any"
+          value="${caps[mIdx] > 0 ? Math.round(caps[mIdx]) : ''}"
+          placeholder="0"
+          ${isLocked ? 'disabled' : ''}
+          onchange="updateMonthlyCap(${mIdx}, this.value)"
+          class="w-full text-xs font-semibold tabular-nums ${isLocked ? 'text-slate-500 cursor-not-allowed' : 'text-slate-900'} bg-transparent border-b border-transparent focus:border-slate-400 focus:outline-none"
+        />
       </div>
-      <input
-        type="number"
-        min="0"
-        step="any"
-        value="${caps[mIdx] > 0 ? Math.round(caps[mIdx]) : ''}"
-        placeholder="0"
-        onchange="updateMonthlyCap(${mIdx}, this.value)"
-        class="w-full text-xs font-semibold tabular-nums text-slate-900 bg-transparent border-b border-transparent focus:border-slate-400 focus:outline-none"
-      />
-    </div>
-  `).join('');
+    `;
+  }).join('');
 
   const monthFilter = document.getElementById('bt-divide-month').value;
   const targetMonths = monthFilter === 'all' ? [0,1,2,3,4,5,6,7,8,9,10,11] : [parseInt(monthFilter, 10)];
@@ -1688,10 +1875,13 @@ function renderBudgetSubTotal(channels, yearObj, caps, monthlyPlanned) {
     return;
   }
 
+  const annualBudget = budgetTotalByYear[budgetYear] || capSum || 0;
+
   container.innerHTML = targetMonths.map(mIdx => {
     const monthCap = caps[mIdx] || 0;
+    const isLocked = Boolean(monthLocks[mIdx]);
     const monthAllocated = monthlyPlanned[mIdx] || 0;
-    const denom = monthCap > 0 ? monthCap : Math.max(1, monthAllocated);
+    const denom = monthCap > 0 ? monthCap : (annualBudget > 0 ? annualBudget / 12 : Math.max(1, monthAllocated));
     const unallocated = monthCap > 0 ? monthCap - monthAllocated : 0;
 
     const chRows = channels.length === 0
@@ -1719,7 +1909,19 @@ function renderBudgetSubTotal(channels, yearObj, caps, monthlyPlanned) {
                   />
                   <span class="text-[10px] text-slate-400">NOK</span>
                 </div>
-                <span class="text-[11px] text-slate-500 w-12 text-right">${pct}%</span>
+                <div class="flex items-center gap-1 bg-white border border-slate-200 rounded-md px-2 h-7">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    value="${val > 0 ? pct : ''}"
+                    placeholder="0"
+                    onchange="updateBudgetCellPct('${escCh}', ${mIdx}, this.value)"
+                    class="w-12 text-right bg-transparent text-xs font-medium text-slate-700 focus:outline-none tabular-nums"
+                  />
+                  <span class="text-[10px] text-slate-400">%</span>
+                </div>
               </div>
             </div>
           `;
@@ -1728,7 +1930,10 @@ function renderBudgetSubTotal(channels, yearObj, caps, monthlyPlanned) {
     return `
       <div class="p-3.5 rounded-xl border border-slate-200/80 bg-[#fbfcfd] space-y-2">
         <div class="flex flex-wrap items-center justify-between gap-2 pb-1.5 border-b border-slate-200/70 text-xs">
-          <span class="font-semibold text-slate-900">${monthNames[mIdx]} ${budgetYear}</span>
+          <div class="flex items-center gap-2">
+            <span class="font-semibold text-slate-900">${monthNames[mIdx]} ${budgetYear}</span>
+            ${isLocked ? '<span class="px-1.5 py-0.5 rounded bg-slate-200/80 text-slate-700 text-[10px] font-medium">Locked</span>' : ''}
+          </div>
           <div class="flex items-center gap-3 tabular-nums text-[11px] text-slate-500">
             <span>Month Budget: <strong class="text-slate-900">${Math.round(monthCap).toLocaleString()} NOK</strong></span>
             <span>Allocated: <strong class="text-slate-900">${Math.round(monthAllocated).toLocaleString()} NOK</strong></span>
@@ -1754,9 +1959,15 @@ function renderBudgetAllocated(channels, yearObj) {
   emptyEl.classList.add('hidden');
   wrapEl.classList.remove('hidden');
 
+  const caps = ensureMonthlyCaps(budgetYear);
+  const capSum = caps.reduce((a, b) => a + b, 0);
+  const totalAllPlanned = channels.reduce((sum, ch) => sum + yearObj[ch].planned.reduce((a, b) => a + b, 0), 0);
+  const denomTotal = budgetTotalByYear[budgetYear] || capSum || totalAllPlanned || 1;
+
   tbody.innerHTML = channels.map(ch => {
     const row = yearObj[ch];
     const rowPlanned = row.planned.reduce((a, b) => a + b, 0);
+    const pctOfTotal = denomTotal > 0 ? ((rowPlanned / denomTotal) * 100).toFixed(1) : '0.0';
     const escCh = ch.replace(/'/g, "\\'");
 
     const monthCells = row.planned.map((val, mIdx) => `
@@ -1777,6 +1988,7 @@ function renderBudgetAllocated(channels, yearObj) {
         <td class="py-3 px-4 font-semibold text-slate-900 whitespace-nowrap sticky left-0 bg-white">${ch}</td>
         ${monthCells}
         <td class="py-3 px-3 text-right font-semibold tabular-nums text-slate-900 whitespace-nowrap">${Math.round(rowPlanned).toLocaleString()} NOK</td>
+        <td class="py-3 px-3 text-right tabular-nums text-slate-500 whitespace-nowrap">${pctOfTotal}%</td>
         <td class="py-3 px-3 text-right">
           ${renderActionMenuHtml('', `deleteBudgetChannel('${escCh}')`)}
         </td>
@@ -3990,6 +4202,8 @@ function getWorkspaceSnapshot() {
     budgetData,
     budgetTotalByYear,
     budgetMonthlyCapByYear,
+    budgetTotalLockByYear,
+    budgetMonthLocksByYear,
     budgetYear,
     contactGroups,
     availableCountries,
@@ -4010,6 +4224,8 @@ function applyWorkspaceSnapshot(snap) {
     if (snap.budgetData && typeof snap.budgetData === 'object') budgetData = snap.budgetData;
     if (snap.budgetTotalByYear && typeof snap.budgetTotalByYear === 'object') budgetTotalByYear = snap.budgetTotalByYear;
     if (snap.budgetMonthlyCapByYear && typeof snap.budgetMonthlyCapByYear === 'object') budgetMonthlyCapByYear = snap.budgetMonthlyCapByYear;
+    if (snap.budgetTotalLockByYear && typeof snap.budgetTotalLockByYear === 'object') budgetTotalLockByYear = snap.budgetTotalLockByYear;
+    if (snap.budgetMonthLocksByYear && typeof snap.budgetMonthLocksByYear === 'object') budgetMonthLocksByYear = snap.budgetMonthLocksByYear;
     if (snap.budgetYear) budgetYear = String(snap.budgetYear);
     if (Array.isArray(snap.contactGroups)) contactGroups = snap.contactGroups;
     if (Array.isArray(snap.availableCountries)) availableCountries = snap.availableCountries;
