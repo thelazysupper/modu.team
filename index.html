@@ -663,6 +663,16 @@
             </div>
 
             <button
+              onclick="triggerCsvImport('budget')"
+              class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium flex items-center gap-1.5 transition-colors"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+              </svg>
+              <span>Import CSV</span>
+            </button>
+
+            <button
               onclick="toggleBudgetForm(true)"
               class="h-8 px-3.5 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium flex items-center gap-1.5 transition-colors"
             >
@@ -1081,6 +1091,15 @@
               ← All Groups
             </button>
             <button
+              onclick="triggerCsvImport('contacts')"
+              class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium flex items-center gap-1.5 transition-colors"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+              </svg>
+              <span>Import CSV</span>
+            </button>
+            <button
               onclick="toggleContactGroupForm(true)"
               class="h-8 px-3.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-xs font-medium flex items-center gap-1.5 transition-colors"
             >
@@ -1352,6 +1371,15 @@
 
           <div class="flex flex-wrap items-center gap-2">
             <button
+              onclick="triggerCsvImport('leads')"
+              class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium flex items-center gap-1.5 transition-colors"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+              </svg>
+              <span>Import CSV</span>
+            </button>
+            <button
               onclick="toggleLeadStageForm(true)"
               class="h-8 px-3.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-xs font-medium flex items-center gap-1.5 transition-colors"
             >
@@ -1563,6 +1591,15 @@
           </div>
 
           <div class="flex flex-wrap items-center gap-2">
+            <button
+              onclick="triggerCsvImport('competitors')"
+              class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium flex items-center gap-1.5 transition-colors"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+              </svg>
+              <span>Import CSV</span>
+            </button>
             <button
               onclick="toggleCompetitorForm(true)"
               class="h-8 px-3.5 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium flex items-center gap-1.5 transition-colors"
@@ -1986,12 +2023,23 @@
             <span class="font-semibold text-slate-900">Integrations</span>
           </div>
 
-          <button
-            onclick="toggleIntegrationForm(true)"
-            class="h-8 px-3.5 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium flex items-center gap-1.5 transition-colors"
-          >
-            <span>+ Add Integration</span>
-          </button>
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              onclick="triggerCsvImport('integrations')"
+              class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium flex items-center gap-1.5 transition-colors"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+              </svg>
+              <span>Import CSV</span>
+            </button>
+            <button
+              onclick="toggleIntegrationForm(true)"
+              class="h-8 px-3.5 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium flex items-center gap-1.5 transition-colors"
+            >
+              <span>+ Add Integration</span>
+            </button>
+          </div>
         </div>
 
         <div class="space-y-1">
@@ -2231,6 +2279,64 @@
       </section>
 
     </main>
+  </div>
+
+  <input type="file" id="csv-file-input" accept=".csv,text/csv" class="hidden" onchange="handleCsvFileSelected(event)" />
+
+  <div id="csv-import-modal" class="hidden fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-[2px] flex items-center justify-center p-4">
+    <div class="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden animate-fade">
+      <div class="flex items-start justify-between gap-3 px-6 py-4 border-b border-slate-200/80 bg-[#fbfcfd]">
+        <div>
+          <div class="flex items-center gap-2">
+            <h3 class="text-sm font-bold text-slate-900">Confirm CSV Import &amp; Data Sync</h3>
+            <span id="csv-modal-target-badge" class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200/80"></span>
+          </div>
+          <p id="csv-modal-file-meta" class="text-[11px] text-slate-500 mt-0.5"></p>
+        </div>
+        <button type="button" onclick="declineCsvImport()" class="text-xs text-slate-400 hover:text-slate-700">✕</button>
+      </div>
+
+      <div class="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+        <div id="csv-sync-summary" class="grid grid-cols-2 sm:grid-cols-4 gap-2.5"></div>
+
+        <div id="csv-sync-notes" class="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 text-[11px] text-slate-600 space-y-1"></div>
+
+        <div class="rounded-xl border border-slate-200/80 overflow-hidden">
+          <div class="px-3.5 py-2 bg-[#fbfcfd] border-b border-slate-200/80 flex items-center justify-between text-[11px] font-medium text-slate-600">
+            <span>Preview of synced records</span>
+            <span id="csv-preview-count" class="text-slate-400 tabular-nums"></span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse text-[11px]">
+              <thead id="csv-preview-head" class="bg-slate-50/80 text-slate-500 border-b border-slate-200/70"></thead>
+              <tbody id="csv-preview-body" class="divide-y divide-slate-200/60"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-t border-slate-200/80 bg-[#fbfcfd]">
+        <p class="text-[11px] text-slate-500">Review the changes above and choose whether to accept and sync or decline.</p>
+        <div class="flex items-center gap-2">
+          <button
+            id="csv-decline-btn"
+            type="button"
+            onclick="declineCsvImport()"
+            class="h-8 px-4 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-xs font-medium text-slate-700 transition-colors"
+          >
+            Decline
+          </button>
+          <button
+            id="csv-accept-btn"
+            type="button"
+            onclick="acceptCsvImport()"
+            class="h-8 px-4 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium transition-colors"
+          >
+            Accept &amp; Sync Data
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="app.js"></script>

@@ -6195,6 +6195,486 @@ async function initWorkspacePersistence() {
   }
 });
 
+let pendingCsvImportState = null;
+let activeCsvImportTarget = null;
+
+function triggerCsvImport(target) {
+  activeCsvImportTarget = target;
+  const input = document.getElementById('csv-file-input');
+  if (!input) return;
+  input.value = '';
+  input.click();
+}
+
+function parseCsvText(text) {
+  const clean = String(text || '').replace(/^\uFEFF/, '');
+  const firstLine = clean.split(/\r?\n/)[0] || '';
+  const commaCount = (firstLine.match(/,/g) || []).length;
+  const semiCount = (firstLine.match(/;/g) || []).length;
+  const delimiter = semiCount > commaCount ? ';' : ',';
+
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < clean.length; i++) {
+    const ch = clean[i];
+    const next = clean[i + 1];
+    if (inQuotes) {
+      if (ch === '"' && next === '"') {
+        field += '"';
+        i++;
+      } else if (ch === '"') {
+        inQuotes = false;
+      } else {
+        field += ch;
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === delimiter) {
+        row.push(field.trim());
+        field = '';
+      } else if (ch === '\r' && next === '\n') {
+        row.push(field.trim());
+        if (row.some(c => c !== '')) rows.push(row);
+        row = [];
+        field = '';
+        i++;
+      } else if (ch === '\n' || ch === '\r') {
+        row.push(field.trim());
+        if (row.some(c => c !== '')) rows.push(row);
+        row = [];
+        field = '';
+      } else {
+        field += ch;
+      }
+    }
+  }
+  if (field !== '' || row.length > 0) {
+    row.push(field.trim());
+    if (row.some(c => c !== '')) rows.push(row);
+  }
+
+  if (rows.length === 0) return { headers: [], records: [], delimiter };
+  const headers = rows[0].map(h => h.trim());
+  const records = rows.slice(1).map(r => {
+    const obj = {};
+    headers.forEach((h, idx) => {
+      obj[h] = (r[idx] || '').trim();
+    });
+    return obj;
+  });
+  return { headers, records, delimiter };
+}
+
+function getCsvField(rec, aliases) {
+  const keys = Object.keys(rec || {});
+  for (const alias of aliases) {
+    const normAlias = alias.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const foundKey = keys.find(k => k.toLowerCase().replace(/[^a-z0-9]/g, '') === normAlias);
+    if (foundKey && rec[foundKey] !== '') return rec[foundKey];
+  }
+  return '';
+}
+
+function parseCsvNumber(val) {
+  if (typeof val === 'number') return isFinite(val) ? val : 0;
+  const s = String(val || '').replace(/[^\d.,-]/g, '').replace(',', '.');
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+
+function parseCsvMonth(val) {
+  const s = String(val || '').trim().toLowerCase();
+  if (!s) return null;
+  if (s === 'all' || s === 'full year') return 'all';
+  const monthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+  const fullNames = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+  const shortIdx = monthNames.findIndex(m => s.startsWith(m));
+  if (shortIdx !== -1) return shortIdx;
+  const fullIdx = fullNames.indexOf(s);
+  if (fullIdx !== -1) return fullIdx;
+  const num = parseInt(s, 10);
+  if (num >= 1 && num <= 12) return num - 1;
+  return null;
+}
+
+function buildCsvSyncPlan(target, fileName, parsed) {
+  const { headers, records, delimiter } = parsed;
+  const plan = {
+    target,
+    targetLabel: target,
+    fileName,
+    delimiter,
+    headers,
+    totalRows: records.length,
+    newCount: 0,
+    updateCount: 0,
+    skipCount: 0,
+    syncEntities: [],
+    previewHeaders: [],
+    previewRows: [],
+    ops: []
+  };
+
+  if (target === 'leads') {
+    plan.targetLabel = 'Leads';
+    plan.previewHeaders = ['Company', 'ERP / Integration', 'Channel', 'Stage', 'Value', 'Action'];
+    const newChannels = new Set();
+    const newIntegrations = new Set();
+    const newStages = new Set();
+
+    records.forEach(rec => {
+      const company = getCsvField(rec, ['company', 'name', 'lead', 'account', 'organization']);
+      if (!company) {
+        plan.skipCount++;
+        return;
+      }
+      const erp = getCsvField(rec, ['erp', 'erpsystem']);
+      const integration = getCsvField(rec, ['integration', 'otherintegration', 'ta']);
+      const channel = getCsvField(rec, ['channel', 'source', 'acquisitionchannel']);
+      const stageName = getCsvField(rec, ['stage', 'status', 'pipeline']);
+      const value = Math.max(0, parseCsvNumber(getCsvField(rec, ['value', 'amount', 'dealvalue', 'arr', 'mrr'])));
+
+      if (channel && !channelsList.some(c => (typeof c === 'string' ? c : c.name).toLowerCase() === channel.toLowerCase())) {
+        newChannels.add(channel);
+      }
+      if (erp && !integrationsList.some(i => i.name.toLowerCase() === erp.toLowerCase())) {
+        newIntegrations.add(`${erp} (ERP)`);
+      }
+      if (integration && !integrationsList.some(i => i.name.toLowerCase() === integration.toLowerCase())) {
+        newIntegrations.add(`${integration} (Other Integration)`);
+      }
+      if (stageName && !leadStages.some(s => s.name.toLowerCase() === stageName.toLowerCase())) {
+        newStages.add(stageName);
+      }
+
+      const existing = leadEntries.find(l => String(l.company || '').toLowerCase() === company.toLowerCase());
+      const action = existing ? 'Update' : 'New';
+      if (existing) plan.updateCount++;
+      else plan.newCount++;
+
+      plan.ops.push({ action, company, erp, integration, channel, stageName, value });
+      if (plan.previewRows.length < 10) {
+        plan.previewRows.push([company, [erp, integration].filter(Boolean).join(' / ') || '—', channel || '—', stageName || (leadStages[0]?.name || 'Default'), value.toLocaleString('en-US'), action]);
+      }
+    });
+
+    if (newChannels.size) plan.syncEntities.push(`Auto-create ${newChannels.size} channel(s): ${Array.from(newChannels).join(', ')}`);
+    if (newIntegrations.size) plan.syncEntities.push(`Auto-create ${newIntegrations.size} integration(s): ${Array.from(newIntegrations).join(', ')}`);
+    if (newStages.size) plan.syncEntities.push(`Auto-create ${newStages.size} lead stage(s): ${Array.from(newStages).join(', ')}`);
+  } else if (target === 'integrations') {
+    plan.targetLabel = 'Integrations';
+    plan.previewHeaders = ['Name', 'Type', 'Action'];
+    records.forEach(rec => {
+      const name = getCsvField(rec, ['name', 'integration', 'system', 'title']);
+      if (!name) {
+        plan.skipCount++;
+        return;
+      }
+      const rawType = getCsvField(rec, ['type', 'category', 'kind']).toLowerCase();
+      let type = 'Other Integration';
+      if (rawType.includes('erp')) type = 'ERP';
+      else if (rawType === 'ta' || rawType.includes('time') || rawType.includes('attendance')) type = 'TA';
+      const existing = integrationsList.find(i => i.name.toLowerCase() === name.toLowerCase());
+      const action = existing ? 'Update' : 'New';
+      if (existing) plan.updateCount++;
+      else plan.newCount++;
+      plan.ops.push({ action, name, type });
+      if (plan.previewRows.length < 10) plan.previewRows.push([name, type, action]);
+    });
+    plan.syncEntities.push('Updates Integration Distribution & Lead Share per Integration charts');
+  } else if (target === 'budget') {
+    plan.targetLabel = `Budget (${budgetYear})`;
+    plan.previewHeaders = ['Channel', 'Month', 'Planned', 'Actual', 'Action'];
+    const newChannels = new Set();
+    records.forEach(rec => {
+      const channel = getCsvField(rec, ['channel', 'source', 'name']);
+      if (!channel) {
+        plan.skipCount++;
+        return;
+      }
+      const monthIdx = parseCsvMonth(getCsvField(rec, ['month', 'period', 'date']));
+      const planned = parseCsvNumber(getCsvField(rec, ['planned', 'budget', 'plan']));
+      const actual = parseCsvNumber(getCsvField(rec, ['actual', 'cost', 'spend', 'spent']));
+      if (!channelsList.some(c => (typeof c === 'string' ? c : c.name).toLowerCase() === channel.toLowerCase())) {
+        newChannels.add(channel);
+      }
+      const exists = Boolean(budgetData[budgetYear]?.[channel]);
+      const action = exists ? 'Update' : 'New';
+      if (exists) plan.updateCount++;
+      else plan.newCount++;
+      const monthLabel = monthIdx === 'all' ? 'All months' : (monthIdx !== null ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][monthIdx] : 'All months');
+      plan.ops.push({ action, channel, monthIdx: monthIdx === null ? 'all' : monthIdx, planned, actual });
+      if (plan.previewRows.length < 10) {
+        plan.previewRows.push([channel, monthLabel, planned.toLocaleString('en-US'), actual.toLocaleString('en-US'), action]);
+      }
+    });
+    if (newChannels.size) plan.syncEntities.push(`Auto-create ${newChannels.size} channel(s): ${Array.from(newChannels).join(', ')}`);
+    plan.syncEntities.push(`Syncs entries into Budget year ${budgetYear} and channel charts`);
+  } else if (target === 'contacts') {
+    plan.targetLabel = 'Contacts & Partners';
+    plan.previewHeaders = ['Partner / Company', 'Contact Name', 'Email / Phone', 'Country', 'Action'];
+    const grp = contactGroups.find(g => g.id === selectedGroupId) || contactGroups[0];
+    const newPartners = new Set();
+    records.forEach(rec => {
+      const partnerName = getCsvField(rec, ['partner', 'company', 'organization', 'account']);
+      const contactName = getCsvField(rec, ['name', 'contact', 'fullname', 'person']);
+      if (!partnerName && !contactName) {
+        plan.skipCount++;
+        return;
+      }
+      const resolvedPartner = partnerName || contactName;
+      const website = normalizeWebsiteUrl(getCsvField(rec, ['website', 'url', 'domain']));
+      const country = getCsvField(rec, ['country', 'market', 'region']);
+      const fn = getCsvField(rec, ['function', 'role', 'title', 'position']);
+      const email = getCsvField(rec, ['email', 'mail']);
+      const phone = getCsvField(rec, ['phone', 'tel', 'mobile']);
+      const location = getCsvField(rec, ['location', 'city', 'office']);
+      const linkedin = normalizeWebsiteUrl(getCsvField(rec, ['linkedin', 'linkedinurl']));
+
+      const existingPartner = grp?.partners?.find(p => p.name.toLowerCase() === resolvedPartner.toLowerCase());
+      if (!existingPartner) newPartners.add(resolvedPartner);
+      const existingContact = existingPartner?.contacts?.find(c => contactName && c.name.toLowerCase() === contactName.toLowerCase());
+      const action = existingContact ? 'Update' : 'New';
+      if (existingContact) plan.updateCount++;
+      else plan.newCount++;
+
+      plan.ops.push({ action, partnerName: resolvedPartner, contactName, website, country, fn, email, phone, location, linkedin });
+      if (plan.previewRows.length < 10) {
+        plan.previewRows.push([resolvedPartner, contactName || '—', [email, phone].filter(Boolean).join(' · ') || '—', country || '—', action]);
+      }
+    });
+    if (grp) plan.syncEntities.push(`Target group: ${grp.name}`);
+    if (newPartners.size) plan.syncEntities.push(`Auto-create ${newPartners.size} partner(s): ${Array.from(newPartners).slice(0, 6).join(', ')}${newPartners.size > 6 ? '...' : ''}`);
+  } else if (target === 'competitors') {
+    plan.targetLabel = 'Competitor Analysis';
+    plan.previewHeaders = ['Name', 'Website', 'Social URL', 'Score', 'Action'];
+    records.forEach(rec => {
+      const name = getCsvField(rec, ['name', 'competitor', 'company']);
+      if (!name) {
+        plan.skipCount++;
+        return;
+      }
+      const website = normalizeWebsiteUrl(getCsvField(rec, ['website', 'url', 'domain']));
+      const socialUrl = normalizeWebsiteUrl(getCsvField(rec, ['socialurl', 'social', 'sociallink']));
+      const positioning = getCsvField(rec, ['positioning', 'tagline', 'summary']);
+      const pricing = getCsvField(rec, ['pricing', 'price']);
+      const score = Math.min(10, Math.max(1, parseInt(getCsvField(rec, ['score', 'rating']), 10) || 7));
+      const strengths = getCsvField(rec, ['strengths', 'pros']);
+      const weaknesses = getCsvField(rec, ['weaknesses', 'cons']);
+      const rawChannels = getCsvField(rec, ['channels', 'channel']);
+      const channels = rawChannels ? rawChannels.split(/[|,]/).map(s => s.trim()).filter(Boolean) : [];
+      const existing = competitorsList.find(c => c.name.toLowerCase() === name.toLowerCase());
+      const action = existing ? 'Update' : 'New';
+      if (existing) plan.updateCount++;
+      else plan.newCount++;
+      plan.ops.push({ action, name, website, socialUrl, positioning, pricing, score, channels, strengths, weaknesses });
+      if (plan.previewRows.length < 10) {
+        plan.previewRows.push([name, website || '—', socialUrl || '—', `${score}/10`, action]);
+      }
+    });
+  }
+
+  return plan;
+}
+
+function handleCsvFileSelected(event) {
+  const file = event?.target?.files?.[0];
+  if (!file || !activeCsvImportTarget) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const parsed = parseCsvText(e.target?.result || '');
+    const plan = buildCsvSyncPlan(activeCsvImportTarget, file.name, parsed);
+    openCsvImportConfirmationModal(plan);
+  };
+  reader.readAsText(file);
+}
+
+function openCsvImportConfirmationModal(plan) {
+  pendingCsvImportState = plan;
+  const modal = document.getElementById('csv-import-modal');
+  if (!modal) return;
+
+  document.getElementById('csv-modal-target-badge').textContent = plan.targetLabel;
+  document.getElementById('csv-modal-file-meta').textContent = `${plan.fileName} · ${plan.totalRows} row${plan.totalRows === 1 ? '' : 's'} detected (${plan.delimiter === ';' ? 'semicolon' : 'comma'}-separated)`;
+
+  document.getElementById('csv-sync-summary').innerHTML = [
+    { label: 'Total Rows', val: plan.totalRows, cls: 'bg-slate-50 text-slate-800 border-slate-200/80' },
+    { label: 'New Records', val: plan.newCount, cls: 'bg-[#ecfdf5] text-[#047857] border-[#a7f3d0]' },
+    { label: 'Updates', val: plan.updateCount, cls: 'bg-[#eff6ff] text-[#1d4ed8] border-[#bfdbfe]' },
+    { label: 'Skipped', val: plan.skipCount, cls: 'bg-slate-50 text-slate-500 border-slate-200/80' }
+  ].map(s => `
+    <div class="rounded-xl border px-3 py-2.5 ${s.cls}">
+      <div class="text-[10px] font-medium opacity-80">${s.label}</div>
+      <div class="text-base font-bold tabular-nums mt-0.5">${s.val}</div>
+    </div>
+  `).join('');
+
+  const notesEl = document.getElementById('csv-sync-notes');
+  const notes = [
+    `Detected columns: ${plan.headers.join(', ') || 'None'}`,
+    ...plan.syncEntities
+  ];
+  notesEl.innerHTML = notes.map(n => `<div class="flex items-start gap-1.5"><span class="text-slate-400">•</span><span>${n}</span></div>`).join('');
+
+  document.getElementById('csv-preview-count').textContent = `Showing ${plan.previewRows.length} of ${plan.ops.length} valid row(s)`;
+  document.getElementById('csv-preview-head').innerHTML = `<tr>${plan.previewHeaders.map(h => `<th class="py-2 px-3 font-medium">${h}</th>`).join('')}</tr>`;
+  document.getElementById('csv-preview-body').innerHTML = plan.previewRows.length > 0
+    ? plan.previewRows.map(r => `<tr>${r.map((cell, idx) => {
+        if (idx === r.length - 1) {
+          const badgeCls = cell === 'Update' ? 'bg-[#eff6ff] text-[#1d4ed8]' : 'bg-[#ecfdf5] text-[#047857]';
+          return `<td class="py-2 px-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-semibold ${badgeCls}">${cell}</span></td>`;
+        }
+        return `<td class="py-2 px-3 text-slate-700">${cell}</td>`;
+      }).join('')}</tr>`).join('')
+    : `<tr><td colspan="${plan.previewHeaders.length || 1}" class="py-6 text-center text-slate-400">No valid rows found in this CSV file.</td></tr>`;
+
+  const acceptBtn = document.getElementById('csv-accept-btn');
+  if (acceptBtn) acceptBtn.disabled = plan.ops.length === 0;
+
+  modal.classList.remove('hidden');
+}
+
+function declineCsvImport() {
+  pendingCsvImportState = null;
+  document.getElementById('csv-import-modal')?.classList.add('hidden');
+}
+
+function acceptCsvImport() {
+  const plan = pendingCsvImportState;
+  if (!plan || !plan.ops.length) {
+    declineCsvImport();
+    return;
+  }
+
+  if (plan.target === 'leads') {
+    plan.ops.forEach((op, idx) => {
+      if (op.channel) ensureChannelExists(op.channel);
+      if (op.erp) ensureIntegrationExists(op.erp, 'ERP');
+      if (op.integration) ensureIntegrationExists(op.integration, 'Other Integration');
+      let stageId = leadStages[0]?.id || Date.now();
+      if (op.stageName) {
+        let stage = leadStages.find(s => s.name.toLowerCase() === op.stageName.toLowerCase());
+        if (!stage) {
+          stage = { id: Date.now() + idx + 100, name: op.stageName, color: '#6366f1' };
+          leadStages.push(stage);
+        }
+        stageId = stage.id;
+      }
+      const existing = leadEntries.find(l => String(l.company || '').toLowerCase() === op.company.toLowerCase());
+      if (existing) {
+        if (op.erp) existing.erp = op.erp;
+        if (op.integration) existing.integration = op.integration;
+        if (op.channel) existing.channel = op.channel;
+        if (op.stageName) existing.stageId = stageId;
+        if (op.value) existing.value = op.value;
+      } else {
+        leadEntries.push({
+          id: Date.now() + idx,
+          company: op.company,
+          erp: op.erp,
+          integration: op.integration,
+          channel: op.channel || (channelsList[0]?.name || 'Direct'),
+          stageId,
+          value: op.value
+        });
+      }
+    });
+    renderLeadsView();
+  } else if (plan.target === 'integrations') {
+    plan.ops.forEach(op => ensureIntegrationExists(op.name, op.type));
+    renderIntegrationsView();
+  } else if (plan.target === 'budget') {
+    if (!budgetData[budgetYear]) budgetData[budgetYear] = {};
+    plan.ops.forEach(op => {
+      ensureChannelExists(op.channel);
+      if (!budgetData[budgetYear][op.channel]) {
+        budgetData[budgetYear][op.channel] = { planned: Array(12).fill(0), actual: Array(12).fill(0) };
+      }
+      if (op.monthIdx === 'all') {
+        const pM = Math.round((op.planned / 12) * 100) / 100;
+        const aM = Math.round((op.actual / 12) * 100) / 100;
+        for (let m = 0; m < 12; m++) {
+          budgetData[budgetYear][op.channel].planned[m] = pM;
+          budgetData[budgetYear][op.channel].actual[m] = aM;
+        }
+      } else {
+        budgetData[budgetYear][op.channel].planned[op.monthIdx] = Math.round(op.planned * 100) / 100;
+        budgetData[budgetYear][op.channel].actual[op.monthIdx] = Math.round(op.actual * 100) / 100;
+      }
+    });
+    renderBudgetView();
+  } else if (plan.target === 'contacts') {
+    let grp = contactGroups.find(g => g.id === selectedGroupId) || contactGroups[0];
+    if (!grp) {
+      grp = { id: Date.now(), name: 'Imported Contacts', partners: [] };
+      contactGroups.push(grp);
+      selectedGroupId = grp.id;
+    }
+    plan.ops.forEach((op, idx) => {
+      let partner = grp.partners.find(p => p.name.toLowerCase() === op.partnerName.toLowerCase());
+      if (!partner) {
+        partner = {
+          id: Date.now() + idx * 10,
+          name: op.partnerName,
+          website: op.website || '',
+          countries: op.country ? [op.country] : [],
+          countryWebsites: {},
+          contacts: []
+        };
+        grp.partners.push(partner);
+      } else {
+        if (op.website && !partner.website) partner.website = op.website;
+        if (op.country && !partner.countries.includes(op.country)) partner.countries.push(op.country);
+      }
+      if (op.contactName) {
+        const existingContact = partner.contacts.find(c => c.name.toLowerCase() === op.contactName.toLowerCase());
+        const contactData = {
+          id: existingContact ? existingContact.id : (Date.now() + idx * 10 + 1),
+          name: op.contactName,
+          function: op.fn,
+          phone: op.phone,
+          email: op.email,
+          location: op.location,
+          linkedin: op.linkedin
+        };
+        if (existingContact) Object.assign(existingContact, contactData);
+        else partner.contacts.push(contactData);
+      }
+    });
+    renderContactsView();
+  } else if (plan.target === 'competitors') {
+    plan.ops.forEach((op, idx) => {
+      const existing = competitorsList.find(c => c.name.toLowerCase() === op.name.toLowerCase());
+      const data = {
+        id: existing ? existing.id : (Date.now() + idx),
+        name: op.name,
+        website: op.website,
+        socialUrl: op.socialUrl,
+        logo: existing?.logo || '',
+        followers: existing?.followers || '',
+        posts: existing?.posts || '',
+        positioning: op.positioning,
+        pricing: op.pricing,
+        score: op.score,
+        channels: op.channels,
+        strengths: op.strengths,
+        weaknesses: op.weaknesses
+      };
+      if (existing) Object.assign(existing, data);
+      else competitorsList.push(data);
+    });
+    renderCompetitorsView();
+  }
+
+  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+  pendingCsvImportState = null;
+  document.getElementById('csv-import-modal')?.classList.add('hidden');
+}
+
 window.addEventListener('DOMContentLoaded', () => {
   const savedYear = readSavedWorkspaceYear();
   if (savedYear) syncAllYearSelects(savedYear);
