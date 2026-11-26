@@ -730,6 +730,7 @@ function openApp(appId) {
     document.getElementById('view-aeo-seo').classList.remove('hidden');
     renderAeoSeoView();
   } else if (appId === 'marketing-reports') {
+    activeReportChannel = null;
     document.getElementById('view-marketing-reports').classList.remove('hidden');
     renderMarketingReportsView();
   } else {
@@ -3975,6 +3976,8 @@ function renderAeoSeoView() {
 
 let reportsYear = '2026';
 let reportsMetric = 'cost';
+let reportsChannelMetric = 'cost';
+let activeReportChannel = null;
 let reportsMetricsByYear = {};
 
 function ensureReportsChannelMetrics(year, channel) {
@@ -3986,6 +3989,17 @@ function ensureReportsChannelMetrics(year, channel) {
     };
   }
   return reportsMetricsByYear[year][channel];
+}
+
+function ensureReportsBudgetRow(year, channel) {
+  if (!budgetData[year]) budgetData[year] = {};
+  if (!budgetData[year][channel]) {
+    budgetData[year][channel] = {
+      planned: Array(12).fill(0),
+      actual: Array(12).fill(0)
+    };
+  }
+  return budgetData[year][channel];
 }
 
 function handleReportsYearChange() {
@@ -4000,60 +4014,47 @@ function handleReportsMetricChange() {
   renderMarketingReportsView();
 }
 
-function toggleReportsMetricsForm(show) {
-  const panel = document.getElementById('mr-metrics-panel');
-  if (!panel) return;
-  if (!show) {
-    panel.classList.add('hidden');
-    return;
-  }
-  const chSel = document.getElementById('mr-m-channel');
-  if (chSel) {
-    const names = getChannelNames();
-    chSel.innerHTML = names.map(c => `<option value="${c}">${c}</option>`).join('');
-  }
-  document.getElementById('mr-m-month').value = 'all';
-  document.getElementById('mr-m-leads').value = '';
-  document.getElementById('mr-m-ctr').value = '';
-  panel.classList.remove('hidden');
+function handleReportsChannelMetricChange() {
+  const sel = document.getElementById('mr-ch-chart-metric');
+  if (sel) reportsChannelMetric = sel.value || 'cost';
+  renderMarketingReportsView();
 }
 
-function saveReportsMetrics() {
-  const channel = document.getElementById('mr-m-channel')?.value;
-  const monthVal = document.getElementById('mr-m-month')?.value || 'all';
-  const leadsVal = parseFloat(document.getElementById('mr-m-leads')?.value) || 0;
-  const ctrVal = parseFloat(document.getElementById('mr-m-ctr')?.value) || 0;
-  if (!channel) return;
-
-  const entry = ensureReportsChannelMetrics(reportsYear, channel);
-  if (monthVal === 'all') {
-    const leadsPerMonth = Math.round((leadsVal / 12) * 100) / 100;
-    for (let m = 0; m < 12; m++) {
-      if (document.getElementById('mr-m-leads').value !== '') entry.leads[m] = leadsPerMonth;
-      if (document.getElementById('mr-m-ctr').value !== '') entry.ctr[m] = ctrVal;
-    }
-  } else {
-    const mIdx = parseInt(monthVal, 10);
-    if (document.getElementById('mr-m-leads').value !== '') entry.leads[mIdx] = leadsVal;
-    if (document.getElementById('mr-m-ctr').value !== '') entry.ctr[mIdx] = ctrVal;
-  }
-
-  toggleReportsMetricsForm(false);
+function openReportChannelDetail(channelName) {
+  activeReportChannel = channelName;
   renderMarketingReportsView();
+}
+
+function closeReportChannelDetail() {
+  activeReportChannel = null;
+  renderMarketingReportsView();
+}
+
+function updateReportChannelValue(channelName, monthIdx, field, rawVal) {
+  const num = parseFloat(rawVal);
+  const val = isNaN(num) || num < 0 ? 0 : num;
+  if (field === 'planned' || field === 'actual') {
+    const row = ensureReportsBudgetRow(reportsYear, channelName);
+    row[field][monthIdx] = val;
+  } else if (field === 'leads' || field === 'ctr') {
+    const mRow = ensureReportsChannelMetrics(reportsYear, channelName);
+    mRow[field][monthIdx] = val;
+  }
+  renderReportChannelDetail();
   if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
 }
 
-function drawMarketingReportsChart(mode, seriesA, seriesB = null) {
-  const canvas = document.getElementById('marketingReportsChart');
+function drawReportsBarChart(canvasId, mode, seriesA, seriesB = null, chartHeight = 220) {
+  const canvas = document.getElementById(canvasId);
   if (!canvas) return;
-  canvas._barMeta = { mode, seriesA, seriesB, hoverIdx: -1 };
+  canvas._barMeta = { mode, seriesA, seriesB, chartHeight, hoverIdx: -1 };
 
   const renderBars = (hoverIdx = -1) => {
     const ctx = canvas.getContext('2d');
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
     const width = rect.width || 680;
-    const height = 220;
+    const height = chartHeight;
     canvas.width = width * dpr;
     canvas.height = height * dpr;
     ctx.scale(dpr, dpr);
@@ -4180,7 +4181,7 @@ function drawMarketingReportsChart(mode, seriesA, seriesB = null) {
       } else if (meta.mode === 'leads') {
         html += `<div class="flex items-center justify-between gap-4"><span class="text-sky-300">Leads</span><span class="tabular-nums font-medium">${Math.round(vA).toLocaleString()}</span></div>`;
       } else {
-        html += `<div class="flex items-center justify-between gap-4"><span class="text-amber-300">Avg. CTR</span><span class="tabular-nums font-medium">${vA.toFixed(2)}%</span></div>`;
+        html += `<div class="flex items-center justify-between gap-4"><span class="text-amber-300">CTR</span><span class="tabular-nums font-medium">${vA.toFixed(2)}%</span></div>`;
       }
       showChartTooltip(e.clientX, e.clientY, html);
     });
@@ -4194,6 +4195,103 @@ function drawMarketingReportsChart(mode, seriesA, seriesB = null) {
   }
 }
 
+function renderReportChannelDetail() {
+  if (!activeReportChannel) return;
+  const channelName = activeReportChannel;
+  const chObj = channelsList.find(c => c.name.toLowerCase() === channelName.toLowerCase());
+  const color = getChannelColor(channelName, 0);
+
+  document.getElementById('mr-crumb-sep')?.classList.remove('hidden');
+  const crumbCh = document.getElementById('mr-crumb-channel');
+  if (crumbCh) {
+    crumbCh.textContent = channelName;
+    crumbCh.classList.remove('hidden');
+  }
+  document.getElementById('mr-back-btn')?.classList.remove('hidden');
+
+  const dotEl = document.getElementById('mr-ch-dot');
+  if (dotEl) dotEl.style.background = color;
+  document.getElementById('mr-ch-title').textContent = channelName;
+  document.getElementById('mr-ch-subtitle').textContent = `${chObj?.type || 'Channel'} · ${reportsYear} monthly performance and data entry`;
+  document.getElementById('mr-ch-chart-year').textContent = reportsYear;
+  document.getElementById('mr-ch-table-year').textContent = reportsYear;
+
+  const metricSel = document.getElementById('mr-ch-chart-metric');
+  if (metricSel && metricSel.value !== reportsChannelMetric) {
+    metricSel.value = reportsChannelMetric;
+  }
+
+  const row = (budgetData[reportsYear] && budgetData[reportsYear][channelName]) || {
+    planned: Array(12).fill(0),
+    actual: Array(12).fill(0)
+  };
+  const mRow = (reportsMetricsByYear[reportsYear] && reportsMetricsByYear[reportsYear][channelName]) || {
+    leads: Array(12).fill(0),
+    ctr: Array(12).fill(0)
+  };
+
+  const chartLegend = document.getElementById('mr-ch-chart-legend');
+  const chartTitle = document.getElementById('mr-ch-chart-title');
+  if (reportsChannelMetric === 'leads') {
+    if (chartTitle) chartTitle.textContent = `${channelName} Leads`;
+    if (chartLegend) chartLegend.innerHTML = `<span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#0ea5e9] inline-block"></span><span>Leads</span></span>`;
+    drawReportsBarChart('mrChannelChart', 'leads', mRow.leads, null, 200);
+  } else if (reportsChannelMetric === 'ctr') {
+    if (chartTitle) chartTitle.textContent = `${channelName} CTR (%)`;
+    if (chartLegend) chartLegend.innerHTML = `<span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#f59e0b] inline-block"></span><span>CTR (%)</span></span>`;
+    drawReportsBarChart('mrChannelChart', 'ctr', mRow.ctr, null, 200);
+  } else {
+    if (chartTitle) chartTitle.textContent = `${channelName} Cost (NOK)`;
+    if (chartLegend) {
+      chartLegend.innerHTML = `
+        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#10b981] inline-block"></span><span>Planned</span></span>
+        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#7c3aed] inline-block"></span><span>Actual</span></span>
+      `;
+    }
+    drawReportsBarChart('mrChannelChart', 'cost', row.planned, row.actual, 200);
+  }
+
+  const escCh = channelName.replace(/'/g, "\\'");
+  const tbody = document.getElementById('mr-ch-table-body');
+  if (!tbody) return;
+
+  const totalPlanned = row.planned.reduce((a, b) => a + b, 0);
+  const totalActual = row.actual.reduce((a, b) => a + b, 0);
+  const totalLeads = mRow.leads.reduce((a, b) => a + b, 0);
+  const nonZeroCtrs = mRow.ctr.filter(v => v > 0);
+  const avgCtr = nonZeroCtrs.length > 0 ? nonZeroCtrs.reduce((a, b) => a + b, 0) / nonZeroCtrs.length : 0;
+
+  const rowsHtml = monthNames.map((mName, mIdx) => `
+    <tr class="hover:bg-slate-50/70 transition-colors">
+      <td class="py-2.5 px-4 font-medium text-slate-900">${mName} ${reportsYear}</td>
+      <td class="py-2 px-4 text-right tabular-nums">
+        <input type="number" min="0" step="any" value="${row.planned[mIdx] || ''}" placeholder="0" onchange="updateReportChannelValue('${escCh}', ${mIdx}, 'planned', this.value)" class="w-24 text-right bg-white border border-slate-200 rounded-md px-2 py-1 text-xs font-medium text-slate-900 focus:outline-none focus:border-slate-400 tabular-nums" />
+      </td>
+      <td class="py-2 px-4 text-right tabular-nums">
+        <input type="number" min="0" step="any" value="${row.actual[mIdx] || ''}" placeholder="0" onchange="updateReportChannelValue('${escCh}', ${mIdx}, 'actual', this.value)" class="w-24 text-right bg-white border border-slate-200 rounded-md px-2 py-1 text-xs font-medium text-slate-900 focus:outline-none focus:border-slate-400 tabular-nums" />
+      </td>
+      <td class="py-2 px-4 text-right tabular-nums">
+        <input type="number" min="0" step="1" value="${mRow.leads[mIdx] || ''}" placeholder="0" onchange="updateReportChannelValue('${escCh}', ${mIdx}, 'leads', this.value)" class="w-20 text-right bg-white border border-slate-200 rounded-md px-2 py-1 text-xs font-medium text-slate-900 focus:outline-none focus:border-slate-400 tabular-nums" />
+      </td>
+      <td class="py-2 px-4 text-right tabular-nums">
+        <input type="number" min="0" max="100" step="0.01" value="${mRow.ctr[mIdx] || ''}" placeholder="0.00" onchange="updateReportChannelValue('${escCh}', ${mIdx}, 'ctr', this.value)" class="w-20 text-right bg-white border border-slate-200 rounded-md px-2 py-1 text-xs font-medium text-slate-900 focus:outline-none focus:border-slate-400 tabular-nums" />
+      </td>
+    </tr>
+  `).join('');
+
+  const totalRowHtml = `
+    <tr class="bg-[#fbfcfd] font-semibold text-slate-900 border-t border-slate-200">
+      <td class="py-3 px-4">Total / Avg</td>
+      <td class="py-3 px-4 text-right tabular-nums">${Math.round(totalPlanned).toLocaleString()} NOK</td>
+      <td class="py-3 px-4 text-right tabular-nums">${Math.round(totalActual).toLocaleString()} NOK</td>
+      <td class="py-3 px-4 text-right tabular-nums">${Math.round(totalLeads).toLocaleString()}</td>
+      <td class="py-3 px-4 text-right tabular-nums">${avgCtr.toFixed(2)}%</td>
+    </tr>
+  `;
+
+  tbody.innerHTML = rowsHtml + totalRowHtml;
+}
+
 function renderMarketingReportsView() {
   const sel = document.getElementById('reports-year-select');
   if (sel && sel.value !== reportsYear) {
@@ -4203,6 +4301,21 @@ function renderMarketingReportsView() {
   if (metricSel && metricSel.value !== reportsMetric) {
     metricSel.value = reportsMetric;
   }
+
+  const overviewEl = document.getElementById('mr-overview');
+  const detailEl = document.getElementById('mr-channel-detail');
+  if (activeReportChannel) {
+    overviewEl?.classList.add('hidden');
+    detailEl?.classList.remove('hidden');
+    renderReportChannelDetail();
+    return;
+  }
+
+  detailEl?.classList.add('hidden');
+  overviewEl?.classList.remove('hidden');
+  document.getElementById('mr-crumb-sep')?.classList.add('hidden');
+  document.getElementById('mr-crumb-channel')?.classList.add('hidden');
+  document.getElementById('mr-back-btn')?.classList.add('hidden');
 
   const yearObj = budgetData[reportsYear] || {};
   const metricsYearObj = reportsMetricsByYear[reportsYear] || {};
@@ -4247,7 +4360,6 @@ function renderMarketingReportsView() {
     }
   });
 
-  // Also include leads from Leads pipeline if they have a date or fallback to current month
   (leadEntries || []).forEach(l => {
     const d = l.createdAt ? new Date(l.createdAt) : null;
     if (d && !isNaN(d.getTime())) {
@@ -4259,22 +4371,7 @@ function renderMarketingReportsView() {
 
   const monthlyCtr = monthlyCtrSum.map((sum, m) => (monthlyCtrCount[m] > 0 ? sum / monthlyCtrCount[m] : 0));
 
-  const caps = ensureMonthlyCaps(reportsYear);
-  const capSum = caps.reduce((a, b) => a + b, 0);
-  const annualTarget = budgetTotalByYear[reportsYear] || capSum || totalPlanned;
-  const remaining = totalPlanned - totalActual;
-  const utilPct = totalPlanned > 0 ? ((totalActual / totalPlanned) * 100).toFixed(1) : '0.0';
-
   document.getElementById('mr-chart-year').textContent = reportsYear;
-  document.getElementById('mr-kpi-channels').textContent = String(allChannelNames.length);
-  document.getElementById('mr-kpi-planned').textContent = `${Math.round(totalPlanned).toLocaleString()} NOK`;
-  document.getElementById('mr-kpi-planned-sub').textContent = annualTarget > 0
-    ? `Target: ${Math.round(annualTarget).toLocaleString()} NOK`
-    : 'Annual allocation';
-  document.getElementById('mr-kpi-actual').textContent = `${Math.round(totalActual).toLocaleString()} NOK`;
-  document.getElementById('mr-kpi-actual-sub').textContent = `${utilPct}% utilized`;
-  document.getElementById('mr-kpi-remaining').textContent = `${Math.round(remaining).toLocaleString()} NOK`;
-
   const subtitleEl = document.getElementById('mr-chart-subtitle');
   const legendEl = document.getElementById('mr-chart-legend');
   let hasChartData = false;
@@ -4285,14 +4382,14 @@ function renderMarketingReportsView() {
       legendEl.innerHTML = `<span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#0ea5e9] inline-block"></span><span>Leads</span></span>`;
     }
     hasChartData = monthlyLeads.some(v => v > 0);
-    drawMarketingReportsChart('leads', monthlyLeads, null);
+    drawReportsBarChart('marketingReportsChart', 'leads', monthlyLeads, null, 220);
   } else if (reportsMetric === 'ctr') {
     if (subtitleEl) subtitleEl.textContent = 'Monthly average Click-Through Rate (%) across channels';
     if (legendEl) {
       legendEl.innerHTML = `<span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#f59e0b] inline-block"></span><span>Avg. CTR (%)</span></span>`;
     }
     hasChartData = monthlyCtr.some(v => v > 0);
-    drawMarketingReportsChart('ctr', monthlyCtr, null);
+    drawReportsBarChart('marketingReportsChart', 'ctr', monthlyCtr, null, 220);
   } else {
     if (subtitleEl) subtitleEl.textContent = 'Monthly planned budget vs. actual spend across all channels';
     if (legendEl) {
@@ -4302,7 +4399,7 @@ function renderMarketingReportsView() {
       `;
     }
     hasChartData = totalPlanned > 0 || totalActual > 0;
-    drawMarketingReportsChart('cost', monthlyPlanned, monthlyActual);
+    drawReportsBarChart('marketingReportsChart', 'cost', monthlyPlanned, monthlyActual, 220);
   }
 
   document.getElementById('mr-chart-empty-note')?.classList.toggle('hidden', hasChartData);
@@ -4331,9 +4428,10 @@ function renderMarketingReportsView() {
     const avgCtr = nonZeroCtrs.length > 0 ? (nonZeroCtrs.reduce((a, b) => a + b, 0) / nonZeroCtrs.length).toFixed(2) : '0.00';
     const sharePct = totalPlanned > 0 ? ((chPlanned / shareDenom) * 100).toFixed(1) : '0.0';
     const chUtilPct = chPlanned > 0 ? Math.min(100, (chActual / chPlanned) * 100) : 0;
+    const escName = name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
     return `
-      <div class="rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow flex flex-col justify-between gap-4 hover:border-slate-300 transition-colors">
+      <div onclick="openReportChannelDetail('${escName}')" class="cursor-pointer rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow flex flex-col justify-between gap-4 hover:border-slate-300 hover:shadow-md transition-all">
         <div class="flex items-start justify-between gap-2">
           <div class="flex items-center gap-2.5 min-w-0">
             <span class="w-3 h-3 rounded-full shrink-0" style="background:${color}"></span>
@@ -4376,9 +4474,7 @@ function renderMarketingReportsView() {
 
         <div class="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px]">
           <span class="text-slate-400">${reportsYear} · NOK</span>
-          <button type="button" onclick="budgetYear='${reportsYear}'; openApp('budget'); setBudgetSubView('allocated');" class="font-medium text-slate-700 hover:text-slate-900 hover:underline underline-offset-2">
-            Edit in Budget →
-          </button>
+          <span class="font-medium text-slate-700">Open &amp; add data →</span>
         </div>
       </div>
     `;
