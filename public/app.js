@@ -694,7 +694,7 @@ function setActiveNavHighlight(activeId) {
 }
 
 function hideAllViews() {
-  ['view-hub', 'view-app-group', 'view-channels', 'view-budget', 'view-contacts', 'view-leads', 'view-competitors', 'view-aeo-seo', 'view-app-detail', 'view-generic-section'].forEach(id => {
+  ['view-hub', 'view-app-group', 'view-channels', 'view-budget', 'view-contacts', 'view-leads', 'view-competitors', 'view-aeo-seo', 'view-marketing-reports', 'view-app-detail', 'view-generic-section'].forEach(id => {
     document.getElementById(id)?.classList.add('hidden');
   });
 }
@@ -729,6 +729,9 @@ function openApp(appId) {
   } else if (appId === 'aeo-seo') {
     document.getElementById('view-aeo-seo').classList.remove('hidden');
     renderAeoSeoView();
+  } else if (appId === 'marketing-reports') {
+    document.getElementById('view-marketing-reports').classList.remove('hidden');
+    renderMarketingReportsView();
   } else {
     document.getElementById('view-app-detail').classList.remove('hidden');
     document.getElementById('active-app-breadcrumb').textContent = app.title;
@@ -3970,11 +3973,273 @@ function renderAeoSeoView() {
   }).join('');
 }
 
+let reportsYear = '2026';
+
+function handleReportsYearChange() {
+  const sel = document.getElementById('reports-year-select');
+  if (sel) reportsYear = sel.value;
+  renderMarketingReportsView();
+}
+
+function drawMarketingReportsChart(monthlyPlanned, monthlyActual) {
+  const canvas = document.getElementById('marketingReportsChart');
+  if (!canvas) return;
+  const totalYearPlanned = monthlyPlanned.reduce((a, b) => a + b, 0);
+  canvas._barMeta = { monthlyPlanned, monthlyActual, totalYearPlanned, hoverIdx: -1 };
+
+  const renderBars = (hoverIdx = -1) => {
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    const width = rect.width || 680;
+    const height = 220;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, width, height);
+
+    const maxVal = Math.max(100, ...monthlyPlanned, ...monthlyActual) * 1.15;
+    const padL = 48, padR = 14, padT = 14, padB = 30;
+    const plotW = width - padL - padR;
+    const plotH = height - padT - padB;
+    const uiFont = '-apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif';
+
+    canvas._barMeta.padL = padL;
+    canvas._barMeta.padR = padR;
+    canvas._barMeta.width = width;
+    canvas._barMeta.plotW = plotW;
+
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = `10px ${uiFont}`;
+    [0, 0.5, 1].forEach(frac => {
+      const val = Math.round(maxVal * frac);
+      const y = padT + plotH - frac * plotH;
+      ctx.beginPath();
+      ctx.moveTo(padL, y);
+      ctx.lineTo(width - padR, y);
+      ctx.stroke();
+      ctx.fillText(val >= 1000 ? Math.round(val / 1000) + 'k' : String(val), 4, y + 3);
+    });
+    ctx.setLineDash([]);
+
+    const groupW = plotW / 12;
+    const barW = Math.min(13, Math.max(5, (groupW - 12) / 2));
+    const pillR = barW / 2;
+
+    monthNames.forEach((mLbl, idx) => {
+      const colX = padL + idx * groupW;
+      const centerX = colX + groupW / 2;
+      const isHovered = idx === hoverIdx;
+
+      if (isHovered) {
+        ctx.fillStyle = 'rgba(241, 245, 249, 0.9)';
+        ctx.beginPath();
+        ctx.roundRect(colX + 2, padT, groupW - 4, plotH + 4, 6);
+        ctx.fill();
+      }
+
+      const pH = (monthlyPlanned[idx] / maxVal) * plotH;
+      const aH = (monthlyActual[idx] / maxVal) * plotH;
+
+      ctx.globalAlpha = hoverIdx !== -1 && !isHovered ? 0.55 : 1;
+      if (pH > 0) {
+        ctx.fillStyle = '#10b981';
+        ctx.beginPath();
+        ctx.roundRect(centerX - barW - 1.5, padT + plotH - pH, barW, pH, [pillR, pillR, pillR, pillR]);
+        ctx.fill();
+      }
+
+      if (aH > 0) {
+        ctx.fillStyle = '#7c3aed';
+        ctx.beginPath();
+        ctx.roundRect(centerX + 1.5, padT + plotH - aH, barW, aH, [pillR, pillR, pillR, pillR]);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      ctx.fillStyle = isHovered ? '#0f172a' : '#64748b';
+      ctx.font = `${isHovered ? '600' : '400'} 10px ${uiFont}`;
+      ctx.textAlign = 'center';
+      ctx.fillText(mLbl, centerX, height - 8);
+      ctx.textAlign = 'left';
+    });
+  };
+
+  renderBars(-1);
+
+  if (!canvas._hasHoverListeners) {
+    canvas._hasHoverListeners = true;
+    canvas.addEventListener('mousemove', e => {
+      const meta = canvas._barMeta;
+      if (!meta || !meta.plotW) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const groupW = meta.plotW / 12;
+      const idx = Math.floor((x - meta.padL) / groupW);
+      if (idx < 0 || idx > 11) {
+        if (meta.hoverIdx !== -1) {
+          meta.hoverIdx = -1;
+          renderBars(-1);
+        }
+        hideChartTooltip();
+        return;
+      }
+      if (meta.hoverIdx !== idx) {
+        meta.hoverIdx = idx;
+        renderBars(idx);
+      }
+      const pVal = meta.monthlyPlanned[idx] || 0;
+      const aVal = meta.monthlyActual[idx] || 0;
+      const utilPct = pVal > 0 ? ((aVal / pVal) * 100).toFixed(1) : '0.0';
+      showChartTooltip(
+        e.clientX,
+        e.clientY,
+        `<div class="font-semibold text-white mb-1">${monthNames[idx]} ${reportsYear}</div>
+         <div class="flex items-center justify-between gap-4"><span class="text-emerald-300">Planned</span><span class="tabular-nums font-medium">${Math.round(pVal).toLocaleString()} NOK</span></div>
+         <div class="flex items-center justify-between gap-4"><span class="text-violet-300">Actual</span><span class="tabular-nums font-medium">${Math.round(aVal).toLocaleString()} NOK (${utilPct}%)</span></div>`
+      );
+    });
+    canvas.addEventListener('mouseleave', () => {
+      if (canvas._barMeta && canvas._barMeta.hoverIdx !== -1) {
+        canvas._barMeta.hoverIdx = -1;
+        renderBars(-1);
+      }
+      hideChartTooltip();
+    });
+  }
+}
+
+function renderMarketingReportsView() {
+  const sel = document.getElementById('reports-year-select');
+  if (sel && sel.value !== reportsYear) {
+    reportsYear = sel.value || budgetYear || '2026';
+  }
+  const yearObj = budgetData[reportsYear] || {};
+  const knownNames = getChannelNames();
+  const budgetNames = Object.keys(yearObj);
+  const allChannelNames = [...knownNames];
+  budgetNames.forEach(name => {
+    if (!allChannelNames.some(n => n.toLowerCase() === name.toLowerCase())) {
+      allChannelNames.push(name);
+    }
+  });
+
+  const monthlyPlanned = Array(12).fill(0);
+  const monthlyActual = Array(12).fill(0);
+  let totalPlanned = 0;
+  let totalActual = 0;
+
+  allChannelNames.forEach(name => {
+    const row = yearObj[name];
+    if (!row) return;
+    for (let m = 0; m < 12; m++) {
+      const p = row.planned[m] || 0;
+      const a = row.actual[m] || 0;
+      monthlyPlanned[m] += p;
+      monthlyActual[m] += a;
+      totalPlanned += p;
+      totalActual += a;
+    }
+  });
+
+  const caps = ensureMonthlyCaps(reportsYear);
+  const capSum = caps.reduce((a, b) => a + b, 0);
+  const annualTarget = budgetTotalByYear[reportsYear] || capSum || totalPlanned;
+  const remaining = totalPlanned - totalActual;
+  const utilPct = totalPlanned > 0 ? ((totalActual / totalPlanned) * 100).toFixed(1) : '0.0';
+
+  document.getElementById('mr-chart-year').textContent = reportsYear;
+  document.getElementById('mr-kpi-channels').textContent = String(allChannelNames.length);
+  document.getElementById('mr-kpi-planned').textContent = `${Math.round(totalPlanned).toLocaleString()} NOK`;
+  document.getElementById('mr-kpi-planned-sub').textContent = annualTarget > 0
+    ? `Target: ${Math.round(annualTarget).toLocaleString()} NOK`
+    : 'Annual allocation';
+  document.getElementById('mr-kpi-actual').textContent = `${Math.round(totalActual).toLocaleString()} NOK`;
+  document.getElementById('mr-kpi-actual-sub').textContent = `${utilPct}% utilized`;
+  document.getElementById('mr-kpi-remaining').textContent = `${Math.round(remaining).toLocaleString()} NOK`;
+
+  const hasChartData = totalPlanned > 0 || totalActual > 0;
+  document.getElementById('mr-chart-empty-note')?.classList.toggle('hidden', hasChartData);
+  drawMarketingReportsChart(monthlyPlanned, monthlyActual);
+
+  const cardsContainer = document.getElementById('marketing-reports-channel-cards');
+  if (!cardsContainer) return;
+
+  if (allChannelNames.length === 0) {
+    cardsContainer.innerHTML = `<div class="col-span-full p-8 rounded-2xl border border-dashed border-slate-200 bg-[#fbfcfd] text-center text-xs text-slate-500">No channels configured yet. Add channels in Channels or Budget to see cards here.</div>`;
+    return;
+  }
+
+  const shareDenom = Math.max(1, totalPlanned);
+  cardsContainer.innerHTML = allChannelNames.map((name, idx) => {
+    const chObj = channelsList.find(c => c.name.toLowerCase() === name.toLowerCase());
+    const color = getChannelColor(name, idx);
+    const typeLabel = chObj?.type || 'Channel';
+    const row = yearObj[name];
+    const chPlanned = row ? row.planned.reduce((a, b) => a + b, 0) : 0;
+    const chActual = row ? row.actual.reduce((a, b) => a + b, 0) : 0;
+    const sharePct = totalPlanned > 0 ? ((chPlanned / shareDenom) * 100).toFixed(1) : '0.0';
+    const chUtilPct = chPlanned > 0 ? Math.min(100, (chActual / chPlanned) * 100) : 0;
+    const leadCount = (leadEntries || []).filter(l => String(l.source || l.channel || '').toLowerCase() === name.toLowerCase()).length;
+
+    return `
+      <div class="rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow flex flex-col justify-between gap-4 hover:border-slate-300 transition-colors">
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <span class="w-3 h-3 rounded-full shrink-0" style="background:${color}"></span>
+            <div class="min-w-0">
+              <h4 class="text-sm font-semibold text-slate-900 truncate">${name}</h4>
+              <div class="text-[11px] text-slate-400">${typeLabel}</div>
+            </div>
+          </div>
+          <span class="px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-700 tabular-nums shrink-0">${sharePct}% share</span>
+        </div>
+
+        <div class="grid grid-cols-3 gap-2 pt-1 border-t border-slate-100">
+          <div>
+            <div class="text-[10px] text-slate-400">Planned</div>
+            <div class="text-xs font-semibold tabular-nums text-slate-900">${Math.round(chPlanned).toLocaleString()}</div>
+          </div>
+          <div>
+            <div class="text-[10px] text-slate-400">Actual</div>
+            <div class="text-xs font-semibold tabular-nums text-slate-900">${Math.round(chActual).toLocaleString()}</div>
+          </div>
+          <div>
+            <div class="text-[10px] text-slate-400">Leads</div>
+            <div class="text-xs font-semibold tabular-nums text-slate-900">${leadCount}</div>
+          </div>
+        </div>
+
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between text-[11px] text-slate-500">
+            <span>Spend vs. Planned</span>
+            <span class="tabular-nums font-medium text-slate-700">${chPlanned > 0 ? ((chActual / chPlanned) * 100).toFixed(0) : 0}%</span>
+          </div>
+          <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+            <div class="h-full rounded-full transition-all duration-300" style="width:${chUtilPct}%; background:${color}"></div>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px]">
+          <span class="text-slate-400">${reportsYear} · NOK</span>
+          <button type="button" onclick="budgetYear='${reportsYear}'; openApp('budget'); setBudgetSubView('allocated');" class="font-medium text-slate-700 hover:text-slate-900 hover:underline underline-offset-2">
+            Edit in Budget →
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
 window.addEventListener('resize', () => {
   if (!document.getElementById('view-channels')?.classList.contains('hidden')) renderChannelsView();
   if (!document.getElementById('view-leads')?.classList.contains('hidden')) renderLeadsView();
   if (!document.getElementById('view-competitors')?.classList.contains('hidden')) renderCompetitorsView();
   if (!document.getElementById('view-aeo-seo')?.classList.contains('hidden')) renderAeoSeoView();
+  if (!document.getElementById('view-marketing-reports')?.classList.contains('hidden')) renderMarketingReportsView();
   if (budgetSubView === 'summary' && Object.keys(budgetData[budgetYear] || {}).length > 0) renderBudgetView();
 });
 

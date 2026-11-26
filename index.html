@@ -1755,6 +1755,99 @@
         </div>
       </section>
 
+      <!-- VIEW: MARKETING REPORTS -->
+      <section id="view-marketing-reports" class="hidden max-w-6xl mx-auto space-y-6 animate-fade">
+        <div class="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-200/80">
+          <div class="flex items-center gap-2 text-xs">
+            <button onclick="openHub()" class="text-slate-500 hover:text-slate-900 font-medium flex items-center gap-1.5 transition-colors">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+              </svg>
+              <span>Apps</span>
+            </button>
+            <span class="text-slate-300">/</span>
+            <span class="font-semibold text-slate-900">Marketing Reports</span>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="flex items-center gap-1.5 bg-[#fbfcfd] border border-slate-200 rounded-lg px-2.5 h-8 text-xs">
+              <span class="text-slate-400">Year:</span>
+              <select id="reports-year-select" onchange="handleReportsYearChange()" class="bg-transparent text-slate-900 font-medium text-xs focus:outline-none cursor-pointer">
+                <option value="2025">2025</option>
+                <option value="2026" selected>2026</option>
+                <option value="2027">2027</option>
+              </select>
+            </div>
+            <button onclick="openApp('budget')" class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition-colors">
+              Open Budget →
+            </button>
+          </div>
+        </div>
+
+        <div class="space-y-1">
+          <h2 class="text-xl font-bold tracking-tight text-slate-900">Marketing Reports</h2>
+          <p class="text-xs text-slate-500">Overview of monthly marketing performance and per-channel breakdown in NOK.</p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+          <div class="p-4 rounded-xl border border-slate-200/80 bg-[#fbfcfd] space-y-1">
+            <div class="text-xs text-slate-500">Active Channels</div>
+            <div id="mr-kpi-channels" class="text-lg font-bold tabular-nums text-slate-900">0</div>
+            <div class="text-[11px] text-slate-400">Tracked in workspace</div>
+          </div>
+          <div class="p-4 rounded-xl border border-slate-200/80 bg-[#fbfcfd] space-y-1">
+            <div class="text-xs text-slate-500">Planned Budget</div>
+            <div id="mr-kpi-planned" class="text-lg font-bold tabular-nums text-slate-900">0 NOK</div>
+            <div id="mr-kpi-planned-sub" class="text-[11px] text-slate-400">Annual allocation</div>
+          </div>
+          <div class="p-4 rounded-xl border border-slate-200/80 bg-[#fbfcfd] space-y-1">
+            <div class="text-xs text-slate-500">Actual Spend</div>
+            <div id="mr-kpi-actual" class="text-lg font-bold tabular-nums text-slate-900">0 NOK</div>
+            <div id="mr-kpi-actual-sub" class="text-[11px] text-slate-400">0% utilized</div>
+          </div>
+          <div class="p-4 rounded-xl border border-slate-200/80 bg-[#fbfcfd] space-y-1">
+            <div class="text-xs text-slate-500">Remaining Budget</div>
+            <div id="mr-kpi-remaining" class="text-lg font-bold tabular-nums text-slate-900">0 NOK</div>
+            <div class="text-[11px] text-slate-400">Planned − Actual</div>
+          </div>
+        </div>
+
+        <div class="rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-900">Overview Chart (<span id="mr-chart-year">2026</span>)</h3>
+              <p class="text-[11px] text-slate-500">Monthly planned budget vs. actual spend across all channels</p>
+            </div>
+            <div class="flex items-center gap-3 text-[11px] text-slate-600">
+              <span class="flex items-center gap-1.5">
+                <span class="w-2.5 h-2.5 rounded-full bg-[#10b981] inline-block"></span>
+                <span>Planned</span>
+              </span>
+              <span class="flex items-center gap-1.5">
+                <span class="w-2.5 h-2.5 rounded-full bg-[#7c3aed] inline-block"></span>
+                <span>Actual</span>
+              </span>
+            </div>
+          </div>
+          <div class="w-full pt-1">
+            <canvas id="marketingReportsChart" height="220" class="w-full"></canvas>
+          </div>
+          <p id="mr-chart-empty-note" class="hidden text-[11px] text-slate-400 text-center pt-1">
+            No budget or spend recorded for this year yet — add numbers in Budget to populate the monthly overview.
+          </p>
+        </div>
+
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-900">Channels</h3>
+              <p class="text-[11px] text-slate-500">Performance and budget utilization per channel</p>
+            </div>
+          </div>
+          <div id="marketing-reports-channel-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+        </div>
+      </section>
+
       <!-- VIEW 4: GENERIC SECTION -->
       <section id="view-generic-section" class="hidden max-w-6xl mx-auto space-y-6 animate-fade">
         <div class="space-y-1">
