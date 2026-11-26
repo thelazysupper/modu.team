@@ -146,6 +146,23 @@ const illustrations = {
       <circle cx="201" cy="35" r="9" fill="#d1fae5"/>
       <path d="M196 35l3 3 6-6" stroke="#10b981" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
+  `,
+  integrations: `
+    <svg class="w-56 h-32" viewBox="0 0 240 120" fill="none">
+      <line x1="88" y1="60" x2="112" y2="40" stroke="#cbd5e1" stroke-width="1.6" stroke-dasharray="3 3"/>
+      <line x1="88" y1="60" x2="112" y2="80" stroke="#cbd5e1" stroke-width="1.6" stroke-dasharray="3 3"/>
+      <line x1="152" y1="40" x2="174" y2="60" stroke="#cbd5e1" stroke-width="1.6" stroke-dasharray="3 3"/>
+      <line x1="152" y1="80" x2="174" y2="60" stroke="#cbd5e1" stroke-width="1.6" stroke-dasharray="3 3"/>
+      <rect x="44" y="42" width="44" height="36" rx="8" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+      <rect x="54" y="56" width="24" height="4" rx="2" fill="#7c3aed"/>
+      <rect x="54" y="63" width="16" height="3" rx="1.5" fill="#c4b5fd"/>
+      <rect x="108" y="24" width="44" height="30" rx="7" fill="#d1fae5" stroke="#10b981" stroke-width="1.5"/>
+      <rect x="117" y="37" width="26" height="4" rx="2" fill="#10b981"/>
+      <rect x="108" y="66" width="44" height="30" rx="7" fill="#e0f2fe" stroke="#0ea5e9" stroke-width="1.5"/>
+      <rect x="117" y="79" width="26" height="4" rx="2" fill="#0ea5e9"/>
+      <circle cx="182" cy="60" r="14" fill="#ffffff" stroke="#6366f1" stroke-width="1.6"/>
+      <circle cx="182" cy="60" r="5" fill="#6366f1"/>
+    </svg>
   `
 };
 
@@ -180,6 +197,14 @@ const apps = [
     status: 'Active',
     description: 'Kanban pipeline with custom stages, ERP systems, integrations, and channels.',
     illustration: illustrations.leads,
+    actionType: 'open'
+  },
+  {
+    id: 'integrations',
+    title: 'Integrations',
+    status: 'Active',
+    description: 'Manage ERP, TA, and other integrations and track their distribution across leads.',
+    illustration: illustrations.integrations,
     actionType: 'open'
   },
   {
@@ -695,7 +720,7 @@ function setActiveNavHighlight(activeId) {
 }
 
 function hideAllViews() {
-  ['view-hub', 'view-app-group', 'view-channels', 'view-budget', 'view-contacts', 'view-leads', 'view-competitors', 'view-aeo-seo', 'view-marketing-reports', 'view-app-detail', 'view-generic-section'].forEach(id => {
+  ['view-hub', 'view-app-group', 'view-channels', 'view-budget', 'view-contacts', 'view-leads', 'view-integrations', 'view-competitors', 'view-aeo-seo', 'view-marketing-reports', 'view-app-detail', 'view-generic-section'].forEach(id => {
     document.getElementById(id)?.classList.add('hidden');
   });
 }
@@ -866,7 +891,7 @@ function navigateToRoute(rawPath, { push = false } = {}) {
       }
       return;
     }
-    if (['contacts', 'leads', 'competitors', 'aeo-seo'].includes(head)) {
+    if (['contacts', 'leads', 'integrations', 'competitors', 'aeo-seo'].includes(head)) {
       openApp(head);
       return;
     }
@@ -926,6 +951,10 @@ function openApp(appId) {
     document.getElementById('view-leads').classList.remove('hidden');
     renderLeadsView();
     syncRouteUrl('/leads');
+  } else if (appId === 'integrations') {
+    document.getElementById('view-integrations').classList.remove('hidden');
+    renderIntegrationsView();
+    syncRouteUrl('/integrations');
   } else if (appId === 'competitors') {
     document.getElementById('view-competitors').classList.remove('hidden');
     renderCompetitorsView();
@@ -3469,6 +3498,308 @@ function confirmAddLeadChannel() {
   populateLeadChannelSelect(val);
 }
 
+let integrationsList = [];
+const INTEGRATION_TYPE_COLORS = {
+  'ERP': '#6366f1',
+  'TA': '#10b981',
+  'Other Integration': '#0ea5e9'
+};
+
+function ensureIntegrationExists(name, type = 'Other Integration') {
+  const trimmed = String(name || '').trim();
+  if (!trimmed) return null;
+  const existing = integrationsList.find(i => i.name.toLowerCase() === trimmed.toLowerCase());
+  if (existing) return existing;
+  const next = {
+    id: Date.now() + Math.floor(Math.random() * 1000),
+    name: trimmed,
+    type: INTEGRATION_TYPE_COLORS[type] ? type : 'Other Integration'
+  };
+  integrationsList.push(next);
+  return next;
+}
+
+function populateLeadIntegrationSelect(field, selectedValue = '') {
+  const sel = document.getElementById(field === 'erp' ? 'l-erp' : 'l-integration');
+  const wrap = document.getElementById(field === 'erp' ? 'l-erp-custom-wrap' : 'l-integration-custom-wrap');
+  if (wrap) wrap.classList.add('hidden');
+  if (!sel) return;
+
+  if (selectedValue) {
+    ensureIntegrationExists(selectedValue, field === 'erp' ? 'ERP' : 'Other Integration');
+  }
+
+  sel.innerHTML = `
+    <option value="">None</option>
+    ${integrationsList.map(i => `<option value="${i.name}" ${i.name === selectedValue ? 'selected' : ''}>${i.name} (${i.type})</option>`).join('')}
+    <option value="__add_new__">+ Add new integration...</option>
+  `;
+  sel.value = selectedValue || '';
+}
+
+function handleLeadIntegrationSelectChange(field) {
+  const sel = document.getElementById(field === 'erp' ? 'l-erp' : 'l-integration');
+  const wrap = document.getElementById(field === 'erp' ? 'l-erp-custom-wrap' : 'l-integration-custom-wrap');
+  const input = document.getElementById(field === 'erp' ? 'l-erp-custom' : 'l-integration-custom');
+  if (!sel || !wrap) return;
+  if (sel.value === '__add_new__') {
+    wrap.classList.remove('hidden');
+    if (input) {
+      input.value = '';
+      input.focus();
+    }
+  } else {
+    wrap.classList.add('hidden');
+  }
+}
+
+function confirmAddLeadIntegration(field) {
+  const input = document.getElementById(field === 'erp' ? 'l-erp-custom' : 'l-integration-custom');
+  const typeSel = document.getElementById(field === 'erp' ? 'l-erp-custom-type' : 'l-integration-custom-type');
+  const val = (input?.value || '').trim();
+  if (!val) {
+    input?.focus();
+    return;
+  }
+  const type = typeSel?.value || (field === 'erp' ? 'ERP' : 'Other Integration');
+  ensureIntegrationExists(val, type);
+  const otherField = field === 'erp' ? 'integration' : 'erp';
+  const otherSel = document.getElementById(otherField === 'erp' ? 'l-erp' : 'l-integration');
+  const otherVal = otherSel && otherSel.value !== '__add_new__' ? otherSel.value : '';
+  populateLeadIntegrationSelect(field, val);
+  populateLeadIntegrationSelect(otherField, otherVal);
+  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+}
+
+function toggleIntegrationForm(show, editId = null) {
+  const panel = document.getElementById('integration-form-panel');
+  if (!panel) return;
+  if (!show) {
+    panel.classList.add('hidden');
+    return;
+  }
+  panel.classList.remove('hidden');
+  if (editId) {
+    const item = integrationsList.find(i => i.id === editId);
+    if (!item) return;
+    document.getElementById('integration-form-title').textContent = 'Edit Integration';
+    document.getElementById('int-edit-id').value = String(item.id);
+    document.getElementById('int-name').value = item.name;
+    document.getElementById('int-type').value = item.type || 'ERP';
+  } else {
+    document.getElementById('integration-form-title').textContent = 'Add Integration';
+    document.getElementById('int-edit-id').value = '';
+    document.getElementById('int-name').value = '';
+    document.getElementById('int-type').value = 'ERP';
+  }
+  document.getElementById('int-name')?.focus();
+}
+
+function saveIntegration() {
+  const editId = document.getElementById('int-edit-id').value;
+  const name = (document.getElementById('int-name').value || '').trim();
+  const type = document.getElementById('int-type').value || 'Other Integration';
+  if (!name) {
+    document.getElementById('int-name')?.focus();
+    return;
+  }
+  if (editId) {
+    const item = integrationsList.find(i => i.id === Number(editId));
+    if (item) {
+      const oldName = item.name;
+      item.name = name;
+      item.type = type;
+      if (oldName !== name) {
+        leadEntries.forEach(l => {
+          if (l.erp === oldName) l.erp = name;
+          if (l.integration === oldName) l.integration = name;
+        });
+      }
+    }
+  } else {
+    const existing = integrationsList.find(i => i.name.toLowerCase() === name.toLowerCase());
+    if (existing) {
+      existing.type = type;
+    } else {
+      integrationsList.push({ id: Date.now() + Math.floor(Math.random() * 1000), name, type });
+    }
+  }
+  toggleIntegrationForm(false);
+  renderIntegrationsView();
+  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+}
+
+function deleteIntegration(intId) {
+  const item = integrationsList.find(i => i.id === intId);
+  confirmDeleteAction(`Delete integration "${item?.name || 'this integration'}"?`, () => {
+    integrationsList = integrationsList.filter(i => i.id !== intId);
+    renderIntegrationsView();
+    if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+  });
+}
+
+function drawIntegrationsPieChart(segments) {
+  const canvas = document.getElementById('integrationsPieChart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const size = 160;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = size * dpr;
+  canvas.height = size * dpr;
+  canvas.style.width = size + 'px';
+  canvas.style.height = size + 'px';
+  ctx.scale(dpr, dpr);
+
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = 68;
+  const total = segments.reduce((a, s) => a + s.value, 0);
+  const slices = [];
+  if (total > 0) {
+    let angle = -Math.PI / 2;
+    segments.forEach((seg, idx) => {
+      const span = (seg.value / total) * Math.PI * 2;
+      slices.push({ ...seg, idx, start: angle, end: angle + span });
+      angle += span;
+    });
+  }
+
+  const renderPie = (hoverIdx = -1) => {
+    ctx.clearRect(0, 0, size, size);
+    if (total <= 0) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = '#f1f5f9';
+      ctx.fill();
+      return;
+    }
+    slices.forEach(s => {
+      const isHovered = s.idx === hoverIdx;
+      const radius = isHovered ? r + 4 : r;
+      ctx.save();
+      ctx.globalAlpha = hoverIdx !== -1 && !isHovered ? 0.55 : 1;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, radius, s.start, s.end);
+      ctx.closePath();
+      ctx.fillStyle = s.color;
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#ffffff';
+      ctx.stroke();
+      ctx.restore();
+    });
+  };
+
+  canvas._pieMeta = { slices, total, hoverIdx: -1, render: renderPie };
+  renderPie(-1);
+
+  if (!canvas._hasPieHover) {
+    canvas._hasPieHover = true;
+    canvas.addEventListener('mousemove', e => {
+      const meta = canvas._pieMeta;
+      if (!meta || meta.total <= 0) return;
+      const rect = canvas.getBoundingClientRect();
+      const dx = e.clientX - rect.left - cx;
+      const dy = e.clientY - rect.top - cy;
+      if (Math.sqrt(dx * dx + dy * dy) > r + 4) {
+        if (meta.hoverIdx !== -1) { meta.hoverIdx = -1; meta.render(-1); }
+        hideChartTooltip();
+        return;
+      }
+      let ang = Math.atan2(dy, dx);
+      if (ang < -Math.PI / 2) ang += Math.PI * 2;
+      const hit = meta.slices.find(s => ang >= s.start && ang <= s.end);
+      if (!hit) return;
+      if (meta.hoverIdx !== hit.idx) { meta.hoverIdx = hit.idx; meta.render(hit.idx); }
+      const pct = ((hit.value / meta.total) * 100).toFixed(1);
+      showChartTooltip(e.clientX, e.clientY, `<div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full" style="background:${hit.color}"></span><span class="font-semibold">${hit.label}</span><span class="text-slate-300">·</span><span>${hit.value}</span><span class="text-slate-300">(${pct}%)</span></div>`);
+    });
+    canvas.addEventListener('mouseleave', () => {
+      const meta = canvas._pieMeta;
+      if (meta && meta.hoverIdx !== -1) { meta.hoverIdx = -1; meta.render(-1); }
+      hideChartTooltip();
+    });
+  }
+}
+
+function renderIntegrationsView() {
+  (leadEntries || []).forEach(l => {
+    if (l.erp) ensureIntegrationExists(l.erp, 'ERP');
+    if (l.integration) ensureIntegrationExists(l.integration, 'Other Integration');
+  });
+
+  const total = integrationsList.length;
+  const totalLbl = document.getElementById('integrations-total-label');
+  if (totalLbl) totalLbl.textContent = `${total} integration${total === 1 ? '' : 's'}`;
+
+  const types = ['ERP', 'TA', 'Other Integration'];
+  const segments = types.map(t => ({
+    label: t,
+    value: integrationsList.filter(i => i.type === t).length,
+    color: INTEGRATION_TYPE_COLORS[t]
+  })).filter(s => s.value > 0);
+
+  drawIntegrationsPieChart(segments);
+
+  const legendEl = document.getElementById('integrations-pie-legend');
+  if (legendEl) {
+    if (total === 0) {
+      legendEl.innerHTML = `<p class="text-xs text-slate-400">Add integrations below to see the distribution across ERP, TA, and Other Integration.</p>`;
+    } else {
+      legendEl.innerHTML = types.map(t => {
+        const count = integrationsList.filter(i => i.type === t).length;
+        const pct = total > 0 ? ((count / total) * 100).toFixed(1) : '0.0';
+        return `
+          <div class="flex items-center justify-between gap-2 text-xs">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${INTEGRATION_TYPE_COLORS[t]}"></span>
+              <span class="font-medium text-slate-800">${t}</span>
+            </div>
+            <span class="tabular-nums text-slate-600">${count} <span class="text-slate-400">(${pct}%)</span></span>
+          </div>
+        `;
+      }).join('');
+    }
+  }
+
+  const emptyEl = document.getElementById('integrations-empty-state');
+  const tableWrap = document.getElementById('integrations-table-wrapper');
+  const tbody = document.getElementById('integrations-table-body');
+  if (!emptyEl || !tableWrap || !tbody) return;
+
+  if (total === 0) {
+    emptyEl.classList.remove('hidden');
+    tableWrap.classList.add('hidden');
+    return;
+  }
+  emptyEl.classList.add('hidden');
+  tableWrap.classList.remove('hidden');
+
+  tbody.innerHTML = integrationsList.map(item => {
+    const color = INTEGRATION_TYPE_COLORS[item.type] || '#0ea5e9';
+    const leadsCount = (leadEntries || []).filter(l =>
+      String(l.erp || '').toLowerCase() === item.name.toLowerCase() ||
+      String(l.integration || '').toLowerCase() === item.name.toLowerCase()
+    ).length;
+    return `
+      <tr class="group hover:bg-slate-50/80 transition-colors">
+        <td class="py-3 px-4 font-semibold text-slate-900">${item.name}</td>
+        <td class="py-3 px-4">
+          <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200/70">
+            <span class="w-1.5 h-1.5 rounded-full" style="background:${color}"></span>
+            ${item.type}
+          </span>
+        </td>
+        <td class="py-3 px-4 text-right tabular-nums text-slate-700">${leadsCount}</td>
+        <td class="py-3 px-4 text-right">
+          ${renderActionMenuHtml(`toggleIntegrationForm(true, ${item.id})`, `deleteIntegration(${item.id})`)}
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
 function populateLeadStageSelect(selectedStageId) {
   const sel = document.getElementById('l-stage');
   if (!sel) return;
@@ -3503,8 +3834,8 @@ function toggleLeadForm(show, editId = null, presetStageId = null) {
     document.getElementById('lead-form-title').textContent = 'Edit Lead';
     document.getElementById('l-edit-id').value = String(item.id);
     document.getElementById('l-company').value = item.company;
-    document.getElementById('l-erp').value = item.erp || '';
-    document.getElementById('l-integration').value = item.integration || '';
+    populateLeadIntegrationSelect('erp', item.erp || '');
+    populateLeadIntegrationSelect('integration', item.integration || '');
     document.getElementById('l-value').value = item.value > 0 ? String(item.value) : '';
     if (item.channel) ensureChannelExists(item.channel);
     populateLeadChannelSelect(item.channel);
@@ -3513,8 +3844,8 @@ function toggleLeadForm(show, editId = null, presetStageId = null) {
     document.getElementById('lead-form-title').textContent = 'New Lead';
     document.getElementById('l-edit-id').value = '';
     document.getElementById('l-company').value = '';
-    document.getElementById('l-erp').value = '';
-    document.getElementById('l-integration').value = '';
+    populateLeadIntegrationSelect('erp', '');
+    populateLeadIntegrationSelect('integration', '');
     document.getElementById('l-value').value = '';
     populateLeadChannelSelect(getChannelNames()[0] || '');
     populateLeadStageSelect(presetStageId);
@@ -3525,8 +3856,28 @@ function toggleLeadForm(show, editId = null, presetStageId = null) {
 function saveLead() {
   const editId = document.getElementById('l-edit-id').value;
   const company = (document.getElementById('l-company').value || '').trim();
-  const erp = (document.getElementById('l-erp').value || '').trim();
-  const integration = (document.getElementById('l-integration').value || '').trim();
+  let erp = document.getElementById('l-erp').value;
+  if (erp === '__add_new__') {
+    const customErp = (document.getElementById('l-erp-custom').value || '').trim();
+    const customType = document.getElementById('l-erp-custom-type')?.value || 'ERP';
+    if (!customErp) {
+      document.getElementById('l-erp-custom').focus();
+      return;
+    }
+    ensureIntegrationExists(customErp, customType);
+    erp = customErp;
+  }
+  let integration = document.getElementById('l-integration').value;
+  if (integration === '__add_new__') {
+    const customInt = (document.getElementById('l-integration-custom').value || '').trim();
+    const customType = document.getElementById('l-integration-custom-type')?.value || 'Other Integration';
+    if (!customInt) {
+      document.getElementById('l-integration-custom').focus();
+      return;
+    }
+    ensureIntegrationExists(customInt, customType);
+    integration = customInt;
+  }
   let channel = document.getElementById('l-channel').value;
   if (channel === '__add_new__') {
     const customVal = (document.getElementById('l-channel-custom').value || '').trim();
@@ -5340,6 +5691,7 @@ function getWorkspaceSnapshot() {
     availableCountries,
     leadStages,
     leadEntries,
+    integrationsList,
     competitorsList,
     aeoSeoEntries,
     appGroups,
@@ -5369,6 +5721,7 @@ function applyWorkspaceSnapshot(snap) {
     if (Array.isArray(snap.availableCountries)) availableCountries = snap.availableCountries;
     if (Array.isArray(snap.leadStages)) leadStages = snap.leadStages;
     if (Array.isArray(snap.leadEntries)) leadEntries = snap.leadEntries;
+    if (Array.isArray(snap.integrationsList)) integrationsList = snap.integrationsList;
     if (Array.isArray(snap.competitorsList)) competitorsList = snap.competitorsList;
     if (Array.isArray(snap.aeoSeoEntries)) aeoSeoEntries = snap.aeoSeoEntries;
     if (Array.isArray(snap.appGroups)) appGroups = snap.appGroups;
@@ -5387,6 +5740,7 @@ function applyWorkspaceSnapshot(snap) {
       if (!document.getElementById('view-budget')?.classList.contains('hidden')) renderBudgetView();
       if (!document.getElementById('view-contacts')?.classList.contains('hidden')) renderContactsView();
       if (!document.getElementById('view-leads')?.classList.contains('hidden')) renderLeadsView();
+      if (!document.getElementById('view-integrations')?.classList.contains('hidden')) renderIntegrationsView();
       if (!document.getElementById('view-competitors')?.classList.contains('hidden')) renderCompetitorsView();
       if (!document.getElementById('view-aeo-seo')?.classList.contains('hidden')) renderAeoSeoView();
       if (!document.getElementById('view-marketing-reports')?.classList.contains('hidden')) renderMarketingReportsView();
