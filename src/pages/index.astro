@@ -3,6 +3,19 @@ import fs from "node:fs";
 import path from "node:path";
 const stylesCss = fs.readFileSync(path.resolve("styles.css"), "utf8");
 const appJs = fs.readFileSync(path.resolve("app.js"), "utf8");
+const supabaseUrl =
+  import.meta.env.PUBLIC_SUPABASE_URL ||
+  process.env.PUBLIC_SUPABASE_URL ||
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  process.env.SUPABASE_URL ||
+  "";
+const supabaseAnonKey =
+  import.meta.env.PUBLIC_SUPABASE_ANON_KEY ||
+  process.env.PUBLIC_SUPABASE_ANON_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  process.env.SUPABASE_ANON_KEY ||
+  "";
+const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url: supabaseUrl, anonKey: supabaseAnonKey })};`;
 ---
 <!DOCTYPE html>
 <html lang="en" class="light">
@@ -11,6 +24,8 @@ const appJs = fs.readFileSync(path.resolve("app.js"), "utf8");
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Modu — Marketing Workspace</title>
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script is:inline set:html={supabaseConfigScript}></script>
   <style is:global set:html={stylesCss}></style>
 </head>
 <body class="bg-white text-slate-900 antialiased m-0 p-0">

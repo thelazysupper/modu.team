@@ -3824,9 +3824,143 @@ function handleLogout() {
   syncAuthState();
 }
 
+const WORKSPACE_STORAGE_KEY = 'modu_workspace_state_v1';
+const SUPABASE_ROW_ID = 'default';
+let supabaseClient = null;
+let isHydratingState = false;
+let hasHydratedOnce = false;
+let saveWorkspaceTimer = null;
+
+function getWorkspaceSnapshot() {
+  const appGroupMap = {};
+  apps.forEach(a => {
+    if (a.groupId) appGroupMap[a.id] = a.groupId;
+  });
+  return {
+    channelsList,
+    budgetData,
+    budgetTotalByYear,
+    budgetMonthlyCapByYear,
+    budgetYear,
+    contactGroups,
+    availableCountries,
+    leadStages,
+    leadEntries,
+    competitorsList,
+    aeoSeoEntries,
+    appGroups,
+    appGroupMap
+  };
+}
+
+function applyWorkspaceSnapshot(snap) {
+  if (!snap || typeof snap !== 'object') return;
+  isHydratingState = true;
+  try {
+    if (Array.isArray(snap.channelsList)) channelsList = snap.channelsList;
+    if (snap.budgetData && typeof snap.budgetData === 'object') budgetData = snap.budgetData;
+    if (snap.budgetTotalByYear && typeof snap.budgetTotalByYear === 'object') budgetTotalByYear = snap.budgetTotalByYear;
+    if (snap.budgetMonthlyCapByYear && typeof snap.budgetMonthlyCapByYear === 'object') budgetMonthlyCapByYear = snap.budgetMonthlyCapByYear;
+    if (snap.budgetYear) budgetYear = String(snap.budgetYear);
+    if (Array.isArray(snap.contactGroups)) contactGroups = snap.contactGroups;
+    if (Array.isArray(snap.availableCountries)) availableCountries = snap.availableCountries;
+    if (Array.isArray(snap.leadStages)) leadStages = snap.leadStages;
+    if (Array.isArray(snap.leadEntries)) leadEntries = snap.leadEntries;
+    if (Array.isArray(snap.competitorsList)) competitorsList = snap.competitorsList;
+    if (Array.isArray(snap.aeoSeoEntries)) aeoSeoEntries = snap.aeoSeoEntries;
+    if (Array.isArray(snap.appGroups)) appGroups = snap.appGroups;
+    if (snap.appGroupMap && typeof snap.appGroupMap === 'object') {
+      apps.forEach(a => {
+        a.groupId = snap.appGroupMap[a.id] || null;
+      });
+    }
+    renderSidebarApps();
+    renderCards();
+    if (!document.getElementById('view-channels')?.classList.contains('hidden')) renderChannelsView();
+    if (!document.getElementById('view-budget')?.classList.contains('hidden')) renderBudgetView();
+    if (!document.getElementById('view-contacts')?.classList.contains('hidden')) renderContactsView();
+    if (!document.getElementById('view-leads')?.classList.contains('hidden')) renderLeadsView();
+    if (!document.getElementById('view-competitors')?.classList.contains('hidden')) renderCompetitorsView();
+    if (!document.getElementById('view-aeo-seo')?.classList.contains('hidden')) renderAeoSeoView();
+  } finally {
+    isHydratingState = false;
+  }
+}
+
+function scheduleWorkspaceSave() {
+  if (isHydratingState || !hasHydratedOnce) return;
+  const snapshot = getWorkspaceSnapshot();
+  try {
+    window.localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(snapshot));
+  } catch {
+    // Ignore storage errors in restricted contexts
+  }
+  if (!supabaseClient) return;
+  clearTimeout(saveWorkspaceTimer);
+  saveWorkspaceTimer = setTimeout(async () => {
+    try {
+      await supabaseClient
+        .from('workspace_state')
+        .upsert({ id: SUPABASE_ROW_ID, data: snapshot, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+    } catch (err) {
+      console.warn('Supabase sync failed:', err);
+    }
+  }, 350);
+}
+
+async function initWorkspacePersistence() {
+  try {
+    const cached = window.localStorage.getItem(WORKSPACE_STORAGE_KEY);
+    if (cached) applyWorkspaceSnapshot(JSON.parse(cached));
+  } catch {
+    // Ignore storage errors
+  }
+
+  const cfg = window.__MODU_SUPABASE__;
+  if (cfg && cfg.url && cfg.anonKey && window.supabase && typeof window.supabase.createClient === 'function') {
+    try {
+      supabaseClient = window.supabase.createClient(cfg.url, cfg.anonKey);
+      const { data, error } = await supabaseClient
+        .from('workspace_state')
+        .select('data')
+        .eq('id', SUPABASE_ROW_ID)
+        .maybeSingle();
+      if (!error && data && data.data) {
+        applyWorkspaceSnapshot(data.data);
+      }
+    } catch (err) {
+      console.warn('Supabase load failed:', err);
+    }
+  }
+  hasHydratedOnce = true;
+}
+
+[
+  'renderChannelsView',
+  'renderBudgetView',
+  'renderContactsView',
+  'renderLeadsView',
+  'renderCompetitorsView',
+  'renderAeoSeoView',
+  'saveAppGroup',
+  'deleteAppGroup',
+  'assignAppGroup',
+  'toggleAppGroupCollapse'
+].forEach(fnName => {
+  const orig = window[fnName];
+  if (typeof orig === 'function') {
+    window[fnName] = function (...args) {
+      const res = orig.apply(this, args);
+      scheduleWorkspaceSave();
+      return res;
+    };
+  }
+});
+
 window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('sidebar-app-count').textContent = String(apps.length);
   renderSidebarApps();
   renderCards();
   syncAuthState();
+  initWorkspacePersistence();
 });
