@@ -1210,11 +1210,12 @@ function renderChannelsView() {
         .sort((a, b) => b.budgetNok - a.budgetNok)
         .map(r => {
           const pct = totalChannelBudget > 0 ? (r.budgetNok / totalChannelBudget) * 100 : 0;
+          const escName = r.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
           return `
-            <div class="flex items-center justify-between gap-2 text-xs">
+            <div onclick="openChannelReportSubpage('${escName}')" class="cursor-pointer flex items-center justify-between gap-2 text-xs hover:bg-slate-50 rounded px-1.5 py-0.5 -mx-1.5 transition-colors">
               <div class="flex items-center gap-2 min-w-0">
                 <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${r.color}"></span>
-                <span class="font-medium text-slate-800 truncate">${r.name}</span>
+                <span class="font-medium text-slate-800 truncate hover:underline underline-offset-2">${r.name}</span>
               </div>
               <div class="flex items-center gap-2 tabular-nums shrink-0">
                 <span class="text-slate-500">${Math.round(r.budgetNok).toLocaleString()} NOK</span>
@@ -1245,11 +1246,12 @@ function renderChannelsView() {
         .sort((a, b) => b.leadCount - a.leadCount)
         .map(r => {
           const pct = totalLeads > 0 ? (r.leadCount / totalLeads) * 100 : 0;
+          const escName = r.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
           return `
-            <div class="flex items-center justify-between gap-2 text-xs">
+            <div onclick="openChannelReportSubpage('${escName}')" class="cursor-pointer flex items-center justify-between gap-2 text-xs hover:bg-slate-50 rounded px-1.5 py-0.5 -mx-1.5 transition-colors">
               <div class="flex items-center gap-2 min-w-0">
                 <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${r.color}"></span>
-                <span class="font-medium text-slate-800 truncate">${r.name}</span>
+                <span class="font-medium text-slate-800 truncate hover:underline underline-offset-2">${r.name}</span>
               </div>
               <div class="flex items-center gap-2 tabular-nums shrink-0">
                 <span class="text-slate-500">${r.leadCount} lead${r.leadCount === 1 ? '' : 's'}</span>
@@ -1277,12 +1279,13 @@ function renderChannelsView() {
   tbody.innerHTML = rows.map(r => {
     const budgetShare = totalChannelBudget > 0 ? (r.budgetNok / totalChannelBudget) * 100 : 0;
     const leadShare = totalLeads > 0 ? (r.leadCount / totalLeads) * 100 : 0;
+    const escName = r.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     return `
-      <tr class="group hover:bg-slate-50/80 transition-colors">
+      <tr onclick="openChannelReportSubpage('${escName}')" class="group cursor-pointer hover:bg-slate-50/80 transition-colors">
         <td class="py-3 px-4">
           <div class="flex items-center gap-2.5">
             <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${r.color}"></span>
-            <span class="font-semibold text-slate-900">${r.name}</span>
+            <span class="font-semibold text-slate-900 group-hover:underline underline-offset-2">${r.name}</span>
           </div>
         </td>
         <td class="py-3 px-4">
@@ -1310,7 +1313,7 @@ function renderChannelsView() {
             <span class="tabular-nums font-medium text-slate-700">${leadShare.toFixed(1)}%</span>
           </div>
         </td>
-        <td class="py-3 px-4 text-right">
+        <td class="py-3 px-4 text-right" onclick="event.stopPropagation()">
           ${renderActionMenuHtml(`toggleChannelForm(true, ${r.id})`, `deleteChannel(${r.id})`)}
         </td>
       </tr>
@@ -4018,6 +4021,17 @@ function handleReportsChannelMetricChange() {
   const sel = document.getElementById('mr-ch-chart-metric');
   if (sel) reportsChannelMetric = sel.value || 'cost';
   renderMarketingReportsView();
+}
+
+function openChannelReportSubpage(channelName) {
+  reportsYear = budgetYear || reportsYear || '2026';
+  const sel = document.getElementById('reports-year-select');
+  if (sel) sel.value = reportsYear;
+  hideAllViews();
+  activeReportChannel = channelName;
+  document.getElementById('view-marketing-reports')?.classList.remove('hidden');
+  renderMarketingReportsView();
+  setActiveNavHighlight('side-app-marketing-reports');
 }
 
 function openReportChannelDetail(channelName) {
