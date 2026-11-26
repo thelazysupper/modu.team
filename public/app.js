@@ -1811,26 +1811,26 @@ function setBudgetSubView(sv) {
     summary: {
       crumb: '',
       title: 'Budget',
-      desc: 'Follow the steps below: set your Total & Monthly budget, lock targets if needed, then allocate by NOK or % across channels.'
+      desc: 'Summary of your marketing budget in NOK. Select any card below to open its detailed view.'
     },
     total: {
-      crumb: '1. Total & Monthly Plan',
-      title: 'Total & Monthly Plan',
+      crumb: 'Total Budget',
+      title: 'Total Budget per Year',
       desc: 'Set and lock your Annual Total and Monthly budgets in NOK, then allocate each month by NOK or %.'
     },
     allocated: {
-      crumb: '2. Channel Allocation',
-      title: 'Channel Allocation',
+      crumb: 'Allocated to Channels',
+      title: 'Allocated to Channels',
       desc: 'Planned monthly budgets and % share by channel in NOK.'
     },
     actual: {
-      crumb: '3. Actual Spend',
-      title: 'Actual Spend',
+      crumb: 'Total Actual Spend',
+      title: 'Total Actual Spend',
       desc: 'Record and review actual monthly spend per channel in NOK.'
     },
     variance: {
-      crumb: '4. Variance',
-      title: 'Variance',
+      crumb: 'Net Variance',
+      title: 'Net Variance',
       desc: 'Compare allocated budget vs. actual spend per channel in NOK.'
     }
   };
@@ -1843,7 +1843,7 @@ function setBudgetSubView(sv) {
     crumbEl.classList.toggle('hidden', isSummary);
     crumbEl.textContent = m.crumb;
   }
-  document.getElementById('budget-back-btn')?.classList.add('hidden');
+  document.getElementById('budget-back-btn')?.classList.toggle('hidden', isSummary);
   const titleEl = document.getElementById('budget-page-title');
   if (titleEl) titleEl.textContent = m.title;
   const descEl = document.getElementById('budget-page-desc');
@@ -2186,6 +2186,107 @@ function renderBudgetView() {
   if (budgetSubView === 'variance') renderBudgetVariance(channels, yearObj);
 }
 
+function drawBudgetChannelPie(segments) {
+  const canvas = document.getElementById('budgetChannelPieChart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const size = 160;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = size * dpr;
+  canvas.height = size * dpr;
+  canvas.style.width = size + 'px';
+  canvas.style.height = size + 'px';
+  ctx.scale(dpr, dpr);
+
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = 68;
+  const total = segments.reduce((a, s) => a + s.value, 0);
+
+  const slices = [];
+  if (total > 0) {
+    let angle = -Math.PI / 2;
+    segments.forEach((seg, idx) => {
+      const span = (seg.value / total) * Math.PI * 2;
+      slices.push({ ...seg, idx, start: angle, end: angle + span });
+      angle += span;
+    });
+  }
+
+  const renderPie = (hoverIdx = -1) => {
+    ctx.clearRect(0, 0, size, size);
+    if (total <= 0) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = '#f1f5f9';
+      ctx.fill();
+      return;
+    }
+
+    slices.forEach(s => {
+      const isHovered = s.idx === hoverIdx;
+      const radius = isHovered ? r + 4 : r;
+      ctx.save();
+      ctx.globalAlpha = hoverIdx !== -1 && !isHovered ? 0.55 : 1;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, radius, s.start, s.end);
+      ctx.closePath();
+      ctx.fillStyle = s.color;
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#ffffff';
+      ctx.stroke();
+      ctx.restore();
+    });
+  };
+
+  canvas._pieMeta = { slices, total, hoverIdx: -1, render: renderPie };
+  renderPie(-1);
+
+  if (!canvas._hasPieHover) {
+    canvas._hasPieHover = true;
+    canvas.addEventListener('mousemove', e => {
+      const meta = canvas._pieMeta;
+      if (!meta || meta.total <= 0) return;
+      const rect = canvas.getBoundingClientRect();
+      const dx = e.clientX - rect.left - cx;
+      const dy = e.clientY - rect.top - cy;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > r + 4) {
+        if (meta.hoverIdx !== -1) {
+          meta.hoverIdx = -1;
+          meta.render(-1);
+        }
+        hideChartTooltip();
+        return;
+      }
+      let ang = Math.atan2(dy, dx);
+      if (ang < -Math.PI / 2) ang += Math.PI * 2;
+      const hit = meta.slices.find(s => ang >= s.start && ang <= s.end);
+      if (!hit) return;
+      if (meta.hoverIdx !== hit.idx) {
+        meta.hoverIdx = hit.idx;
+        meta.render(hit.idx);
+      }
+      const pct = ((hit.value / meta.total) * 100).toFixed(1);
+      showChartTooltip(
+        e.clientX,
+        e.clientY,
+        `<div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full" style="background:${hit.color}"></span><span class="font-semibold">${hit.label}</span><span class="text-slate-300">·</span><span>${Math.round(hit.value).toLocaleString()} NOK</span><span class="text-slate-300">(${pct}%)</span></div>`
+      );
+    });
+    canvas.addEventListener('mouseleave', () => {
+      const meta = canvas._pieMeta;
+      if (meta && meta.hoverIdx !== -1) {
+        meta.hoverIdx = -1;
+        meta.render(-1);
+      }
+      hideChartTooltip();
+    });
+  }
+}
+
 function renderBudgetSummary(channels, yearObj, monthlyPlanned, monthlyActual, totalPlanned, annualBudget) {
   const graphsEl = document.getElementById('budget-summary-graphs');
   const emptyEl = document.getElementById('budget-empty-state');
@@ -2204,34 +2305,36 @@ function renderBudgetSummary(channels, yearObj, monthlyPlanned, monthlyActual, t
 
   const barsContainer = document.getElementById('budget-channel-bars');
   if (channels.length === 0) {
+    drawBudgetChannelPie([]);
     barsContainer.innerHTML = `<p class="text-xs text-slate-400">No channels added yet. Click <strong>+ Add Budget</strong> to allocate across channels.</p>`;
     return;
   }
 
-  const denom = Math.max(1, totalPlanned);
-  const palette = [
-    { bar: 'bg-[#7c3aed]', track: 'bg-[#ede9fe]', hex: '#7c3aed' },
-    { bar: 'bg-[#10b981]', track: 'bg-[#d1fae5]', hex: '#10b981' },
-    { bar: 'bg-[#f43f5e]', track: 'bg-[#ffe4e6]', hex: '#f43f5e' },
-    { bar: 'bg-[#f59e0b]', track: 'bg-[#fef3c7]', hex: '#f59e0b' },
-    { bar: 'bg-[#0ea5e9]', track: 'bg-[#e0f2fe]', hex: '#0ea5e9' }
-  ];
+  const palette = ['#7c3aed', '#10b981', '#f43f5e', '#f59e0b', '#0ea5e9', '#6366f1', '#14b8a6'];
+  const segments = channels.map((ch, idx) => {
+    const chSum = yearObj[ch].planned.reduce((a, b) => a + b, 0);
+    return {
+      label: ch,
+      value: chSum,
+      color: getChannelColor(ch, idx) || palette[idx % palette.length]
+    };
+  }).filter(s => s.value > 0);
+
+  drawBudgetChannelPie(segments);
+
   barsContainer.innerHTML = channels.map((ch, idx) => {
     const chSum = yearObj[ch].planned.reduce((a, b) => a + b, 0);
     const pctExact = totalPlanned > 0 ? (chSum / totalPlanned) * 100 : 0;
-    const pct = Math.min(100, Math.round(pctExact));
-    const pal = palette[idx % palette.length];
+    const color = getChannelColor(ch, idx) || palette[idx % palette.length];
     const safeCh = ch.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-    const tipHtml = `<div class=&quot;flex items-center gap-1.5&quot;><span class=&quot;w-2 h-2 rounded-full&quot; style=&quot;background:${pal.hex}&quot;></span><span class=&quot;font-semibold&quot;>${safeCh}</span><span class=&quot;text-slate-300&quot;>·</span><span>${Math.round(chSum).toLocaleString()} NOK</span><span class=&quot;text-slate-300&quot;>(${pctExact.toFixed(1)}%)</span></div>`;
+    const tipHtml = `<div class=&quot;flex items-center gap-1.5&quot;><span class=&quot;w-2 h-2 rounded-full&quot; style=&quot;background:${color}&quot;></span><span class=&quot;font-semibold&quot;>${safeCh}</span><span class=&quot;text-slate-300&quot;>·</span><span>${Math.round(chSum).toLocaleString()} NOK</span><span class=&quot;text-slate-300&quot;>(${pctExact.toFixed(1)}%)</span></div>`;
     return `
-      <div class="space-y-1.5 cursor-pointer rounded-lg p-1 -mx-1 hover:bg-slate-50/90 transition-colors" onmousemove="showChartTooltip(event.clientX, event.clientY, '${tipHtml.replace(/'/g, "\\'")}')" onmouseleave="hideChartTooltip()">
-        <div class="flex items-center justify-between text-xs">
+      <div class="flex items-center justify-between gap-2 text-xs cursor-pointer rounded-lg px-1.5 py-1 -mx-1.5 hover:bg-slate-50/90 transition-colors" onmousemove="showChartTooltip(event.clientX, event.clientY, '${tipHtml.replace(/'/g, "\\'")}')" onmouseleave="hideChartTooltip()">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${color}"></span>
           <span class="font-medium text-slate-800 truncate">${ch}</span>
-          <span class="tabular-nums text-[11px] text-slate-600">${Math.round(chSum).toLocaleString()} NOK (${pct}%)</span>
         </div>
-        <div class="w-full h-2 ${pal.track} rounded-full overflow-hidden">
-          <div class="h-full ${pal.bar} rounded-full transition-all duration-300" style="width: ${pct}%"></div>
-        </div>
+        <span class="tabular-nums text-[11px] text-slate-600 shrink-0">${Math.round(chSum).toLocaleString()} NOK (${pctExact.toFixed(1)}%)</span>
       </div>
     `;
   }).join('');

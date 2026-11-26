@@ -669,20 +669,12 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
           <div class="space-y-1">
             <h2 id="budget-page-title" class="text-xl font-bold tracking-tight text-slate-900">Budget</h2>
             <p id="budget-page-desc" class="text-xs text-slate-500">
-              Follow the steps below: set your Total &amp; Monthly budget, lock targets if needed, then allocate by NOK or % across channels.
+              Summary of your marketing budget in NOK. Select any card below to open its detailed view.
             </p>
           </div>
           <button id="budget-back-btn" onclick="setBudgetSubView('summary')" class="hidden h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700">
             ← Back to Summary
           </button>
-        </div>
-
-        <div id="budget-flow-tabs" class="flex flex-wrap items-center gap-1.5 border-b border-slate-200/80 pb-3">
-          <button type="button" data-budget-tab="summary" onclick="setBudgetSubView('summary')" class="budget-flow-tab h-8 px-3 rounded-lg text-xs font-medium transition-colors bg-[#0f172a] text-white">Overview</button>
-          <button type="button" data-budget-tab="total" onclick="setBudgetSubView('total')" class="budget-flow-tab h-8 px-3 rounded-lg text-xs font-medium transition-colors bg-[#fbfcfd] border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50">1. Total &amp; Monthly Plan</button>
-          <button type="button" data-budget-tab="allocated" onclick="setBudgetSubView('allocated')" class="budget-flow-tab h-8 px-3 rounded-lg text-xs font-medium transition-colors bg-[#fbfcfd] border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50">2. Channel Allocation</button>
-          <button type="button" data-budget-tab="actual" onclick="setBudgetSubView('actual')" class="budget-flow-tab h-8 px-3 rounded-lg text-xs font-medium transition-colors bg-[#fbfcfd] border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50">3. Actual Spend</button>
-          <button type="button" data-budget-tab="variance" onclick="setBudgetSubView('variance')" class="budget-flow-tab h-8 px-3 rounded-lg text-xs font-medium transition-colors bg-[#fbfcfd] border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50">4. Variance</button>
         </div>
 
         <div id="budget-form-panel" class="hidden rounded-2xl border border-slate-200 bg-[#fbfcfd] p-5 space-y-4 animate-fade">
@@ -808,7 +800,10 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
                 <h3 class="text-sm font-semibold text-slate-900">Budget by Channel</h3>
                 <p class="text-[11px] text-slate-500">Annual share across active channels</p>
               </div>
-              <div id="budget-channel-bars" class="space-y-3"></div>
+              <div class="flex items-center justify-center">
+                <canvas id="budgetChannelPieChart" width="160" height="160"></canvas>
+              </div>
+              <div id="budget-channel-bars" class="space-y-2"></div>
             </div>
           </div>
 
