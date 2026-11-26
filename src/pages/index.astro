@@ -606,16 +606,43 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
                   />
                 </div>
                 <div>
-                  <label class="block text-[11px] font-medium text-slate-600 mb-1">Profile URL or Account ID (Optional)</label>
-                  <input
-                    id="cha-url"
-                    type="text"
-                    placeholder="e.g. https://linkedin.com/company/modu"
-                    onkeydown="if(event.key==='Enter'){event.preventDefault();saveChannelAccount();}"
-                    class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400"
-                  />
+                  <label class="block text-[11px] font-medium text-slate-600 mb-1">Social Link / URL</label>
+                  <div class="flex items-center gap-1.5">
+                    <input
+                      id="cha-url"
+                      type="text"
+                      placeholder="https://linkedin.com/company/modu"
+                      onkeydown="if(event.key==='Enter'){event.preventDefault();fetchChannelAccountInfo();}"
+                      class="flex-1 min-w-0 h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400"
+                    />
+                    <button type="button" id="cha-fetch-btn" onclick="fetchChannelAccountInfo()" class="h-9 px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-[11px] font-medium text-slate-700 shrink-0">
+                      Fetch Info
+                    </button>
+                  </div>
                 </div>
               </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-1">
+                <div>
+                  <label class="block text-[11px] font-medium text-slate-600 mb-1">Logo URL</label>
+                  <input id="cha-logo" type="text" placeholder="Auto-fetched..." class="w-full h-8 px-2.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+                </div>
+                <div>
+                  <label class="block text-[11px] font-medium text-slate-600 mb-1">Followers</label>
+                  <input id="cha-followers" type="text" placeholder="e.g. 12.4K" class="w-full h-8 px-2.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+                </div>
+                <div>
+                  <label class="block text-[11px] font-medium text-slate-600 mb-1">Posts</label>
+                  <input id="cha-posts" type="text" placeholder="e.g. 142" class="w-full h-8 px-2.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+                </div>
+                <div>
+                  <label class="block text-[11px] font-medium text-slate-600 mb-1">Bio / Summary</label>
+                  <input id="cha-bio" type="text" placeholder="Auto-fetched..." class="w-full h-8 px-2.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+                </div>
+              </div>
+
+              <div id="cha-fetch-status" class="hidden text-[11px] text-slate-500"></div>
+
               <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200/70">
                 <button type="button" onclick="toggleChannelAccountForm(false)" class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-600">Cancel</button>
                 <button type="button" onclick="saveChannelAccount()" class="h-8 px-4 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium">Connect Account</button>
@@ -1621,6 +1648,32 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
             <label class="block text-[11px] font-medium text-slate-600">Active Channels (from Channels app)</label>
             <div id="comp-channels-picker" class="flex flex-wrap gap-1.5"></div>
           </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 pt-1 border-t border-slate-200/60">
+            <div class="lg:col-span-2">
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Social Link (LinkedIn, Instagram, etc.)</label>
+              <div class="flex items-center gap-1.5">
+                <input id="comp-social-url" type="text" placeholder="https://linkedin.com/company/..." onkeydown="if(event.key==='Enter'){event.preventDefault();fetchCompetitorSocialInfo();}" class="flex-1 min-w-0 h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+                <button type="button" id="comp-fetch-btn" onclick="fetchCompetitorSocialInfo()" class="h-9 px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-[11px] font-medium text-slate-700 shrink-0">Fetch Info</button>
+              </div>
+            </div>
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Logo URL</label>
+              <input id="comp-logo" type="text" placeholder="Auto-fetched..." class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-[11px] font-medium text-slate-600 mb-1">Followers</label>
+                <input id="comp-followers" type="text" placeholder="e.g. 5.2K" class="w-full h-9 px-2.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+              </div>
+              <div>
+                <label class="block text-[11px] font-medium text-slate-600 mb-1">Posts</label>
+                <input id="comp-posts" type="text" placeholder="e.g. 84" class="w-full h-9 px-2.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+              </div>
+            </div>
+          </div>
+
+          <div id="comp-social-status" class="hidden text-[11px] text-slate-500"></div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div>

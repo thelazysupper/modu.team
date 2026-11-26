@@ -1415,6 +1415,75 @@ function closeChannelDetail() {
   syncRouteUrl('/channels');
 }
 
+function inferSocialMetadataFromUrl(rawUrl) {
+  let normalized = (rawUrl || '').trim();
+  if (!normalized) return null;
+  if (!/^https?:\/\//i.test(normalized)) {
+    normalized = 'https://' + normalized;
+  }
+  try {
+    const parsed = new URL(normalized);
+    const host = parsed.hostname.replace(/^www\./i, '').toLowerCase();
+    const parts = parsed.pathname.split('/').filter(Boolean);
+    let platform = 'Other';
+    if (host.includes('instagram.com')) platform = 'Instagram';
+    else if (host.includes('linkedin.com')) platform = 'LinkedIn';
+    else if (host.includes('tiktok.com')) platform = 'TikTok';
+    else if (host.includes('youtube.com') || host.includes('youtu.be')) platform = 'YouTube';
+    else if (host === 'x.com' || host.includes('twitter.com')) platform = 'X / Twitter';
+    else if (host.includes('facebook.com') || host.includes('fb.com')) platform = 'Meta / Facebook';
+    else if (host.includes('threads.net')) platform = 'Threads';
+    else if (host.includes('pinterest.')) platform = 'Pinterest';
+    else if (host.includes('github.com')) platform = 'GitHub';
+
+    let handle = '';
+    if (parts.length > 0) {
+      if (['company', 'in', 'channel', 'c', 'user', 'pages'].includes(parts[0].toLowerCase()) && parts[1]) {
+        handle = parts[1];
+      } else {
+        handle = parts[0];
+      }
+    }
+    const cleanHandle = handle.replace(/^@/, '');
+    const name = cleanHandle ? (handle.startsWith('@') ? handle : `@${cleanHandle}`) : host;
+    const logo = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=128`;
+    return { ok: true, url: parsed.toString(), platform, name, logo, followers: '', posts: '', bio: '', fromApi: false };
+  } catch (e) {
+    return null;
+  }
+}
+
+async function fetchSocialProfileInfo(rawUrl) {
+  const fallback = inferSocialMetadataFromUrl(rawUrl);
+  if (!fallback) return null;
+
+  const canFetchApi = typeof window !== 'undefined' && (window.location.protocol === 'http:' || window.location.protocol === 'https:');
+  if (canFetchApi) {
+    try {
+      const resp = await fetch(`/api/social-preview?url=${encodeURIComponent(fallback.url)}`);
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data && (data.ok || data.name || data.logo || data.followers || data.posts)) {
+          return {
+            ok: true,
+            url: data.url || fallback.url,
+            platform: data.platform && data.platform !== 'Other' ? data.platform : fallback.platform,
+            name: data.name || fallback.name,
+            logo: data.logo || fallback.logo,
+            followers: data.followers || '',
+            posts: data.posts || '',
+            bio: data.bio || '',
+            fromApi: true
+          };
+        }
+      }
+    } catch (e) {
+      // Fall back to URL metadata + favicon
+    }
+  }
+  return fallback;
+}
+
 function toggleChannelAccountForm(show) {
   const panel = document.getElementById('ch-account-form-panel');
   if (!panel) return;
@@ -1435,10 +1504,98 @@ function toggleChannelAccountForm(show) {
   }
   const nameInput = document.getElementById('cha-name');
   const urlInput = document.getElementById('cha-url');
+  const logoInput = document.getElementById('cha-logo');
+  const followersInput = document.getElementById('cha-followers');
+  const postsInput = document.getElementById('cha-posts');
+  const bioInput = document.getElementById('cha-bio');
+  const statusEl = document.getElementById('cha-fetch-status');
   if (nameInput) nameInput.value = '';
   if (urlInput) urlInput.value = '';
+  if (logoInput) logoInput.value = '';
+  if (followersInput) followersInput.value = '';
+  if (postsInput) postsInput.value = '';
+  if (bioInput) bioInput.value = '';
+  if (statusEl) {
+    statusEl.textContent = '';
+    statusEl.classList.add('hidden');
+  }
   panel.classList.remove('hidden');
-  nameInput?.focus();
+  (urlInput || nameInput)?.focus();
+}
+
+async function fetchChannelAccountInfo() {
+  const urlInput = document.getElementById('cha-url');
+  const btn = document.getElementById('cha-fetch-btn');
+  const statusEl = document.getElementById('cha-fetch-status');
+  const rawUrl = (urlInput?.value || '').trim();
+  if (!rawUrl) {
+    urlInput?.focus();
+    return;
+  }
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Fetching...';
+  }
+  if (statusEl) {
+    statusEl.textContent = 'Fetching profile logo, followers, and post stats...';
+    statusEl.classList.remove('hidden');
+  }
+
+  const info = await fetchSocialProfileInfo(rawUrl);
+
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = 'Fetch Info';
+  }
+  if (!info) {
+    if (statusEl) {
+      statusEl.textContent = 'Could not parse URL. Please enter a valid https:// social link.';
+      statusEl.classList.remove('hidden');
+    }
+    return;
+  }
+
+  if (urlInput) urlInput.value = info.url;
+  const platSel = document.getElementById('cha-platform');
+  if (platSel && info.platform) {
+    const match = Array.from(platSel.options).find(o => o.value.toLowerCase() === info.platform.toLowerCase() || (info.platform === 'Meta / Facebook' && o.value === 'Meta / Facebook'));
+    if (match) platSel.value = match.value;
+  }
+  const nameInput = document.getElementById('cha-name');
+  if (nameInput && !nameInput.value.trim() && info.name) nameInput.value = info.name;
+  const logoInput = document.getElementById('cha-logo');
+  if (logoInput && info.logo) logoInput.value = info.logo;
+  const followersInput = document.getElementById('cha-followers');
+  if (followersInput && info.followers) followersInput.value = info.followers;
+  const postsInput = document.getElementById('cha-posts');
+  if (postsInput && info.posts) postsInput.value = info.posts;
+  const bioInput = document.getElementById('cha-bio');
+  if (bioInput && info.bio) bioInput.value = info.bio;
+
+  if (statusEl) {
+    const parts = [info.platform, info.followers ? `${info.followers} followers` : '', info.posts ? `${info.posts} posts` : ''].filter(Boolean);
+    statusEl.textContent = info.fromApi
+      ? `Fetched: ${parts.join(' · ')}`
+      : `Detected ${info.platform} logo from URL (enter followers/posts manually if needed)`;
+    statusEl.classList.remove('hidden');
+  }
+}
+
+async function refreshChannelAccount(accountId) {
+  if (!activeChannelDetailName) return;
+  const list = channelAccountsByName[activeChannelDetailName] || [];
+  const acc = list.find(a => a.id === accountId);
+  if (!acc || !acc.url) return;
+  const info = await fetchSocialProfileInfo(acc.url);
+  if (!info) return;
+  if (info.logo) acc.logo = info.logo;
+  if (info.followers) acc.followers = info.followers;
+  if (info.posts) acc.posts = info.posts;
+  if (info.bio) acc.bio = info.bio;
+  if (info.platform && acc.platform === 'Other') acc.platform = info.platform;
+  acc.fetchedAt = new Date().toISOString();
+  renderChannelDetailView();
+  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
 }
 
 function saveChannelAccount() {
@@ -1446,6 +1603,10 @@ function saveChannelAccount() {
   const platform = document.getElementById('cha-platform')?.value || 'Other';
   const name = (document.getElementById('cha-name')?.value || '').trim();
   const url = (document.getElementById('cha-url')?.value || '').trim();
+  const logo = (document.getElementById('cha-logo')?.value || '').trim();
+  const followers = (document.getElementById('cha-followers')?.value || '').trim();
+  const posts = (document.getElementById('cha-posts')?.value || '').trim();
+  const bio = (document.getElementById('cha-bio')?.value || '').trim();
   if (!name) {
     document.getElementById('cha-name')?.focus();
     return;
@@ -1458,6 +1619,10 @@ function saveChannelAccount() {
     platform,
     name,
     url,
+    logo,
+    followers,
+    posts,
+    bio,
     connectedAt: new Date().toISOString()
   });
   toggleChannelAccountForm(false);
@@ -1601,24 +1766,45 @@ function renderChannelDetailView() {
     return;
   }
 
-  listEl.innerHTML = accounts.map(acc => `
-    <div class="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl border border-slate-200/80 bg-[#fbfcfd]">
-      <div class="flex items-center gap-3 min-w-0">
-        <span class="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-white border border-slate-200 text-slate-800 shrink-0">${acc.platform}</span>
-        <div class="min-w-0">
-          <div class="text-xs font-semibold text-slate-900 truncate">${acc.name}</div>
-          ${acc.url ? `<div class="text-[11px] text-slate-500 truncate">${acc.url}</div>` : ''}
+  listEl.innerHTML = accounts.map(acc => {
+    const initials = (acc.name || acc.platform || '?').replace(/^@/, '').slice(0, 2).toUpperCase();
+    const logoUrl = acc.logo || (acc.url ? getLogoUrl(acc.url) : '');
+    const logoHtml = logoUrl
+      ? `<div class="w-9 h-9 rounded-lg border border-slate-200 bg-white flex items-center justify-center overflow-hidden shrink-0">
+           <img src="${logoUrl}" alt="${acc.name}" class="w-6 h-6 object-cover rounded" onerror="this.parentElement.innerHTML='<span class=\\'text-[11px] font-bold text-slate-600\\'>${initials}</span>'" />
+         </div>`
+      : `<div class="w-9 h-9 rounded-lg border border-slate-200 bg-slate-100 text-slate-700 flex items-center justify-center text-[11px] font-bold shrink-0">${initials}</div>`;
+    const statsHtml = (acc.followers || acc.posts)
+      ? `<div class="flex flex-wrap items-center gap-1.5 mt-1">
+           ${acc.followers ? `<span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-100 text-slate-700">Followers: ${acc.followers}</span>` : ''}
+           ${acc.posts ? `<span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-100 text-slate-700">Posts: ${acc.posts}</span>` : ''}
+         </div>`
+      : '';
+    return `
+      <div class="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl border border-slate-200/80 bg-[#fbfcfd]">
+        <div class="flex items-start gap-3 min-w-0 flex-1">
+          ${logoHtml}
+          <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="text-xs font-semibold text-slate-900 truncate">${acc.name}</span>
+              <span class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white border border-slate-200 text-slate-700 shrink-0">${acc.platform}</span>
+            </div>
+            ${acc.url ? `<a href="${acc.url}" target="_blank" rel="noopener noreferrer" class="block text-[11px] text-slate-500 hover:text-slate-900 underline underline-offset-2 truncate mt-0.5">${acc.url} ↗</a>` : ''}
+            ${statsHtml}
+            ${acc.bio ? `<p class="text-[11px] text-slate-500 mt-1 line-clamp-2">${acc.bio}</p>` : ''}
+          </div>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          ${acc.url ? `<button type="button" onclick="refreshChannelAccount(${acc.id})" class="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-[11px] font-medium text-slate-700 transition-colors">Refresh</button>` : ''}
+          <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#d1fae5] text-[#047857]">
+            <span class="w-1.5 h-1.5 rounded-full bg-[#10b981]"></span>
+            Connected
+          </span>
+          ${renderActionMenuHtml('', `deleteChannelAccount(${acc.id})`)}
         </div>
       </div>
-      <div class="flex items-center gap-2.5 shrink-0">
-        <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#d1fae5] text-[#047857]">
-          <span class="w-1.5 h-1.5 rounded-full bg-[#10b981]"></span>
-          Connected
-        </span>
-        ${renderActionMenuHtml('', `deleteChannelAccount(${acc.id})`)}
-      </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 }
 
 function renderChannelsView() {
@@ -4270,6 +4456,10 @@ function toggleCompetitorForm(show, editId = null) {
     document.getElementById('comp-edit-id').value = String(item.id);
     document.getElementById('comp-name').value = item.name;
     document.getElementById('comp-website').value = item.website || '';
+    document.getElementById('comp-social-url').value = item.socialUrl || '';
+    document.getElementById('comp-logo').value = item.logo || '';
+    document.getElementById('comp-followers').value = item.followers || '';
+    document.getElementById('comp-posts').value = item.posts || '';
     document.getElementById('comp-positioning').value = item.positioning || '';
     document.getElementById('comp-pricing').value = item.pricing || '';
     document.getElementById('comp-score').value = String(item.score || 7);
@@ -4281,6 +4471,10 @@ function toggleCompetitorForm(show, editId = null) {
     document.getElementById('comp-edit-id').value = '';
     document.getElementById('comp-name').value = '';
     document.getElementById('comp-website').value = '';
+    document.getElementById('comp-social-url').value = '';
+    document.getElementById('comp-logo').value = '';
+    document.getElementById('comp-followers').value = '';
+    document.getElementById('comp-posts').value = '';
     document.getElementById('comp-positioning').value = '';
     document.getElementById('comp-pricing').value = '';
     document.getElementById('comp-score').value = '7';
@@ -4288,14 +4482,86 @@ function toggleCompetitorForm(show, editId = null) {
     document.getElementById('comp-weaknesses').value = '';
     selectedCompChannelsTemp = [];
   }
+  const socialStatusEl = document.getElementById('comp-social-status');
+  if (socialStatusEl) {
+    socialStatusEl.textContent = '';
+    socialStatusEl.classList.add('hidden');
+  }
   renderCompetitorChannelsPicker();
   document.getElementById('comp-name').focus();
+}
+
+async function fetchCompetitorSocialInfo() {
+  const urlInput = document.getElementById('comp-social-url');
+  const btn = document.getElementById('comp-fetch-btn');
+  const statusEl = document.getElementById('comp-social-status');
+  const rawUrl = (urlInput?.value || '').trim();
+  if (!rawUrl) {
+    urlInput?.focus();
+    return;
+  }
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Fetching...';
+  }
+  if (statusEl) {
+    statusEl.textContent = 'Fetching social logo, followers, and post stats...';
+    statusEl.classList.remove('hidden');
+  }
+
+  const info = await fetchSocialProfileInfo(rawUrl);
+
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = 'Fetch Info';
+  }
+  if (!info) {
+    if (statusEl) {
+      statusEl.textContent = 'Could not parse URL. Please enter a valid https:// social link.';
+      statusEl.classList.remove('hidden');
+    }
+    return;
+  }
+
+  if (urlInput) urlInput.value = info.url;
+  const nameInput = document.getElementById('comp-name');
+  if (nameInput && !nameInput.value.trim() && info.name) nameInput.value = info.name.replace(/^@/, '');
+  const logoInput = document.getElementById('comp-logo');
+  if (logoInput && info.logo) logoInput.value = info.logo;
+  const followersInput = document.getElementById('comp-followers');
+  if (followersInput && info.followers) followersInput.value = info.followers;
+  const postsInput = document.getElementById('comp-posts');
+  if (postsInput && info.posts) postsInput.value = info.posts;
+
+  if (info.platform && info.platform !== 'Other') {
+    const matchedChObj = channelsList.find(ch => {
+      const chName = typeof ch === 'string' ? ch : (ch?.name || '');
+      return chName.toLowerCase().includes(info.platform.toLowerCase().split(' ')[0]);
+    });
+    const matchedChannel = typeof matchedChObj === 'string' ? matchedChObj : (matchedChObj?.name || '');
+    if (matchedChannel && !selectedCompChannelsTemp.includes(matchedChannel)) {
+      selectedCompChannelsTemp.push(matchedChannel);
+      renderCompetitorChannelsPicker();
+    }
+  }
+
+  if (statusEl) {
+    const parts = [info.platform, info.followers ? `${info.followers} followers` : '', info.posts ? `${info.posts} posts` : ''].filter(Boolean);
+    statusEl.textContent = info.fromApi
+      ? `Fetched: ${parts.join(' · ')}`
+      : `Detected ${info.platform} logo from URL (enter followers/posts manually if needed)`;
+    statusEl.classList.remove('hidden');
+  }
 }
 
 function saveCompetitor() {
   const editId = document.getElementById('comp-edit-id').value;
   const name = (document.getElementById('comp-name').value || '').trim();
   const website = normalizeWebsiteUrl(document.getElementById('comp-website').value);
+  const socialUrl = normalizeWebsiteUrl(document.getElementById('comp-social-url')?.value || '');
+  const logo = (document.getElementById('comp-logo')?.value || '').trim();
+  const followers = (document.getElementById('comp-followers')?.value || '').trim();
+  const posts = (document.getElementById('comp-posts')?.value || '').trim();
   const positioning = (document.getElementById('comp-positioning').value || '').trim();
   const pricing = (document.getElementById('comp-pricing').value || '').trim();
   const score = Math.min(10, Math.max(1, parseInt(document.getElementById('comp-score').value, 10) || 5));
@@ -4311,6 +4577,10 @@ function saveCompetitor() {
     id: editId ? Number(editId) : Date.now(),
     name,
     website,
+    socialUrl,
+    logo,
+    followers,
+    posts,
     positioning,
     pricing,
     score,
@@ -4515,12 +4785,13 @@ function renderCompetitorsView() {
   gridEl.classList.remove('hidden');
 
   gridEl.innerHTML = rows.map(c => {
-    const logoUrl = getLogoUrl(c.website);
+    const logoUrl = c.logo || getLogoUrl(c.website || c.socialUrl);
     const domain = getDomainFromUrl(c.website);
+    const socialDomain = getDomainFromUrl(c.socialUrl);
     const initials = c.name.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase() || '?';
     const logoHtml = logoUrl
       ? `<div class="w-9 h-9 rounded-lg border border-slate-200 bg-white flex items-center justify-center overflow-hidden shrink-0">
-           <img src="${logoUrl}" alt="${c.name}" class="w-5 h-5 object-contain" onerror="this.parentElement.innerHTML='<span class=\\'text-[11px] font-bold text-slate-600\\'>${initials}</span>'" />
+           <img src="${logoUrl}" alt="${c.name}" class="w-6 h-6 object-contain" onerror="this.parentElement.innerHTML='<span class=\\'text-[11px] font-bold text-slate-600\\'>${initials}</span>'" />
          </div>`
       : `<div class="w-9 h-9 rounded-lg border border-slate-200 bg-slate-100 text-slate-700 flex items-center justify-center text-xs font-bold shrink-0">${initials}</div>`;
 
@@ -4533,6 +4804,13 @@ function renderCompetitorsView() {
         `).join('')
       : `<span class="text-[11px] text-slate-400">No channels selected</span>`;
 
+    const socialStatsHtml = (c.followers || c.posts)
+      ? `<div class="flex flex-wrap items-center gap-1.5">
+           ${c.followers ? `<span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200/70">Followers: ${c.followers}</span>` : ''}
+           ${c.posts ? `<span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200/70">Posts: ${c.posts}</span>` : ''}
+         </div>`
+      : '';
+
     return `
       <div class="group rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-3.5">
         <div class="flex items-start justify-between gap-3">
@@ -4543,15 +4821,17 @@ function renderCompetitorsView() {
                 <h4 class="text-sm font-bold text-slate-900 truncate">${c.name}</h4>
                 <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold tabular-nums bg-[#ede9fe] text-[#7c3aed]">${c.score}/10</span>
               </div>
-              <div class="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5">
+              <div class="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 mt-0.5">
                 ${c.positioning ? `<span class="truncate">${c.positioning}</span>` : ''}
                 ${c.website ? `<a href="${c.website}" target="_blank" rel="noopener noreferrer" class="underline underline-offset-2 hover:text-slate-900 shrink-0">${domain || 'Website'} ↗</a>` : ''}
+                ${c.socialUrl ? `<a href="${c.socialUrl}" target="_blank" rel="noopener noreferrer" class="underline underline-offset-2 hover:text-slate-900 shrink-0">${socialDomain || 'Social'} ↗</a>` : ''}
               </div>
             </div>
           </div>
           ${renderActionMenuHtml(`toggleCompetitorForm(true, ${c.id})`, `deleteCompetitor(${c.id})`, 'shrink-0')}
         </div>
 
+        ${socialStatsHtml}
         <div class="flex flex-wrap items-center gap-1.5">${chPills}</div>
 
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2 border-t border-slate-200/70 text-[11px]">
