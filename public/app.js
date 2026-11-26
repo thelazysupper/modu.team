@@ -2344,14 +2344,57 @@ function toggleMonthBudgetLock(mIdx) {
   renderBudgetView();
 }
 
+function syncBudgetDependents() {
+  if (!document.getElementById('view-channels')?.classList.contains('hidden')) renderChannelsView();
+  if (!document.getElementById('ch-detail-view')?.classList.contains('hidden') && activeChannelDetailName) renderChannelDetailView();
+  if (!document.getElementById('view-marketing-reports')?.classList.contains('hidden')) renderMarketingReportsView();
+  if (typeof renderCards === 'function') renderCards();
+}
+
+function syncAnnualBudgetWithChannels(year = budgetYear) {
+  const yearObj = budgetData[year] || {};
+  const channels = Object.keys(yearObj);
+  const monthlyPlannedSum = Array(12).fill(0);
+  let totalPlanned = 0;
+
+  channels.forEach(ch => {
+    const row = yearObj[ch];
+    for (let m = 0; m < 12; m++) {
+      const val = row.planned[m] || 0;
+      monthlyPlannedSum[m] += val;
+      totalPlanned += val;
+    }
+  });
+
+  const caps = ensureMonthlyCaps(year);
+  const locks = ensureMonthLocks(year);
+  for (let m = 0; m < 12; m++) {
+    if (!locks[m] && (monthlyPlannedSum[m] > (caps[m] || 0) || !caps[m])) {
+      caps[m] = Math.round(monthlyPlannedSum[m] * 100) / 100;
+    }
+  }
+
+  if (!isAnnualBudgetLocked(year)) {
+    const currentAnnual = budgetTotalByYear[year] || 0;
+    const capSum = caps.reduce((a, b) => a + b, 0);
+    const targetTotal = Math.max(totalPlanned, capSum);
+    if (targetTotal > currentAnnual || currentAnnual === 0) {
+      budgetTotalByYear[year] = Math.round(targetTotal * 100) / 100;
+    }
+  }
+}
+
 function handleAnnualBudgetChange() {
   if (isAnnualBudgetLocked(budgetYear)) return;
   const val = parseFloat(document.getElementById('budget-annual-total').value);
   budgetTotalByYear[budgetYear] = isNaN(val) || val < 0 ? 0 : val;
+  distributeAnnualEvenly({ skipRender: true });
   renderBudgetView();
+  syncBudgetDependents();
+  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
 }
 
-function distributeAnnualEvenly() {
+function distributeAnnualEvenly(opts = {}) {
   const annual = budgetTotalByYear[budgetYear] || 0;
   const caps = ensureMonthlyCaps(budgetYear);
   const locks = ensureMonthLocks(budgetYear);
@@ -2368,7 +2411,11 @@ function distributeAnnualEvenly() {
       caps[m] = perMonth;
     });
   }
-  renderBudgetView();
+  if (!opts.skipRender) {
+    renderBudgetView();
+    syncBudgetDependents();
+    if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+  }
 }
 
 function updateMonthlyCap(mIdx, val) {
@@ -2378,13 +2425,15 @@ function updateMonthlyCap(mIdx, val) {
   const caps = ensureMonthlyCaps(budgetYear);
   caps[mIdx] = isNaN(num) || num < 0 ? 0 : num;
   if (!isAnnualBudgetLocked(budgetYear)) {
-    budgetTotalByYear[budgetYear] = caps.reduce((a, b) => a + b, 0);
+    budgetTotalByYear[budgetYear] = Math.round(caps.reduce((a, b) => a + b, 0) * 100) / 100;
     const annualInput = document.getElementById('budget-annual-total');
     if (annualInput) {
       annualInput.value = budgetTotalByYear[budgetYear] > 0 ? Math.round(budgetTotalByYear[budgetYear]) : '';
     }
   }
   renderBudgetView();
+  syncBudgetDependents();
+  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
 }
 
 function handleBudgetYearChange() {
@@ -2565,14 +2614,18 @@ function saveBudgetEntry() {
   }
 
   toggleBudgetForm(false);
+  syncAnnualBudgetWithChannels(budgetYear);
   renderBudgetView();
+  syncBudgetDependents();
 }
 
 function updateBudgetCell(channel, monthIdx, val) {
   const num = parseFloat(val);
   if (!budgetData[budgetYear] || !budgetData[budgetYear][channel]) return;
   budgetData[budgetYear][channel].planned[monthIdx] = isNaN(num) || num < 0 ? 0 : num;
+  syncAnnualBudgetWithChannels(budgetYear);
   renderBudgetView();
+  syncBudgetDependents();
 }
 
 function updateBudgetCellPct(channel, monthIdx, pctVal) {
@@ -2589,7 +2642,9 @@ function updateBudgetCellPct(channel, monthIdx, pctVal) {
   const monthBase = caps[monthIdx] > 0 ? caps[monthIdx] : (annualBudget > 0 ? annualBudget / 12 : monthAllocated);
   if (monthBase <= 0) return;
   budgetData[budgetYear][channel].planned[monthIdx] = Math.round(((pct / 100) * monthBase) * 100) / 100;
+  syncAnnualBudgetWithChannels(budgetYear);
   renderBudgetView();
+  syncBudgetDependents();
 }
 
 function updateBudgetActualCell(channel, monthIdx, val) {
@@ -2597,6 +2652,7 @@ function updateBudgetActualCell(channel, monthIdx, val) {
   if (!budgetData[budgetYear] || !budgetData[budgetYear][channel]) return;
   budgetData[budgetYear][channel].actual[monthIdx] = isNaN(num) || num < 0 ? 0 : num;
   renderBudgetView();
+  syncBudgetDependents();
 }
 
 function deleteBudgetChannel(channel) {
@@ -2604,7 +2660,9 @@ function deleteBudgetChannel(channel) {
     if (budgetData[budgetYear]) {
       delete budgetData[budgetYear][channel];
     }
+    syncAnnualBudgetWithChannels(budgetYear);
     renderBudgetView();
+    syncBudgetDependents();
   });
 }
 
@@ -2614,6 +2672,10 @@ function renderBudgetView() {
   const caps = ensureMonthlyCaps(budgetYear);
   const monthlyCapSum = caps.reduce((a, b) => a + b, 0);
   const annualBudget = budgetTotalByYear[budgetYear] || monthlyCapSum || 0;
+  const annualInput = document.getElementById('budget-annual-total');
+  if (annualInput && document.activeElement !== annualInput) {
+    annualInput.value = annualBudget > 0 ? Math.round(annualBudget) : '';
+  }
 
   let totalPlanned = 0;
   let totalActual = 0;
@@ -6946,7 +7008,9 @@ function acceptCsvImport() {
         budgetData[budgetYear][op.channel].actual[op.monthIdx] = Math.round(op.actual * 100) / 100;
       }
     });
+    syncAnnualBudgetWithChannels(budgetYear);
     renderBudgetView();
+    syncBudgetDependents();
   } else if (plan.target === 'contacts') {
     let grp = contactGroups.find(g => g.id === selectedGroupId) || contactGroups[0];
     if (!grp) {
