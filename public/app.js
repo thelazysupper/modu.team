@@ -712,6 +712,7 @@ function openApp(appId) {
   hideAllViews();
 
   if (appId === 'channels') {
+    activeChannelDetailName = null;
     document.getElementById('view-channels').classList.remove('hidden');
     renderChannelsView();
   } else if (appId === 'budget') {
@@ -1165,9 +1166,165 @@ function drawChannelDonut(canvasId, segments, centerTop, centerSub, unitFormatte
   }
 }
 
+let activeChannelDetailName = null;
+let channelAccountsByName = {};
+
+function openChannelDetail(channelName) {
+  activeChannelDetailName = channelName;
+  renderChannelsView();
+}
+
+function closeChannelDetail() {
+  activeChannelDetailName = null;
+  toggleChannelAccountForm(false);
+  renderChannelsView();
+}
+
+function toggleChannelAccountForm(show) {
+  const panel = document.getElementById('ch-account-form-panel');
+  if (!panel) return;
+  if (!show) {
+    panel.classList.add('hidden');
+    return;
+  }
+  const chName = (activeChannelDetailName || '').toLowerCase();
+  const platSel = document.getElementById('cha-platform');
+  if (platSel) {
+    if (chName.includes('linkedin')) platSel.value = 'LinkedIn';
+    else if (chName.includes('meta') || chName.includes('facebook')) platSel.value = 'Meta / Facebook';
+    else if (chName.includes('instagram')) platSel.value = 'Instagram';
+    else if (chName.includes('google')) platSel.value = 'Google Ads';
+    else if (chName.includes('tiktok')) platSel.value = 'TikTok';
+    else if (chName.includes('youtube')) platSel.value = 'YouTube';
+    else platSel.value = 'Other';
+  }
+  const nameInput = document.getElementById('cha-name');
+  const urlInput = document.getElementById('cha-url');
+  if (nameInput) nameInput.value = '';
+  if (urlInput) urlInput.value = '';
+  panel.classList.remove('hidden');
+  nameInput?.focus();
+}
+
+function saveChannelAccount() {
+  if (!activeChannelDetailName) return;
+  const platform = document.getElementById('cha-platform')?.value || 'Other';
+  const name = (document.getElementById('cha-name')?.value || '').trim();
+  const url = (document.getElementById('cha-url')?.value || '').trim();
+  if (!name) {
+    document.getElementById('cha-name')?.focus();
+    return;
+  }
+  if (!Array.isArray(channelAccountsByName[activeChannelDetailName])) {
+    channelAccountsByName[activeChannelDetailName] = [];
+  }
+  channelAccountsByName[activeChannelDetailName].push({
+    id: Date.now() + Math.floor(Math.random() * 1000),
+    platform,
+    name,
+    url,
+    connectedAt: new Date().toISOString()
+  });
+  toggleChannelAccountForm(false);
+  renderChannelDetailView();
+  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+}
+
+function deleteChannelAccount(accountId) {
+  if (!activeChannelDetailName) return;
+  const list = channelAccountsByName[activeChannelDetailName] || [];
+  const acc = list.find(a => a.id === accountId);
+  confirmDeleteAction(`Disconnect "${acc?.name || 'this account'}" from ${activeChannelDetailName}?`, () => {
+    channelAccountsByName[activeChannelDetailName] = list.filter(a => a.id !== accountId);
+    renderChannelDetailView();
+    if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+  });
+}
+
+function renderChannelDetailView() {
+  const name = activeChannelDetailName;
+  if (!name) return;
+  const ch = channelsList.find(c => c.name.toLowerCase() === name.toLowerCase()) || { name, type: 'Other', color: '#0f172a' };
+
+  document.getElementById('ch-crumb-sep')?.classList.remove('hidden');
+  const crumbName = document.getElementById('ch-crumb-name');
+  if (crumbName) {
+    crumbName.textContent = ch.name;
+    crumbName.classList.remove('hidden');
+  }
+  document.getElementById('ch-back-btn')?.classList.remove('hidden');
+  document.getElementById('ch-add-btn')?.classList.add('hidden');
+
+  const dotEl = document.getElementById('ch-detail-dot');
+  if (dotEl) dotEl.style.background = ch.color || '#0f172a';
+  const nameEl = document.getElementById('ch-detail-name');
+  if (nameEl) nameEl.textContent = ch.name;
+  const typeEl = document.getElementById('ch-detail-type');
+  if (typeEl) typeEl.textContent = ch.type || 'Other';
+
+  const yearObj = budgetData[budgetYear] || {};
+  const bRow = yearObj[ch.name];
+  const budgetNok = bRow ? bRow.planned.reduce((a, b) => a + b, 0) : 0;
+  const actualNok = bRow ? bRow.actual.reduce((a, b) => a + b, 0) : 0;
+  const leadCount = leadEntries.filter(l => String(l.channel || '').toLowerCase() === ch.name.toLowerCase()).length;
+
+  document.getElementById('ch-detail-budget').textContent = `${Math.round(budgetNok).toLocaleString()} NOK`;
+  document.getElementById('ch-detail-year-lbl').textContent = `Year ${budgetYear}`;
+  document.getElementById('ch-detail-actual').textContent = `${Math.round(actualNok).toLocaleString()} NOK`;
+  document.getElementById('ch-detail-leads').textContent = String(leadCount);
+
+  const listEl = document.getElementById('ch-accounts-list');
+  if (!listEl) return;
+  const accounts = channelAccountsByName[ch.name] || [];
+
+  if (accounts.length === 0) {
+    listEl.innerHTML = `
+      <div class="rounded-xl border border-dashed border-slate-200 bg-[#fbfcfd] p-8 text-center text-xs text-slate-500">
+        No social accounts connected to <strong>${ch.name}</strong> yet. Click <strong>+ Connect Account</strong> above to add one.
+      </div>
+    `;
+    return;
+  }
+
+  listEl.innerHTML = accounts.map(acc => `
+    <div class="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl border border-slate-200/80 bg-[#fbfcfd]">
+      <div class="flex items-center gap-3 min-w-0">
+        <span class="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-white border border-slate-200 text-slate-800 shrink-0">${acc.platform}</span>
+        <div class="min-w-0">
+          <div class="text-xs font-semibold text-slate-900 truncate">${acc.name}</div>
+          ${acc.url ? `<div class="text-[11px] text-slate-500 truncate">${acc.url}</div>` : ''}
+        </div>
+      </div>
+      <div class="flex items-center gap-2.5 shrink-0">
+        <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#d1fae5] text-[#047857]">
+          <span class="w-1.5 h-1.5 rounded-full bg-[#10b981]"></span>
+          Connected
+        </span>
+        ${renderActionMenuHtml('', `deleteChannelAccount(${acc.id})`)}
+      </div>
+    </div>
+  `).join('');
+}
+
 function renderChannelsView() {
   const yearSel = document.getElementById('channels-year');
   if (yearSel) yearSel.value = budgetYear;
+
+  const overviewEl = document.getElementById('channels-overview');
+  const detailEl = document.getElementById('channels-detail');
+  if (activeChannelDetailName) {
+    overviewEl?.classList.add('hidden');
+    detailEl?.classList.remove('hidden');
+    renderChannelDetailView();
+    return;
+  }
+
+  detailEl?.classList.add('hidden');
+  overviewEl?.classList.remove('hidden');
+  document.getElementById('ch-crumb-sep')?.classList.add('hidden');
+  document.getElementById('ch-crumb-name')?.classList.add('hidden');
+  document.getElementById('ch-back-btn')?.classList.add('hidden');
+  document.getElementById('ch-add-btn')?.classList.remove('hidden');
 
   const yearObj = budgetData[budgetYear] || {};
   Object.keys(yearObj).forEach(chName => ensureChannelExists(chName));
@@ -1212,7 +1369,7 @@ function renderChannelsView() {
           const pct = totalChannelBudget > 0 ? (r.budgetNok / totalChannelBudget) * 100 : 0;
           const escName = r.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
           return `
-            <div onclick="openChannelReportSubpage('${escName}')" class="cursor-pointer flex items-center justify-between gap-2 text-xs hover:bg-slate-50 rounded px-1.5 py-0.5 -mx-1.5 transition-colors">
+            <div onclick="openChannelDetail('${escName}')" class="cursor-pointer flex items-center justify-between gap-2 text-xs hover:bg-slate-50 rounded px-1.5 py-0.5 -mx-1.5 transition-colors">
               <div class="flex items-center gap-2 min-w-0">
                 <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${r.color}"></span>
                 <span class="font-medium text-slate-800 truncate hover:underline underline-offset-2">${r.name}</span>
@@ -1248,7 +1405,7 @@ function renderChannelsView() {
           const pct = totalLeads > 0 ? (r.leadCount / totalLeads) * 100 : 0;
           const escName = r.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
           return `
-            <div onclick="openChannelReportSubpage('${escName}')" class="cursor-pointer flex items-center justify-between gap-2 text-xs hover:bg-slate-50 rounded px-1.5 py-0.5 -mx-1.5 transition-colors">
+            <div onclick="openChannelDetail('${escName}')" class="cursor-pointer flex items-center justify-between gap-2 text-xs hover:bg-slate-50 rounded px-1.5 py-0.5 -mx-1.5 transition-colors">
               <div class="flex items-center gap-2 min-w-0">
                 <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${r.color}"></span>
                 <span class="font-medium text-slate-800 truncate hover:underline underline-offset-2">${r.name}</span>
@@ -1281,7 +1438,7 @@ function renderChannelsView() {
     const leadShare = totalLeads > 0 ? (r.leadCount / totalLeads) * 100 : 0;
     const escName = r.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     return `
-      <tr onclick="openChannelReportSubpage('${escName}')" class="group cursor-pointer hover:bg-slate-50/80 transition-colors">
+      <tr onclick="openChannelDetail('${escName}')" class="group cursor-pointer hover:bg-slate-50/80 transition-colors">
         <td class="py-3 px-4">
           <div class="flex items-center gap-2.5">
             <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${r.color}"></span>
@@ -4725,6 +4882,7 @@ function getWorkspaceSnapshot() {
   });
   return {
     channelsList,
+    channelAccountsByName,
     budgetData,
     budgetTotalByYear,
     budgetMonthlyCapByYear,
@@ -4748,6 +4906,7 @@ function applyWorkspaceSnapshot(snap) {
   isHydratingState = true;
   try {
     if (Array.isArray(snap.channelsList)) channelsList = snap.channelsList;
+    if (snap.channelAccountsByName && typeof snap.channelAccountsByName === 'object') channelAccountsByName = snap.channelAccountsByName;
     if (snap.budgetData && typeof snap.budgetData === 'object') budgetData = snap.budgetData;
     if (snap.budgetTotalByYear && typeof snap.budgetTotalByYear === 'object') budgetTotalByYear = snap.budgetTotalByYear;
     if (snap.budgetMonthlyCapByYear && typeof snap.budgetMonthlyCapByYear === 'object') budgetMonthlyCapByYear = snap.budgetMonthlyCapByYear;
