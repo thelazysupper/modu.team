@@ -20,115 +20,131 @@ const illustrations = {
     <svg class="w-56 h-32" viewBox="0 0 240 120" fill="none">
       <line x1="24" y1="30" x2="216" y2="30" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="3 3"/>
       <line x1="24" y1="62" x2="216" y2="62" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="3 3"/>
-      <circle cx="52" cy="52" r="1.8" fill="#10b981"/>
-      <rect x="44" y="72" width="18" height="22" rx="2" fill="#cbd5e1"/>
-      <rect x="76" y="88" width="18" height="6" rx="1.5" fill="#cbd5e1"/>
+      <rect x="44" y="64" width="18" height="30" rx="2.5" fill="#e0f2fe" stroke="#0ea5e9" stroke-width="1.2"/>
+      <rect x="76" y="76" width="18" height="18" rx="2.5" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.2"/>
+      <rect x="108" y="52" width="18" height="42" rx="2.5" fill="#d1fae5" stroke="#10b981" stroke-width="1.2"/>
+      <rect x="140" y="68" width="18" height="26" rx="2.5" fill="#fef3c7" stroke="#f59e0b" stroke-width="1.2"/>
+      <rect x="172" y="42" width="18" height="52" rx="2.5" fill="#e0e7ff" stroke="#6366f1" stroke-width="1.2"/>
+      <polyline points="53,54 85,66 117,42 149,56 181,32" stroke="#10b981" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="53" cy="54" r="2.5" fill="#10b981"/>
+      <circle cx="117" cy="42" r="2.5" fill="#10b981"/>
+      <circle cx="181" cy="32" r="2.5" fill="#10b981"/>
       <line x1="20" y1="94" x2="220" y2="94" stroke="#cbd5e1" stroke-width="1.5"/>
     </svg>
   `,
   aeoSeo: `
     <svg class="w-56 h-32" viewBox="0 0 240 120" fill="none">
       <rect x="28" y="14" width="52" height="92" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
-      <rect x="34" y="24" width="40" height="20" rx="3" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
-      <rect x="38" y="30" width="22" height="2.5" rx="1" fill="#94a3b8"/>
-      <rect x="38" y="35" width="14" height="2.5" rx="1" fill="#cbd5e1"/>
+      <rect x="34" y="24" width="40" height="20" rx="3" fill="#f5f3ff" stroke="#ddd6fe" stroke-width="1"/>
+      <rect x="38" y="30" width="22" height="2.5" rx="1" fill="#7c3aed"/>
+      <rect x="38" y="35" width="14" height="2.5" rx="1" fill="#c4b5fd"/>
       <rect x="34" y="72" width="40" height="20" rx="3" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
       <rect x="38" y="78" width="20" height="2.5" rx="1" fill="#94a3b8"/>
       <rect x="38" y="83" width="12" height="2.5" rx="1" fill="#cbd5e1"/>
       <rect x="94" y="14" width="52" height="92" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
-      <circle cx="102" cy="21" r="1.5" fill="#cbd5e1"/>
-      <rect x="100" y="28" width="40" height="20" rx="3" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
-      <rect x="104" y="34" width="24" height="2.5" rx="1" fill="#94a3b8"/>
-      <rect x="104" y="39" width="14" height="2.5" rx="1" fill="#cbd5e1"/>
+      <circle cx="102" cy="21" r="2" fill="#0ea5e9"/>
+      <rect x="100" y="28" width="40" height="20" rx="3" fill="#f0f9ff" stroke="#bae6fd" stroke-width="1"/>
+      <rect x="104" y="34" width="24" height="2.5" rx="1" fill="#0ea5e9"/>
+      <rect x="104" y="39" width="14" height="2.5" rx="1" fill="#7dd3fc"/>
       <rect x="160" y="14" width="52" height="92" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
-      <circle cx="204" cy="21" r="2" fill="#0f172a"/>
-      <rect x="166" y="28" width="40" height="20" rx="3" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
-      <rect x="170" y="34" width="24" height="2.5" rx="1" fill="#94a3b8"/>
-      <rect x="170" y="39" width="14" height="2.5" rx="1" fill="#cbd5e1"/>
-      <rect x="58" y="48" width="46" height="22" rx="4" fill="#ffffff" stroke="#475569" stroke-width="1.5"/>
-      <rect x="64" y="55" width="24" height="3" rx="1" fill="#64748b"/>
-      <rect x="64" y="61" width="14" height="2.5" rx="1" fill="#cbd5e1"/>
+      <circle cx="204" cy="21" r="2.2" fill="#10b981"/>
+      <rect x="166" y="28" width="40" height="20" rx="3" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1"/>
+      <rect x="170" y="34" width="24" height="2.5" rx="1" fill="#10b981"/>
+      <rect x="170" y="39" width="14" height="2.5" rx="1" fill="#6ee7b7"/>
+      <rect x="58" y="48" width="46" height="22" rx="4" fill="#ffffff" stroke="#6366f1" stroke-width="1.6"/>
+      <rect x="64" y="55" width="24" height="3" rx="1" fill="#6366f1"/>
+      <rect x="64" y="61" width="14" height="2.5" rx="1" fill="#a5b4fc"/>
     </svg>
   `,
   competitors: `
     <svg class="w-56 h-32" viewBox="0 0 240 120" fill="none">
       <rect x="28" y="14" width="52" height="92" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
-      <rect x="34" y="24" width="40" height="20" rx="3" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
-      <rect x="38" y="30" width="22" height="2.5" rx="1" fill="#94a3b8"/>
-      <rect x="38" y="35" width="14" height="2.5" rx="1" fill="#cbd5e1"/>
+      <rect x="34" y="24" width="40" height="20" rx="3" fill="#fffbeb" stroke="#fde68a" stroke-width="1"/>
+      <rect x="38" y="30" width="22" height="2.5" rx="1" fill="#f59e0b"/>
+      <rect x="38" y="35" width="14" height="2.5" rx="1" fill="#fcd34d"/>
       <rect x="34" y="72" width="40" height="20" rx="3" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
       <rect x="38" y="78" width="20" height="2.5" rx="1" fill="#94a3b8"/>
       <rect x="94" y="14" width="52" height="92" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
-      <rect x="100" y="28" width="40" height="20" rx="3" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
-      <rect x="104" y="34" width="24" height="2.5" rx="1" fill="#94a3b8"/>
+      <rect x="100" y="28" width="40" height="20" rx="3" fill="#fff1f2" stroke="#fecdd3" stroke-width="1"/>
+      <rect x="104" y="34" width="24" height="2.5" rx="1" fill="#f43f5e"/>
       <rect x="160" y="14" width="52" height="92" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
-      <circle cx="204" cy="21" r="2" fill="#0f172a"/>
-      <rect x="166" y="28" width="40" height="20" rx="3" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
-      <rect x="170" y="34" width="24" height="2.5" rx="1" fill="#94a3b8"/>
-      <rect x="66" y="54" width="48" height="22" rx="4" fill="#ffffff" stroke="#0f172a" stroke-width="1.8"/>
-      <rect x="72" y="61" width="26" height="3.5" rx="1" fill="#475569"/>
-      <rect x="72" y="67" width="14" height="2.5" rx="1" fill="#cbd5e1"/>
+      <circle cx="204" cy="21" r="2.2" fill="#0ea5e9"/>
+      <rect x="166" y="28" width="40" height="20" rx="3" fill="#f0f9ff" stroke="#bae6fd" stroke-width="1"/>
+      <rect x="170" y="34" width="24" height="2.5" rx="1" fill="#0ea5e9"/>
+      <rect x="66" y="54" width="48" height="22" rx="4" fill="#ffffff" stroke="#7c3aed" stroke-width="1.8"/>
+      <rect x="72" y="61" width="26" height="3.5" rx="1" fill="#7c3aed"/>
+      <rect x="72" y="67" width="14" height="2.5" rx="1" fill="#c4b5fd"/>
     </svg>
   `,
   assistant: `
     <svg class="w-56 h-32" viewBox="0 0 240 120" fill="none">
       <rect x="34" y="14" width="172" height="92" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
-      <rect x="122" y="22" width="74" height="14" rx="7" fill="#64748b"/>
-      <rect x="132" y="28" width="44" height="2" rx="1" fill="#ffffff"/>
+      <rect x="122" y="22" width="74" height="14" rx="7" fill="#7c3aed"/>
+      <rect x="132" y="28" width="44" height="2.5" rx="1.25" fill="#ffffff"/>
+      <rect x="44" y="44" width="104" height="20" rx="7" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1"/>
+      <circle cx="55" cy="54" r="3" fill="#10b981"/>
+      <rect x="63" y="50" width="68" height="3" rx="1.5" fill="#059669"/>
+      <rect x="63" y="56" width="44" height="2.5" rx="1.25" fill="#6ee7b7"/>
+      <rect x="44" y="76" width="152" height="18" rx="6" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+      <rect x="52" y="83.5" width="72" height="3" rx="1.5" fill="#cbd5e1"/>
+      <circle cx="184" cy="85" r="5" fill="#0ea5e9"/>
     </svg>
   `,
   budget: `
     <svg class="w-56 h-32" viewBox="0 0 240 120" fill="none">
       <line x1="28" y1="92" x2="212" y2="92" stroke="#cbd5e1" stroke-width="1.5"/>
-      <rect x="44" y="48" width="14" height="44" rx="2.5" fill="#0f172a"/>
-      <rect x="61" y="60" width="14" height="32" rx="2.5" fill="#cbd5e1"/>
-      <rect x="92" y="34" width="14" height="58" rx="2.5" fill="#0f172a"/>
-      <rect x="109" y="42" width="14" height="50" rx="2.5" fill="#cbd5e1"/>
-      <rect x="140" y="54" width="14" height="38" rx="2.5" fill="#0f172a"/>
-      <rect x="157" y="46" width="14" height="46" rx="2.5" fill="#cbd5e1"/>
-      <rect x="188" y="38" width="14" height="54" rx="2.5" fill="#0f172a"/>
+      <rect x="44" y="48" width="14" height="44" rx="2.5" fill="#6366f1"/>
+      <rect x="61" y="60" width="14" height="32" rx="2.5" fill="#e0e7ff" stroke="#a5b4fc" stroke-width="1"/>
+      <rect x="92" y="34" width="14" height="58" rx="2.5" fill="#7c3aed"/>
+      <rect x="109" y="42" width="14" height="50" rx="2.5" fill="#ede9fe" stroke="#c4b5fd" stroke-width="1"/>
+      <rect x="140" y="54" width="14" height="38" rx="2.5" fill="#10b981"/>
+      <rect x="157" y="46" width="14" height="46" rx="2.5" fill="#d1fae5" stroke="#6ee7b7" stroke-width="1"/>
+      <rect x="188" y="38" width="14" height="54" rx="2.5" fill="#0ea5e9"/>
     </svg>
   `,
   contacts: `
     <svg class="w-56 h-32" viewBox="0 0 240 120" fill="none">
       <rect x="40" y="20" width="160" height="80" rx="8" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
-      <circle cx="64" cy="44" r="9" fill="#0f172a"/>
+      <circle cx="64" cy="44" r="9" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.4"/>
+      <circle cx="71" cy="50" r="2.5" fill="#10b981"/>
       <rect x="82" y="39" width="64" height="4" rx="2" fill="#0f172a"/>
-      <rect x="82" y="47" width="42" height="3" rx="1.5" fill="#cbd5e1"/>
+      <rect x="82" y="47" width="42" height="3" rx="1.5" fill="#a78bfa"/>
       <line x1="54" y1="64" x2="186" y2="64" stroke="#f1f5f9" stroke-width="1.2"/>
-      <circle cx="64" cy="80" r="9" fill="#cbd5e1"/>
-      <rect x="82" y="75" width="54" height="4" rx="2" fill="#64748b"/>
-      <rect x="82" y="83" width="38" height="3" rx="1.5" fill="#cbd5e1"/>
+      <circle cx="64" cy="80" r="9" fill="#e0f2fe" stroke="#0ea5e9" stroke-width="1.4"/>
+      <rect x="82" y="75" width="54" height="4" rx="2" fill="#475569"/>
+      <rect x="82" y="83" width="38" height="3" rx="1.5" fill="#7dd3fc"/>
     </svg>
   `,
   leads: `
     <svg class="w-56 h-32" viewBox="0 0 240 120" fill="none">
       <rect x="28" y="18" width="56" height="84" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
-      <rect x="35" y="26" width="28" height="4" rx="2" fill="#0f172a"/>
-      <rect x="35" y="36" width="42" height="22" rx="3" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
+      <rect x="35" y="26" width="28" height="4" rx="2" fill="#0ea5e9"/>
+      <rect x="35" y="36" width="42" height="22" rx="3" fill="#f0f9ff" stroke="#bae6fd" stroke-width="1"/>
       <rect x="35" y="64" width="42" height="22" rx="3" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
       <rect x="92" y="18" width="56" height="84" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
-      <rect x="99" y="26" width="28" height="4" rx="2" fill="#64748b"/>
-      <rect x="99" y="36" width="42" height="26" rx="3" fill="#0f172a"/>
+      <rect x="99" y="26" width="28" height="4" rx="2" fill="#7c3aed"/>
+      <rect x="99" y="36" width="42" height="26" rx="3" fill="#7c3aed"/>
       <rect x="104" y="43" width="24" height="3" rx="1.5" fill="#ffffff"/>
+      <rect x="104" y="50" width="16" height="2.5" rx="1.25" fill="#ddd6fe"/>
       <rect x="156" y="18" width="56" height="84" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
-      <rect x="163" y="26" width="28" height="4" rx="2" fill="#94a3b8"/>
-      <rect x="163" y="36" width="42" height="20" rx="3" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
+      <rect x="163" y="26" width="28" height="4" rx="2" fill="#10b981"/>
+      <rect x="163" y="36" width="42" height="20" rx="3" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1"/>
     </svg>
   `,
   seoAudit: `
     <svg class="w-56 h-32" viewBox="0 0 240 120" fill="none">
       <rect x="42" y="14" width="140" height="92" rx="6" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
       <line x1="42" y1="26" x2="182" y2="26" stroke="#e2e8f0" stroke-width="1"/>
-      <circle cx="50" cy="20" r="1.5" fill="#cbd5e1"/>
-      <circle cx="56" cy="20" r="1.5" fill="#cbd5e1"/>
-      <circle cx="62" cy="20" r="1.5" fill="#cbd5e1"/>
-      <rect x="52" y="36" width="86" height="5" rx="2" fill="#cbd5e1"/>
-      <rect x="52" y="52" width="110" height="5" rx="2" fill="#cbd5e1"/>
-      <rect x="52" y="66" width="84" height="5" rx="2" fill="#cbd5e1"/>
-      <rect x="52" y="80" width="96" height="5" rx="2" fill="#cbd5e1"/>
-      <line x1="43" y1="47" x2="181" y2="47" stroke="#0f172a" stroke-width="1.8"/>
-      <path d="M196 34l3.5 3.5 7-7" stroke="#94a3b8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="50" cy="20" r="1.8" fill="#f43f5e"/>
+      <circle cx="56" cy="20" r="1.8" fill="#f59e0b"/>
+      <circle cx="62" cy="20" r="1.8" fill="#10b981"/>
+      <rect x="52" y="36" width="86" height="5" rx="2" fill="#e0f2fe"/>
+      <rect x="52" y="52" width="110" height="5" rx="2" fill="#d1fae5"/>
+      <rect x="52" y="66" width="84" height="5" rx="2" fill="#ede9fe"/>
+      <rect x="52" y="80" width="96" height="5" rx="2" fill="#fef3c7"/>
+      <line x1="43" y1="47" x2="181" y2="47" stroke="#6366f1" stroke-width="1.8"/>
+      <circle cx="201" cy="35" r="9" fill="#d1fae5"/>
+      <path d="M196 35l3 3 6-6" stroke="#10b981" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
   `
 };
