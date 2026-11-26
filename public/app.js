@@ -6269,19 +6269,44 @@ function parseCsvText(text) {
   return { headers, records, delimiter };
 }
 
-function getCsvField(rec, aliases) {
+function getCsvField(rec, aliases, fallbackFirstCol = false) {
   const keys = Object.keys(rec || {});
   for (const alias of aliases) {
     const normAlias = alias.toLowerCase().replace(/[^a-z0-9]/g, '');
     const foundKey = keys.find(k => k.toLowerCase().replace(/[^a-z0-9]/g, '') === normAlias);
-    if (foundKey && rec[foundKey] !== '') return rec[foundKey];
+    if (foundKey !== undefined && rec[foundKey] !== '') return rec[foundKey];
+  }
+  if (fallbackFirstCol && keys.length > 0 && rec[keys[0]] !== '') {
+    return rec[keys[0]];
   }
   return '';
 }
 
 function parseCsvNumber(val) {
   if (typeof val === 'number') return isFinite(val) ? val : 0;
-  const s = String(val || '').replace(/[^\d.,-]/g, '').replace(',', '.');
+  let s = String(val || '').replace(/[^\d.,-]/g, '');
+  if (!s) return 0;
+  const lastComma = s.lastIndexOf(',');
+  const lastDot = s.lastIndexOf('.');
+  if (lastComma !== -1 && lastDot !== -1) {
+    if (lastComma > lastDot) {
+      s = s.replace(/\./g, '').replace(',', '.');
+    } else {
+      s = s.replace(/,/g, '');
+    }
+  } else if (lastComma !== -1) {
+    const afterComma = s.slice(lastComma + 1);
+    if (afterComma.length === 3 && /^\d{3}$/.test(afterComma)) {
+      s = s.replace(/,/g, '');
+    } else {
+      s = s.replace(',', '.');
+    }
+  } else if (lastDot !== -1) {
+    const afterDot = s.slice(lastDot + 1);
+    if (afterDot.length === 3 && /^\d{3}$/.test(afterDot) && (s.match(/\./g) || []).length >= 1 && s.length > 4) {
+      s = s.replace(/\./g, '');
+    }
+  }
   const n = parseFloat(s);
   return isNaN(n) ? 0 : n;
 }
@@ -6292,12 +6317,17 @@ function parseCsvMonth(val) {
   if (s === 'all' || s === 'full year') return 'all';
   const monthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
   const fullNames = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
-  const shortIdx = monthNames.findIndex(m => s.startsWith(m));
-  if (shortIdx !== -1) return shortIdx;
+  const noNames = ['januar', 'februar', 'mars', 'april', 'mai', 'juni', 'juli', 'august', 'september', 'oktober', 'november', 'desember'];
   const fullIdx = fullNames.indexOf(s);
   if (fullIdx !== -1) return fullIdx;
+  const noIdx = noNames.indexOf(s);
+  if (noIdx !== -1) return noIdx;
+  const shortIdx = monthNames.findIndex(m => s.startsWith(m));
+  if (shortIdx !== -1) return shortIdx;
+  const noShortIdx = noNames.findIndex(m => s.startsWith(m.slice(0, 3)));
+  if (noShortIdx !== -1) return noShortIdx;
   const num = parseInt(s, 10);
-  if (num >= 1 && num <= 12) return num - 1;
+  if (/^\d{1,2}$/.test(s) && num >= 1 && num <= 12) return num - 1;
   return null;
 }
 
@@ -6388,30 +6418,69 @@ function buildCsvSyncPlan(target, fileName, parsed) {
     plan.syncEntities.push('Updates Integration Distribution & Lead Share per Integration charts');
   } else if (target === 'budget') {
     plan.targetLabel = `Budget (${budgetYear})`;
-    plan.previewHeaders = ['Channel', 'Month', 'Planned', 'Actual', 'Action'];
     const newChannels = new Set();
-    records.forEach(rec => {
-      const channel = getCsvField(rec, ['channel', 'source', 'name']);
-      if (!channel) {
-        plan.skipCount++;
-        return;
-      }
-      const monthIdx = parseCsvMonth(getCsvField(rec, ['month', 'period', 'date']));
-      const planned = parseCsvNumber(getCsvField(rec, ['planned', 'budget', 'plan']));
-      const actual = parseCsvNumber(getCsvField(rec, ['actual', 'cost', 'spend', 'spent']));
-      if (!channelsList.some(c => (typeof c === 'string' ? c : c.name).toLowerCase() === channel.toLowerCase())) {
-        newChannels.add(channel);
-      }
-      const exists = Boolean(budgetData[budgetYear]?.[channel]);
-      const action = exists ? 'Update' : 'New';
-      if (exists) plan.updateCount++;
-      else plan.newCount++;
-      const monthLabel = monthIdx === 'all' ? 'All months' : (monthIdx !== null ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][monthIdx] : 'All months');
-      plan.ops.push({ action, channel, monthIdx: monthIdx === null ? 'all' : monthIdx, planned, actual });
-      if (plan.previewRows.length < 10) {
-        plan.previewRows.push([channel, monthLabel, planned.toLocaleString('en-US'), actual.toLocaleString('en-US'), action]);
-      }
-    });
+    const monthColumns = headers
+      .map(h => ({ header: h, monthIdx: parseCsvMonth(h) }))
+      .filter(m => m.monthIdx !== null && m.monthIdx !== 'all');
+
+    if (monthColumns.length >= 2) {
+      plan.matrixMode = true;
+      plan.budgetField = /plan|budget|budsjett/i.test(fileName) ? 'planned' : 'actual';
+      plan.previewHeaders = ['Channel', 'Months w/ Data', 'Annual Total', 'Action'];
+
+      records.forEach(rec => {
+        const channel = getCsvField(rec, ['channel', 'source', 'name', 'kanal', 'platform', 'media'], true);
+        if (!channel || /^(total|totalt|sum|grand total)$/i.test(channel.trim())) {
+          plan.skipCount++;
+          return;
+        }
+        const monthlyValues = Array(12).fill(0);
+        let activeMonths = 0;
+        monthColumns.forEach(mc => {
+          const val = Math.round(parseCsvNumber(rec[mc.header]) * 100) / 100;
+          monthlyValues[mc.monthIdx] = val;
+          if (val !== 0) activeMonths++;
+        });
+        const totalVal = monthlyValues.reduce((a, b) => a + b, 0);
+        if (!channelsList.some(c => (typeof c === 'string' ? c : c.name).toLowerCase() === channel.toLowerCase())) {
+          newChannels.add(channel);
+        }
+        const exists = Boolean(budgetData[budgetYear]?.[channel]);
+        const action = exists ? 'Update' : 'New';
+        if (exists) plan.updateCount++;
+        else plan.newCount++;
+        plan.ops.push({ action, channel, monthlyValues });
+        if (plan.previewRows.length < 10) {
+          plan.previewRows.push([channel, `${activeMonths} / ${monthColumns.length}`, totalVal.toLocaleString('en-US'), action]);
+        }
+      });
+
+      plan.syncEntities.push(`Detected monthly matrix (${monthColumns.length} month columns) — importing into ${plan.budgetField === 'planned' ? 'Planned Budget' : 'Actual Spend'} for ${budgetYear}`);
+    } else {
+      plan.previewHeaders = ['Channel', 'Month', 'Planned', 'Actual', 'Action'];
+      records.forEach(rec => {
+        const channel = getCsvField(rec, ['channel', 'source', 'name', 'kanal', 'platform', 'media'], true);
+        if (!channel || /^(total|totalt|sum|grand total)$/i.test(channel.trim())) {
+          plan.skipCount++;
+          return;
+        }
+        const monthIdx = parseCsvMonth(getCsvField(rec, ['month', 'period', 'date', 'maned', 'måned']));
+        const planned = parseCsvNumber(getCsvField(rec, ['planned', 'budget', 'plan', 'budsjett']));
+        const actual = parseCsvNumber(getCsvField(rec, ['actual', 'cost', 'spend', 'spent', 'kostnad', 'forbruk']));
+        if (!channelsList.some(c => (typeof c === 'string' ? c : c.name).toLowerCase() === channel.toLowerCase())) {
+          newChannels.add(channel);
+        }
+        const exists = Boolean(budgetData[budgetYear]?.[channel]);
+        const action = exists ? 'Update' : 'New';
+        if (exists) plan.updateCount++;
+        else plan.newCount++;
+        const monthLabel = monthIdx === 'all' ? 'All months' : (monthIdx !== null ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][monthIdx] : 'All months');
+        plan.ops.push({ action, channel, monthIdx: monthIdx === null ? 'all' : monthIdx, planned, actual });
+        if (plan.previewRows.length < 10) {
+          plan.previewRows.push([channel, monthLabel, planned.toLocaleString('en-US'), actual.toLocaleString('en-US'), action]);
+        }
+      });
+    }
     if (newChannels.size) plan.syncEntities.push(`Auto-create ${newChannels.size} channel(s): ${Array.from(newChannels).join(', ')}`);
     plan.syncEntities.push(`Syncs entries into Budget year ${budgetYear} and channel charts`);
   } else if (target === 'contacts') {
@@ -6514,8 +6583,9 @@ function openCsvImportConfirmationModal(plan) {
   `).join('');
 
   const notesEl = document.getElementById('csv-sync-notes');
+  const displayHeaders = plan.headers.map((h, i) => (h === '' && i === 0 ? '(First column)' : h)).filter(Boolean);
   const notes = [
-    `Detected columns: ${plan.headers.join(', ') || 'None'}`,
+    `Detected columns: ${displayHeaders.join(', ') || 'None'}`,
     ...plan.syncEntities
   ];
   notesEl.innerHTML = notes.map(n => `<div class="flex items-start gap-1.5"><span class="text-slate-400">•</span><span>${n}</span></div>`).join('');
@@ -6589,12 +6659,17 @@ function acceptCsvImport() {
     renderIntegrationsView();
   } else if (plan.target === 'budget') {
     if (!budgetData[budgetYear]) budgetData[budgetYear] = {};
+    const targetField = plan.budgetField === 'planned' ? 'planned' : 'actual';
     plan.ops.forEach(op => {
       ensureChannelExists(op.channel);
       if (!budgetData[budgetYear][op.channel]) {
         budgetData[budgetYear][op.channel] = { planned: Array(12).fill(0), actual: Array(12).fill(0) };
       }
-      if (op.monthIdx === 'all') {
+      if (Array.isArray(op.monthlyValues)) {
+        for (let m = 0; m < 12; m++) {
+          budgetData[budgetYear][op.channel][targetField][m] = op.monthlyValues[m] || 0;
+        }
+      } else if (op.monthIdx === 'all') {
         const pM = Math.round((op.planned / 12) * 100) / 100;
         const aM = Math.round((op.actual / 12) * 100) / 100;
         for (let m = 0; m < 12; m++) {
