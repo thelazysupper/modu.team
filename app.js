@@ -353,15 +353,24 @@ function saveAppGroup() {
   toggleAppGroupForm(false);
   renderSidebarApps();
   renderCards();
+  if (activeGroupViewId && !document.getElementById('view-app-group')?.classList.contains('hidden')) {
+    renderAppGroupView();
+  }
 }
 
 function deleteAppGroup(groupId) {
-  appGroups = appGroups.filter(g => g.id !== groupId);
-  apps.forEach(app => {
-    if (app.groupId === groupId) app.groupId = null;
+  const grp = appGroups.find(g => g.id === groupId);
+  confirmDeleteAction(`Delete group "${grp?.name || 'this group'}"? Apps inside will become ungrouped.`, () => {
+    appGroups = appGroups.filter(g => g.id !== groupId);
+    apps.forEach(app => {
+      if (app.groupId === groupId) app.groupId = null;
+    });
+    renderSidebarApps();
+    renderCards();
+    if (activeGroupViewId === groupId) {
+      openHub();
+    }
   });
-  renderSidebarApps();
-  renderCards();
 }
 
 function toggleAppGroupCollapse(groupId) {
@@ -369,7 +378,6 @@ function toggleAppGroupCollapse(groupId) {
   if (!grp) return;
   grp.collapsed = !grp.collapsed;
   renderSidebarApps();
-  renderCards();
 }
 
 function assignAppGroup(appId, groupIdVal) {
@@ -378,6 +386,53 @@ function assignAppGroup(appId, groupIdVal) {
   app.groupId = groupIdVal ? Number(groupIdVal) : null;
   renderSidebarApps();
   renderCards();
+  if (activeGroupViewId && !document.getElementById('view-app-group')?.classList.contains('hidden')) {
+    renderAppGroupView();
+  }
+}
+
+let activeGroupViewId = null;
+
+function openAppGroup(groupId) {
+  const grp = appGroups.find(g => g.id === groupId);
+  if (!grp) return;
+  activeGroupViewId = groupId;
+  hideAllViews();
+  document.getElementById('view-app-group').classList.remove('hidden');
+  renderAppGroupView();
+  setActiveNavHighlight('nav-hub');
+}
+
+function renderAppGroupView() {
+  const grp = appGroups.find(g => g.id === activeGroupViewId);
+  if (!grp) {
+    openHub();
+    return;
+  }
+  const grpApps = apps.filter(a => a.groupId === grp.id);
+  document.getElementById('group-view-breadcrumb').textContent = grp.name;
+  document.getElementById('group-view-title').textContent = grp.name;
+  document.getElementById('group-view-subtitle').textContent =
+    `${grpApps.length} app${grpApps.length === 1 ? '' : 's'} in this group`;
+
+  document.getElementById('group-view-edit-btn').onclick = () => {
+    openHub();
+    toggleAppGroupForm(true, grp.id);
+  };
+  document.getElementById('group-view-delete-btn').onclick = () => {
+    deleteAppGroup(grp.id);
+  };
+
+  const emptyEl = document.getElementById('group-apps-empty');
+  const gridEl = document.getElementById('group-apps-grid');
+  if (grpApps.length === 0) {
+    emptyEl.classList.remove('hidden');
+    gridEl.classList.add('hidden');
+    return;
+  }
+  emptyEl.classList.add('hidden');
+  gridEl.classList.remove('hidden');
+  gridEl.innerHTML = grpApps.map(renderAppCardHtml).join('');
 }
 
 function renderSidebarAppItem(app) {
@@ -429,18 +484,15 @@ function renderSidebarApps() {
     }
     return `
       <div class="space-y-0.5 pt-1.5">
-        <button
-          onclick="toggleAppGroupCollapse(${grp.id})"
-          class="w-full flex items-center justify-between px-2.5 py-1 rounded-md text-[11px] font-semibold text-slate-500 hover:text-slate-800 hover:bg-slate-100/60 transition-colors"
-        >
-          <span class="truncate">${grp.name}</span>
-          <span class="inline-flex items-center gap-1 text-[10px] text-slate-400">
+        <div class="w-full flex items-center justify-between px-2.5 py-1 rounded-md text-[11px] font-semibold text-slate-500 hover:text-slate-800 hover:bg-slate-100/60 transition-colors">
+          <button onclick="openAppGroup(${grp.id})" class="truncate text-left flex-1">${grp.name}</button>
+          <button onclick="toggleAppGroupCollapse(${grp.id})" class="inline-flex items-center gap-1 text-[10px] text-slate-400 shrink-0 pl-1">
             <span class="tabular-nums">${grpApps.length}</span>
             <svg class="w-3 h-3 transition-transform ${grp.collapsed ? '-rotate-90' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
             </svg>
-          </span>
-        </button>
+          </button>
+        </div>
         ${grp.collapsed ? '' : `<div class="pl-2 space-y-0.5">${grpApps.length > 0 ? grpApps.map(renderSidebarAppItem).join('') : `<div class="px-2.5 py-1 text-[11px] text-slate-400">Empty</div>`}</div>`}
       </div>
     `;
@@ -458,6 +510,60 @@ function renderSidebarApps() {
 
   container.innerHTML = groupBlocks + ungroupedBlock;
   setActiveNavHighlight(currentNavId);
+}
+
+function renderGroupCardHtml(grp, grpApps) {
+  const previewTiles = grpApps.slice(0, 4).map(a => `
+    <div class="px-2.5 py-2 rounded-lg bg-white border border-slate-200/80 flex items-center justify-between gap-2 shadow-2xs">
+      <span class="text-[11px] font-medium text-slate-700 truncate">${a.title}</span>
+      ${a.status === 'Active' ? '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>' : '<span class="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0"></span>'}
+    </div>
+  `).join('');
+
+  const illustrationHtml = grpApps.length > 0
+    ? `<div class="w-full grid grid-cols-2 gap-2">${previewTiles}</div>`
+    : `<div class="text-xs text-slate-400">Empty group</div>`;
+
+  const desc = grpApps.length > 0
+    ? `Includes ${grpApps.map(a => a.title).join(', ')}.`
+    : 'No apps assigned yet. Click Edit to add apps to this group.';
+
+  return `
+    <article class="rounded-2xl border border-slate-200/80 bg-white overflow-hidden flex flex-col justify-between card-shadow transition-all">
+      <div>
+        <div onclick="openAppGroup(${grp.id})" class="h-44 bg-[#f5f7fa] border-b border-slate-200/60 flex items-center justify-center p-5 cursor-pointer">
+          ${illustrationHtml}
+        </div>
+
+        <div class="p-5 space-y-2.5">
+          <div class="flex items-start justify-between gap-2">
+            <h2 onclick="openAppGroup(${grp.id})" class="text-[15px] font-bold text-slate-900 cursor-pointer hover:underline underline-offset-2">
+              ${grp.name}
+            </h2>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <span class="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-700 tabular-nums">
+                ${grpApps.length} app${grpApps.length === 1 ? '' : 's'}
+              </span>
+            </div>
+          </div>
+
+          <p class="text-xs text-slate-500 leading-relaxed line-clamp-2">
+            ${desc}
+          </p>
+        </div>
+      </div>
+
+      <div class="px-5 pb-4 pt-2 flex items-center justify-between gap-2">
+        ${renderActionMenuHtml(`toggleAppGroupForm(true, ${grp.id})`, `deleteAppGroup(${grp.id})`)}
+        <button onclick="openAppGroup(${grp.id})" class="h-8 px-3.5 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium flex items-center gap-1.5 transition-colors shrink-0">
+          <span>Open</span>
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M7 17L17 7M9 7h8v8"/>
+          </svg>
+        </button>
+      </div>
+    </article>
+  `;
 }
 
 function renderAppCardHtml(app) {
@@ -531,52 +637,16 @@ function renderCards() {
     return true;
   });
 
-  if (appGroups.length === 0) {
-    grid.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">${filtered.map(renderAppCardHtml).join('')}</div>`;
-    return;
-  }
-
-  const groupSections = appGroups.map(grp => {
-    const grpApps = filtered.filter(a => a.groupId === grp.id);
-    if ((query || statusFilter !== 'All') && grpApps.length === 0) return '';
-    return `
-      <div class="space-y-3.5">
-        <div class="flex items-center justify-between gap-3 pb-2 border-b border-slate-200/70">
-          <button onclick="toggleAppGroupCollapse(${grp.id})" class="flex items-center gap-2 text-left group">
-            <svg class="w-3.5 h-3.5 text-slate-400 transition-transform ${grp.collapsed ? '-rotate-90' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-            <h3 class="text-sm font-bold text-slate-900">${grp.name}</h3>
-            <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold tabular-nums bg-slate-100 text-slate-600">${grpApps.length}</span>
-          </button>
-          <div class="inline-flex items-center gap-1.5">
-            <button onclick="toggleAppGroupForm(true, ${grp.id})" class="px-2.5 py-1 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-[11px] font-medium text-slate-600">Edit</button>
-            <button onclick="deleteAppGroup(${grp.id})" class="px-2 py-1 rounded-md border border-slate-200 bg-white hover:bg-slate-100 text-[11px] text-slate-500">✕</button>
-          </div>
-        </div>
-        ${grp.collapsed ? '' : (
-          grpApps.length > 0
-            ? `<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">${grpApps.map(renderAppCardHtml).join('')}</div>`
-            : `<div class="rounded-xl border border-dashed border-slate-200 bg-[#fbfcfd] p-6 text-center text-xs text-slate-400">No apps in this group yet. Use <strong>Edit</strong> above or the dropdown on any app card to assign apps here.</div>`
-        )}
-      </div>
-    `;
+  const groupCardsHtml = appGroups.map(grp => {
+    const grpAppsAll = apps.filter(a => a.groupId === grp.id);
+    const grpAppsFiltered = filtered.filter(a => a.groupId === grp.id);
+    const nameMatch = query && grp.name.toLowerCase().includes(query);
+    if ((query || statusFilter !== 'All') && !nameMatch && grpAppsFiltered.length === 0) return '';
+    return renderGroupCardHtml(grp, grpAppsAll);
   }).join('');
 
   const ungrouped = filtered.filter(a => !a.groupId || !appGroups.some(g => g.id === a.groupId));
-  const ungroupedSection = ungrouped.length > 0
-    ? `
-      <div class="space-y-3.5">
-        <div class="flex items-center gap-2 pb-2 border-b border-slate-200/70">
-          <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Ungrouped</h3>
-          <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold tabular-nums bg-slate-100 text-slate-500">${ungrouped.length}</span>
-        </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">${ungrouped.map(renderAppCardHtml).join('')}</div>
-      </div>
-    `
-    : '';
-
-  grid.innerHTML = groupSections + ungroupedSection;
+  grid.innerHTML = groupCardsHtml + ungrouped.map(renderAppCardHtml).join('');
 }
 
 function cycleStatusFilter() {
@@ -608,12 +678,13 @@ function setActiveNavHighlight(activeId) {
 }
 
 function hideAllViews() {
-  ['view-hub', 'view-channels', 'view-budget', 'view-contacts', 'view-leads', 'view-competitors', 'view-aeo-seo', 'view-app-detail', 'view-generic-section'].forEach(id => {
+  ['view-hub', 'view-app-group', 'view-channels', 'view-budget', 'view-contacts', 'view-leads', 'view-competitors', 'view-aeo-seo', 'view-app-detail', 'view-generic-section'].forEach(id => {
     document.getElementById(id)?.classList.add('hidden');
   });
 }
 
 function openHub() {
+  activeGroupViewId = null;
   hideAllViews();
   document.getElementById('view-hub').classList.remove('hidden');
   setActiveNavHighlight('nav-hub');
@@ -669,6 +740,119 @@ function openSection(sec) {
 function formatCurrency(amount) {
   if (!totalBudget || totalBudget <= 0) return '—';
   return `${Math.round(amount).toLocaleString()} ${currency}`;
+}
+
+let pendingConfirmAction = null;
+
+function closeConfirmModal() {
+  pendingConfirmAction = null;
+  document.getElementById('modu-confirm-modal')?.classList.add('hidden');
+}
+
+function confirmDeleteAction(message, onConfirm) {
+  pendingConfirmAction = onConfirm;
+  let modal = document.getElementById('modu-confirm-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'modu-confirm-modal';
+    modal.className = 'hidden fixed inset-0 z-50 bg-slate-900/35 backdrop-blur-[1px] flex items-center justify-center p-4';
+    modal.innerHTML = `
+      <div class="w-full max-w-xs rounded-2xl border border-slate-200 bg-white card-shadow p-5 space-y-4 animate-fade" onclick="event.stopPropagation()">
+        <div class="space-y-1">
+          <h3 class="text-sm font-bold text-slate-900">Confirm delete</h3>
+          <p id="modu-confirm-msg" class="text-xs text-slate-500 leading-relaxed"></p>
+        </div>
+        <div class="flex items-center justify-end gap-2 pt-1">
+          <button onclick="closeConfirmModal()" class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-600">Cancel</button>
+          <button id="modu-confirm-yes" class="h-8 px-3.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-medium transition-colors">Delete</button>
+        </div>
+      </div>
+    `;
+    modal.addEventListener('click', closeConfirmModal);
+    document.body.appendChild(modal);
+    document.getElementById('modu-confirm-yes').addEventListener('click', () => {
+      const fn = pendingConfirmAction;
+      closeConfirmModal();
+      if (typeof fn === 'function') fn();
+    });
+  }
+  document.getElementById('modu-confirm-msg').textContent = message || 'Are you sure you want to delete this item?';
+  modal.classList.remove('hidden');
+}
+
+function closeActionPopover() {
+  document.getElementById('modu-action-popover')?.classList.add('hidden');
+}
+
+function openActionPopover(btn, event) {
+  if (event) event.stopPropagation();
+  let pop = document.getElementById('modu-action-popover');
+  if (!pop) {
+    pop = document.createElement('div');
+    pop.id = 'modu-action-popover';
+    pop.className = 'hidden fixed z-50 w-32 rounded-xl border border-slate-200/90 bg-white shadow-lg p-1 text-xs animate-fade';
+    pop.addEventListener('click', e => e.stopPropagation());
+    document.body.appendChild(pop);
+    document.addEventListener('click', closeActionPopover);
+    window.addEventListener('scroll', closeActionPopover, true);
+  }
+
+  const editCode = btn.getAttribute('data-edit') || '';
+  const delCode = btn.getAttribute('data-del') || '';
+
+  if (!pop.classList.contains('hidden') && pop._anchorBtn === btn) {
+    closeActionPopover();
+    return;
+  }
+  pop._anchorBtn = btn;
+
+  pop.innerHTML = `
+    ${editCode ? `<button type="button" id="modu-pop-edit" class="w-full text-left px-2.5 py-1.5 rounded-lg text-slate-700 hover:bg-slate-100 font-medium transition-colors">Edit</button>` : ''}
+    ${delCode ? `<button type="button" id="modu-pop-del" class="w-full text-left px-2.5 py-1.5 rounded-lg text-rose-600 hover:bg-rose-50 font-medium transition-colors">Delete</button>` : ''}
+  `;
+
+  if (editCode) {
+    document.getElementById('modu-pop-edit').onclick = () => {
+      closeActionPopover();
+      new Function(editCode)();
+    };
+  }
+  if (delCode) {
+    document.getElementById('modu-pop-del').onclick = () => {
+      closeActionPopover();
+      new Function(delCode)();
+    };
+  }
+
+  pop.classList.remove('hidden');
+  const rect = btn.getBoundingClientRect();
+  const popW = 128;
+  let left = rect.right - popW;
+  if (left < 8) left = rect.left;
+  let top = rect.bottom + 4;
+  if (top + 80 > window.innerHeight) top = rect.top - 74;
+  pop.style.left = `${left}px`;
+  pop.style.top = `${top}px`;
+}
+
+function renderActionMenuHtml(editCode, delCode, extraBtnClass = '') {
+  const escAttr = s => String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  return `
+    <button
+      type="button"
+      data-edit="${escAttr(editCode)}"
+      data-del="${escAttr(delCode)}"
+      onclick="openActionPopover(this, event)"
+      title="Actions"
+      class="w-7 h-7 rounded-lg border border-slate-200/80 bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-900 inline-flex items-center justify-center transition-colors ${extraBtnClass}"
+    >
+      <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+        <circle cx="5" cy="12" r="1.7"/>
+        <circle cx="12" cy="12" r="1.7"/>
+        <circle cx="19" cy="12" r="1.7"/>
+      </svg>
+    </button>
+  `;
 }
 
 function changeChannelsYear(yr) {
@@ -808,8 +992,11 @@ function saveChannel() {
 }
 
 function deleteChannel(id) {
-  channelsList = channelsList.filter(c => c.id !== id);
-  renderChannelsView();
+  const ch = channelsList.find(c => c.id === id);
+  confirmDeleteAction(`Delete channel "${ch?.name || 'this channel'}"?`, () => {
+    channelsList = channelsList.filter(c => c.id !== id);
+    renderChannelsView();
+  });
 }
 
 function getChartTooltipEl() {
@@ -1104,10 +1291,7 @@ function renderChannelsView() {
           </div>
         </td>
         <td class="py-3 px-4 text-right">
-          <div class="inline-flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button onclick="toggleChannelForm(true, ${r.id})" class="px-2 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-50 text-[11px] text-slate-600">Edit</button>
-            <button onclick="deleteChannel(${r.id})" class="px-2 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-100 text-[11px] text-slate-500">✕</button>
-          </div>
+          ${renderActionMenuHtml(`toggleChannelForm(true, ${r.id})`, `deleteChannel(${r.id})`)}
         </td>
       </tr>
     `;
@@ -1325,10 +1509,12 @@ function updateBudgetActualCell(channel, monthIdx, val) {
 }
 
 function deleteBudgetChannel(channel) {
-  if (budgetData[budgetYear]) {
-    delete budgetData[budgetYear][channel];
-  }
-  renderBudgetView();
+  confirmDeleteAction(`Remove "${channel}" from ${budgetYear} budget?`, () => {
+    if (budgetData[budgetYear]) {
+      delete budgetData[budgetYear][channel];
+    }
+    renderBudgetView();
+  });
 }
 
 function renderBudgetView() {
@@ -1576,7 +1762,7 @@ function renderBudgetAllocated(channels, yearObj) {
         ${monthCells}
         <td class="py-3 px-3 text-right font-semibold tabular-nums text-slate-900 whitespace-nowrap">${Math.round(rowPlanned).toLocaleString()} NOK</td>
         <td class="py-3 px-3 text-right">
-          <button onclick="deleteBudgetChannel('${escCh}')" class="px-2 py-1 rounded border border-slate-200 bg-white hover:bg-slate-100 text-[11px] text-slate-500">✕</button>
+          ${renderActionMenuHtml('', `deleteBudgetChannel('${escCh}')`)}
         </td>
       </tr>
     `;
@@ -1877,9 +2063,12 @@ function saveContactGroup() {
 
 function deleteContactGroup(groupId, e) {
   if (e) e.stopPropagation();
-  contactGroups = contactGroups.filter(g => g.id !== groupId);
-  if (selectedGroupId === groupId) selectedGroupId = null;
-  renderContactsView();
+  const grp = contactGroups.find(g => g.id === groupId);
+  confirmDeleteAction(`Delete contact group "${grp?.name || 'this group'}" and all its partners?`, () => {
+    contactGroups = contactGroups.filter(g => g.id !== groupId);
+    if (selectedGroupId === groupId) selectedGroupId = null;
+    renderContactsView();
+  });
 }
 
 function selectContactGroup(groupId) {
@@ -2052,9 +2241,12 @@ function savePartner() {
 
 function deletePartner(partnerId) {
   const grp = contactGroups.find(g => g.id === selectedGroupId);
+  const partner = grp?.partners.find(p => p.id === partnerId);
   if (!grp) return;
-  grp.partners = grp.partners.filter(p => p.id !== partnerId);
-  renderContactsView();
+  confirmDeleteAction(`Delete partner "${partner?.name || 'this partner'}" and its contacts?`, () => {
+    grp.partners = grp.partners.filter(p => p.id !== partnerId);
+    renderContactsView();
+  });
 }
 
 function getLinkedInHandle(url) {
@@ -2154,9 +2346,12 @@ function saveContactPerson() {
 function deleteContactPerson(partnerId, contactId) {
   const grp = contactGroups.find(g => g.id === selectedGroupId);
   const partner = grp?.partners.find(p => p.id === partnerId);
+  const c = partner?.contacts.find(x => x.id === contactId);
   if (!partner) return;
-  partner.contacts = partner.contacts.filter(c => c.id !== contactId);
-  renderContactsView();
+  confirmDeleteAction(`Delete contact "${c?.name || 'this contact'}"?`, () => {
+    partner.contacts = partner.contacts.filter(x => x.id !== contactId);
+    renderContactsView();
+  });
 }
 
 function openContactModal(partnerId, contactId) {
@@ -2281,7 +2476,7 @@ function renderContactsView() {
                 <p class="text-xs text-slate-500 mt-0.5 tabular-nums">${g.partners.length} entries · ${totalPeople} contacts</p>
               </div>
             </div>
-            <button onclick="deleteContactGroup(${g.id}, event)" class="opacity-0 group-hover:opacity-100 px-2 py-1 rounded border border-slate-200 bg-white hover:bg-slate-100 text-[11px] text-slate-500 transition-opacity">✕</button>
+            ${renderActionMenuHtml('', `deleteContactGroup(${g.id})`)}
           </div>
           <div class="flex items-center justify-between pt-2 border-t border-slate-200/60 text-xs">
             <span class="text-slate-400">Directory</span>
@@ -2389,10 +2584,7 @@ function renderContactsView() {
                       ${c.linkedin ? `<a href="${c.linkedin}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" class="text-slate-900 underline underline-offset-2 hover:text-slate-600">Profile ↗</a>` : '—'}
                     </td>
                     <td class="py-2.5 px-5 text-right">
-                      <div class="inline-flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onclick="event.stopPropagation(); toggleContactPersonForm(true, ${p.id}, ${c.id})" class="px-2 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-50 text-[11px] text-slate-600">Edit</button>
-                        <button onclick="event.stopPropagation(); deleteContactPerson(${p.id}, ${c.id})" class="px-2 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-100 text-[11px] text-slate-500">✕</button>
-                      </div>
+                      ${renderActionMenuHtml(`toggleContactPersonForm(true, ${p.id}, ${c.id})`, `deleteContactPerson(${p.id}, ${c.id})`)}
                     </td>
                   </tr>
                 `;
@@ -2417,8 +2609,7 @@ function renderContactsView() {
           </div>
           <div class="flex items-center gap-1.5">
             <button onclick="toggleContactPersonForm(true, ${p.id})" class="h-8 px-3 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium">+ Add Contact</button>
-            <button onclick="togglePartnerForm(true, ${p.id})" class="h-8 px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs text-slate-600">Edit</button>
-            <button onclick="deletePartner(${p.id})" class="h-8 px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-xs text-slate-500">✕</button>
+            ${renderActionMenuHtml(`togglePartnerForm(true, ${p.id})`, `deletePartner(${p.id})`, 'h-8 w-8')}
           </div>
         </div>
         ${contactsTable}
@@ -2455,9 +2646,12 @@ function saveLeadStage() {
 }
 
 function deleteLeadStage(stageId) {
-  leadStages = leadStages.filter(s => s.id !== stageId);
-  leadEntries = leadEntries.filter(l => l.stageId !== stageId);
-  renderLeadsView();
+  const stg = leadStages.find(s => s.id === stageId);
+  confirmDeleteAction(`Delete stage "${stg?.name || 'this stage'}" and all leads in it?`, () => {
+    leadStages = leadStages.filter(s => s.id !== stageId);
+    leadEntries = leadEntries.filter(l => l.stageId !== stageId);
+    renderLeadsView();
+  });
 }
 
 function populateLeadChannelSelect(selectedVal) {
@@ -2595,8 +2789,11 @@ function saveLead() {
 }
 
 function deleteLead(leadId) {
-  leadEntries = leadEntries.filter(l => l.id !== leadId);
-  renderLeadsView();
+  const lead = leadEntries.find(l => l.id === leadId);
+  confirmDeleteAction(`Delete lead "${lead?.company || 'this lead'}"?`, () => {
+    leadEntries = leadEntries.filter(l => l.id !== leadId);
+    renderLeadsView();
+  });
 }
 
 function moveLeadToStage(leadId, newStageId) {
@@ -2843,9 +3040,7 @@ function renderLeadsView() {
           >
             <div class="flex items-start justify-between gap-2">
               <div class="font-semibold text-xs text-slate-900 leading-snug">${l.company}</div>
-              <div class="inline-flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onclick="event.stopPropagation(); deleteLead(${l.id})" title="Delete lead" class="px-1.5 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-100 text-[10px] text-slate-500">✕</button>
-              </div>
+              ${renderActionMenuHtml(`toggleLeadForm(true, ${l.id})`, `deleteLead(${l.id})`, 'w-6 h-6 shrink-0')}
             </div>
 
             ${(l.erp || l.integration) ? `
@@ -2879,7 +3074,7 @@ function renderLeadsView() {
           </div>
           <div class="inline-flex items-center gap-1 shrink-0">
             <button onclick="toggleLeadForm(true, null, ${stage.id})" title="Add lead to stage" class="w-6 h-6 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-xs text-slate-700 flex items-center justify-center">+</button>
-            <button onclick="deleteLeadStage(${stage.id})" title="Delete stage" class="w-6 h-6 rounded-md border border-slate-200 bg-white hover:bg-slate-100 text-[10px] text-slate-500 flex items-center justify-center">✕</button>
+            ${renderActionMenuHtml('', `deleteLeadStage(${stage.id})`, 'w-6 h-6')}
           </div>
         </div>
         <div class="space-y-2.5">${cardsHtml}</div>
@@ -3006,8 +3201,11 @@ function saveCompetitor() {
 }
 
 function deleteCompetitor(id) {
-  competitorsList = competitorsList.filter(c => c.id !== id);
-  renderCompetitorsView();
+  const c = competitorsList.find(x => x.id === id);
+  confirmDeleteAction(`Delete competitor "${c?.name || 'this competitor'}"?`, () => {
+    competitorsList = competitorsList.filter(x => x.id !== id);
+    renderCompetitorsView();
+  });
 }
 
 function drawCompetitorsChart(rows) {
@@ -3221,10 +3419,7 @@ function renderCompetitorsView() {
               </div>
             </div>
           </div>
-          <div class="inline-flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-            <button onclick="toggleCompetitorForm(true, ${c.id})" class="px-2 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-50 text-[11px] text-slate-600">Edit</button>
-            <button onclick="deleteCompetitor(${c.id})" class="px-2 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-100 text-[11px] text-slate-500">✕</button>
-          </div>
+          ${renderActionMenuHtml(`toggleCompetitorForm(true, ${c.id})`, `deleteCompetitor(${c.id})`, 'shrink-0')}
         </div>
 
         <div class="flex flex-wrap items-center gap-1.5">${chPills}</div>
@@ -3323,8 +3518,11 @@ function saveAeoSeoEntry() {
 }
 
 function deleteAeoSeoEntry(id) {
-  aeoSeoEntries = aeoSeoEntries.filter(e => e.id !== id);
-  renderAeoSeoView();
+  const entry = aeoSeoEntries.find(e => e.id === id);
+  confirmDeleteAction(`Delete query "${entry?.query || 'this query'}"?`, () => {
+    aeoSeoEntries = aeoSeoEntries.filter(e => e.id !== id);
+    renderAeoSeoView();
+  });
 }
 
 function drawAeoSeoChart(rows) {
@@ -3537,10 +3735,7 @@ function renderAeoSeoView() {
           ${rowGap > 0 ? '+' : ''}${rowGap.toFixed(0)}%
         </td>
         <td class="py-3 px-4 text-right">
-          <div class="inline-flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button onclick="toggleAeoSeoForm(true, ${e.id})" class="px-2 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-50 text-[11px] text-slate-600">Edit</button>
-            <button onclick="deleteAeoSeoEntry(${e.id})" class="px-2 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-100 text-[11px] text-slate-500">✕</button>
-          </div>
+          ${renderActionMenuHtml(`toggleAeoSeoForm(true, ${e.id})`, `deleteAeoSeoEntry(${e.id})`)}
         </td>
       </tr>
     `;
@@ -3555,8 +3750,79 @@ window.addEventListener('resize', () => {
   if (budgetSubView === 'summary' && Object.keys(budgetData[budgetYear] || {}).length > 0) renderBudgetView();
 });
 
+const AUTH_USERNAME = 'marcus.saltvik@bxsoftware.no';
+const AUTH_PASSWORD = 'SvenToreBowling123@';
+const AUTH_STORAGE_KEY = 'modu_auth_session';
+let isAuthenticated = false;
+
+function readAuthSession() {
+  try {
+    return window.localStorage.getItem(AUTH_STORAGE_KEY) === AUTH_USERNAME;
+  } catch {
+    return isAuthenticated;
+  }
+}
+
+function writeAuthSession(val) {
+  isAuthenticated = Boolean(val);
+  try {
+    if (val) window.localStorage.setItem(AUTH_STORAGE_KEY, AUTH_USERNAME);
+    else window.localStorage.removeItem(AUTH_STORAGE_KEY);
+  } catch {
+    // Sandboxed iframe or restricted storage; in-memory state still works
+  }
+}
+
+function syncAuthState() {
+  const authed = isAuthenticated || readAuthSession();
+  isAuthenticated = authed;
+  const authScreen = document.getElementById('auth-screen');
+  const appShell = document.getElementById('app-shell');
+  if (!authScreen || !appShell) return;
+  if (authed) {
+    authScreen.classList.add('hidden');
+    appShell.classList.remove('hidden');
+    window.dispatchEvent(new Event('resize'));
+  } else {
+    appShell.classList.add('hidden');
+    authScreen.classList.remove('hidden');
+  }
+}
+
+function toggleLoginPasswordVisibility() {
+  const pwInput = document.getElementById('login-password');
+  const btn = document.getElementById('login-pw-toggle');
+  if (!pwInput || !btn) return;
+  const isPw = pwInput.type === 'password';
+  pwInput.type = isPw ? 'text' : 'password';
+  btn.textContent = isPw ? 'Hide' : 'Show';
+}
+
+function handleLogin(e) {
+  if (e && typeof e.preventDefault === 'function') e.preventDefault();
+  const user = (document.getElementById('login-username')?.value || '').trim().toLowerCase();
+  const pass = document.getElementById('login-password')?.value || '';
+  const errEl = document.getElementById('login-error');
+
+  if (user === AUTH_USERNAME.toLowerCase() && pass === AUTH_PASSWORD) {
+    writeAuthSession(true);
+    if (errEl) errEl.classList.add('hidden');
+    if (document.getElementById('login-password')) document.getElementById('login-password').value = '';
+    syncAuthState();
+  } else {
+    if (errEl) errEl.classList.remove('hidden');
+    document.getElementById('login-password')?.focus();
+  }
+}
+
+function handleLogout() {
+  writeAuthSession(false);
+  syncAuthState();
+}
+
 window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('sidebar-app-count').textContent = String(apps.length);
   renderSidebarApps();
   renderCards();
+  syncAuthState();
 });

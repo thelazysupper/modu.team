@@ -1,0 +1,1735 @@
+---
+const base = import.meta.env.BASE_URL.endsWith("/") ? import.meta.env.BASE_URL : import.meta.env.BASE_URL + "/";
+---
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Modu — Marketing Workspace</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <link rel="stylesheet" href={`${base}styles.css`} />
+</head>
+<body class="bg-white text-slate-900 antialiased m-0 p-0">
+  <!-- LOGIN SCREEN -->
+  <div id="auth-screen" class="min-h-screen bg-[#fbfcfd] flex items-center justify-center p-6">
+    <div class="w-full max-w-sm rounded-2xl border border-slate-200/80 bg-white p-7 card-shadow space-y-6 animate-fade">
+      <div class="space-y-2">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center shrink-0">
+            <svg class="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
+              <rect x="2" y="2" width="5" height="5" rx="1"/>
+              <rect x="9" y="2" width="5" height="5" rx="1" opacity="0.5"/>
+              <rect x="2" y="9" width="5" height="5" rx="1" opacity="0.5"/>
+              <rect x="9" y="9" width="5" height="5" rx="1"/>
+            </svg>
+          </div>
+          <span class="text-base font-bold tracking-tight text-slate-900">Modu</span>
+          <span class="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200/60">Workspace</span>
+        </div>
+        <h1 class="text-xl font-bold tracking-tight text-slate-900 pt-1">Sign in</h1>
+        <p class="text-xs text-slate-500">Enter your credentials to access your marketing workspace.</p>
+      </div>
+
+      <form onsubmit="handleLogin(event)" class="space-y-4">
+        <div>
+          <label for="login-username" class="block text-[11px] font-medium text-slate-600 mb-1">Username</label>
+          <input
+            id="login-username"
+            type="text"
+            autocomplete="username"
+            placeholder="name@company.com"
+            class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400"
+          />
+        </div>
+
+        <div>
+          <label for="login-password" class="block text-[11px] font-medium text-slate-600 mb-1">Password</label>
+          <div class="relative">
+            <input
+              id="login-password"
+              type="password"
+              autocomplete="current-password"
+              placeholder="Enter password"
+              class="w-full h-9 pl-3 pr-14 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400"
+            />
+            <button
+              type="button"
+              onclick="toggleLoginPasswordVisibility()"
+              id="login-pw-toggle"
+              class="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] font-medium text-slate-400 hover:text-slate-700"
+            >
+              Show
+            </button>
+          </div>
+        </div>
+
+        <div id="login-error" class="hidden rounded-lg bg-rose-50 border border-rose-200/80 px-3 py-2 text-xs text-rose-600">
+          Invalid username or password.
+        </div>
+
+        <button
+          id="login-submit-btn"
+          type="submit"
+          onclick="handleLogin(event)"
+          class="w-full h-9 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium transition-colors"
+        >
+          Sign in
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div id="app-shell" class="hidden flex w-full min-h-screen flex-col md:flex-row">
+
+    <!-- LEFT SIDEBAR -->
+    <aside id="app-sidebar" class="w-full md:w-60 shrink-0 bg-[#fbfcfd] border-b md:border-b-0 md:border-r border-slate-200/80 flex flex-col justify-between md:fixed md:top-0 md:left-0 md:h-screen md:z-30 md:overflow-y-auto transition-all duration-200">
+      <div>
+        <div id="sidebar-brand-header" class="h-14 px-4 border-b border-slate-200/70 flex items-center justify-between gap-2">
+          <button onclick="openHub()" id="sidebar-brand-btn" class="flex items-center gap-2.5 text-left focus:outline-none min-w-0">
+            <div class="w-7 h-7 rounded-lg bg-slate-900 text-white flex items-center justify-center shrink-0">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor">
+                <rect x="2" y="2" width="5" height="5" rx="1"/>
+                <rect x="9" y="2" width="5" height="5" rx="1" opacity="0.5"/>
+                <rect x="2" y="9" width="5" height="5" rx="1" opacity="0.5"/>
+                <rect x="9" y="9" width="5" height="5" rx="1"/>
+              </svg>
+            </div>
+            <span class="sidebar-label text-sm font-semibold tracking-tight text-slate-900 truncate">Modu</span>
+          </button>
+          <div class="flex items-center gap-1.5 shrink-0">
+            <span class="sidebar-label text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200/60">Workspace</span>
+            <button
+              id="sidebar-toggle-btn"
+              onclick="toggleSidebar()"
+              title="Collapse sidebar"
+              class="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100 flex items-center justify-center transition-colors"
+            >
+              <svg id="sidebar-toggle-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div id="sidebar-nav-wrap" class="p-3 space-y-5">
+          <div class="space-y-0.5">
+            <div class="sidebar-label px-2.5 pb-1.5 text-[11px] font-medium uppercase tracking-wider text-slate-400">
+              Menu
+            </div>
+            <button onclick="openHub()" id="nav-hub" title="Apps" class="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium bg-slate-100 text-slate-900 transition-colors">
+              <span class="flex items-center gap-2.5">
+                <svg class="w-4 h-4 text-slate-700 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <rect x="3" y="3" width="7" height="7" rx="1.5" stroke-width="1.8"/>
+                  <rect x="14" y="3" width="7" height="7" rx="1.5" stroke-width="1.8"/>
+                  <rect x="3" y="14" width="7" height="7" rx="1.5" stroke-width="1.8"/>
+                  <rect x="14" y="14" width="7" height="7" rx="1.5" stroke-width="1.8"/>
+                </svg>
+                <span class="sidebar-label">Apps</span>
+              </span>
+              <span id="sidebar-app-count" class="sidebar-label text-[11px] text-slate-500">6</span>
+            </button>
+
+            <button onclick="openSection('wishlist')" id="nav-wishlist" title="Wishlist" class="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 transition-colors">
+              <span class="flex items-center gap-2.5">
+                <svg class="w-4 h-4 text-slate-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 4v16m8-8H4"/>
+                </svg>
+                <span class="sidebar-label">Wishlist</span>
+              </span>
+            </button>
+
+            <button onclick="openSection('settings')" id="nav-settings" title="Settings" class="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 transition-colors">
+              <span class="flex items-center gap-2.5">
+                <svg class="w-4 h-4 text-slate-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
+                </svg>
+                <span class="sidebar-label">Settings</span>
+              </span>
+            </button>
+          </div>
+
+          <div class="space-y-0.5 pt-3 border-t border-slate-200/70">
+            <div class="sidebar-label px-2.5 pb-1.5 text-[11px] font-medium uppercase tracking-wider text-slate-400">
+              Apps
+            </div>
+            <div id="sidebar-apps-list" class="space-y-0.5"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-3 border-t border-slate-200/70">
+        <div id="sidebar-footer-row" class="px-2.5 py-1.5 text-[11px] text-slate-400 flex items-center justify-between gap-2">
+          <span class="sidebar-label truncate">Modu Workspace</span>
+          <button onclick="handleLogout()" title="Sign out" class="sidebar-label text-[11px] font-medium text-slate-500 hover:text-slate-900 transition-colors shrink-0">Sign out</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main id="app-main" class="flex-1 min-w-0 bg-white p-6 lg:p-8 md:ml-60 transition-all duration-200">
+
+      <!-- VIEW 1: APPS DIRECTORY -->
+      <section id="view-hub" class="max-w-6xl mx-auto space-y-6 animate-fade">
+        <div class="space-y-1.5">
+          <h1 class="text-2xl font-bold tracking-tight text-slate-900">Apps</h1>
+          <p class="text-sm text-slate-500 max-w-2xl leading-relaxed">
+            Overview of marketing apps and tools in your workspace. Select an app below to open it, or add new app ideas under Wishlist in the menu.
+          </p>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
+          <div class="flex items-center gap-2 flex-1 max-w-md">
+            <div class="relative flex-1">
+              <svg class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+              </svg>
+              <input
+                id="search-input"
+                type="text"
+                oninput="renderCards()"
+                placeholder="Search by name or description ..."
+                class="w-full h-9 pl-9 pr-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400 transition-colors"
+              />
+            </div>
+
+            <div class="relative">
+              <button
+                onclick="cycleStatusFilter()"
+                id="filter-btn"
+                title="Filter by status"
+                class="h-9 px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 flex items-center gap-1.5 text-xs transition-colors"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 6h16M4 12h16M4 18h16M8 4v4m8 2v4m-6 2v4"/>
+                </svg>
+                <span id="filter-label" class="hidden sm:inline text-xs font-medium text-slate-600">All</span>
+              </button>
+            </div>
+          </div>
+
+          <button
+            onclick="toggleAppGroupForm(true)"
+            class="h-9 px-3.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium flex items-center gap-1.5 transition-colors"
+          >
+            <span>+ New Group</span>
+          </button>
+        </div>
+
+        <div id="app-group-form" class="hidden rounded-2xl border border-slate-200 bg-[#fbfcfd] p-5 space-y-4 animate-fade">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-200/80">
+            <h3 id="app-group-form-title" class="text-sm font-semibold text-slate-900">New App Group</h3>
+            <button onclick="toggleAppGroupForm(false)" class="text-xs text-slate-400 hover:text-slate-700">✕ Close</button>
+          </div>
+
+          <input type="hidden" id="ag-edit-id" value="" />
+
+          <div class="space-y-3">
+            <div class="max-w-sm">
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Group Name</label>
+              <input
+                id="ag-name"
+                type="text"
+                placeholder="e.g. Growth, Analytics, Sales..."
+                onkeydown="if(event.key==='Enter'){event.preventDefault();saveAppGroup();}"
+                class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400"
+              />
+            </div>
+
+            <div class="space-y-1.5">
+              <label class="block text-[11px] font-medium text-slate-600">Apps in Group</label>
+              <div id="ag-apps-picker" class="flex flex-wrap gap-1.5"></div>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200/70">
+            <button onclick="toggleAppGroupForm(false)" class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-600">
+              Cancel
+            </button>
+            <button onclick="saveAppGroup()" class="h-8 px-4 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium">
+              Save Group
+            </button>
+          </div>
+        </div>
+
+        <div id="apps-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5"></div>
+      </section>
+
+      <!-- VIEW 1B: APP GROUP UNDERPAGE -->
+      <section id="view-app-group" class="hidden max-w-6xl mx-auto space-y-6 animate-fade">
+        <div class="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-200/80">
+          <div class="flex items-center gap-2 text-xs">
+            <button onclick="openHub()" class="text-slate-500 hover:text-slate-900 font-medium flex items-center gap-1.5 transition-colors">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+              </svg>
+              <span>Apps</span>
+            </button>
+            <span class="text-slate-300">/</span>
+            <span id="group-view-breadcrumb" class="font-semibold text-slate-900">Group</span>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button
+              id="group-view-edit-btn"
+              class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition-colors"
+            >
+              Edit Group
+            </button>
+            <button
+              id="group-view-delete-btn"
+              class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-xs font-medium text-slate-500 transition-colors"
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+
+        <div class="space-y-1">
+          <h2 id="group-view-title" class="text-xl font-bold tracking-tight text-slate-900">Group</h2>
+          <p id="group-view-subtitle" class="text-xs text-slate-500"></p>
+        </div>
+
+        <div id="group-apps-empty" class="hidden rounded-2xl border border-dashed border-slate-200 bg-[#fbfcfd] p-12 flex flex-col items-center justify-center text-center min-h-[220px]">
+          <div class="text-sm font-semibold text-slate-900">No apps in this group yet</div>
+          <p class="text-xs text-slate-500 max-w-sm mt-1 mb-4">
+            Click Edit Group above to add apps to this group.
+          </p>
+        </div>
+
+        <div id="group-apps-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5"></div>
+      </section>
+
+      <!-- VIEW 2: CHANNELS APP -->
+      <section id="view-channels" class="hidden max-w-6xl mx-auto space-y-6 animate-fade">
+        <div class="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-200/80">
+          <div class="flex items-center gap-2 text-xs">
+            <button onclick="openHub()" class="text-slate-500 hover:text-slate-900 font-medium flex items-center gap-1.5 transition-colors">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+              </svg>
+              <span>Apps</span>
+            </button>
+            <span class="text-slate-300">/</span>
+            <span class="font-semibold text-slate-900">Channels</span>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <select
+              id="channels-year"
+              onchange="changeChannelsYear(this.value)"
+              class="h-8 px-2.5 rounded-lg border border-slate-200 bg-[#fbfcfd] text-xs font-medium text-slate-800 focus:outline-none focus:border-slate-400"
+            >
+              <option value="2025">2025</option>
+              <option value="2026" selected>2026</option>
+              <option value="2027">2027</option>
+            </select>
+
+            <button
+              onclick="toggleChannelForm(true)"
+              class="h-8 px-3.5 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium flex items-center gap-1.5 transition-colors"
+            >
+              <span>+ Add Channel</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="space-y-1">
+          <h2 class="text-xl font-bold tracking-tight text-slate-900">Channels</h2>
+          <p class="text-xs text-slate-500">
+            Central channel directory powering Budget and Leads, with live channel share and lead share.
+          </p>
+        </div>
+
+        <!-- TWO CHARTS ON TOP: CHANNEL SHARE & CHANNEL LEAD SHARE -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <div class="rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-4">
+            <div class="flex items-center justify-between gap-2 pb-3 border-b border-slate-200/70">
+              <div>
+                <h3 class="text-sm font-semibold text-slate-900">Channel Share</h3>
+                <p class="text-[11px] text-slate-500">Budget allocation share per channel</p>
+              </div>
+              <span id="channels-budget-total-label" class="text-[11px] tabular-nums text-slate-400">0 NOK</span>
+            </div>
+            <div id="channel-share-chart-body" class="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
+              <div class="sm:col-span-5 flex items-center justify-center">
+                <canvas id="channelShareChart" width="180" height="180"></canvas>
+              </div>
+              <div id="channel-share-legend" class="sm:col-span-7 space-y-2"></div>
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-4">
+            <div class="flex items-center justify-between gap-2 pb-3 border-b border-slate-200/70">
+              <div>
+                <h3 class="text-sm font-semibold text-slate-900">Channel Lead Share</h3>
+                <p class="text-[11px] text-slate-500">Inbound leads share per channel</p>
+              </div>
+              <span id="channels-leads-total-label" class="text-[11px] tabular-nums text-slate-400">0 leads</span>
+            </div>
+            <div id="channel-lead-chart-body" class="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
+              <div class="sm:col-span-5 flex items-center justify-center">
+                <canvas id="channelLeadShareChart" width="180" height="180"></canvas>
+              </div>
+              <div id="channel-lead-share-legend" class="sm:col-span-7 space-y-2"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ADD / EDIT CHANNEL FORM -->
+        <div id="channel-form-panel" class="hidden rounded-2xl border border-slate-200 bg-[#fbfcfd] p-5 space-y-4 animate-fade">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-200/80">
+            <h3 id="channel-form-title" class="text-sm font-semibold text-slate-900">Add Channel</h3>
+            <button onclick="toggleChannelForm(false)" class="text-xs text-slate-400 hover:text-slate-700">✕ Close</button>
+          </div>
+
+          <input type="hidden" id="ch-edit-id" value="" />
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Channel Name</label>
+              <input
+                id="ch-name"
+                type="text"
+                placeholder="e.g. LinkedIn Ads, Meta Ads..."
+                onkeydown="if(event.key==='Enter'){event.preventDefault();saveChannel();}"
+                class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400"
+              />
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Category</label>
+              <select id="ch-type" class="w-full h-9 px-2.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-slate-400">
+                <option value="Paid Social">Paid Social</option>
+                <option value="Paid Search">Paid Search</option>
+                <option value="Organic">Organic</option>
+                <option value="Outbound">Outbound</option>
+                <option value="Partner">Partner</option>
+                <option value="Direct">Direct</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Chart Color</label>
+              <select id="ch-color" class="w-full h-9 px-2.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-slate-400">
+                <option value="#7c3aed">Violet</option>
+                <option value="#10b981">Emerald</option>
+                <option value="#0ea5e9">Sky</option>
+                <option value="#f59e0b">Amber</option>
+                <option value="#f43f5e">Rose</option>
+                <option value="#6366f1">Indigo</option>
+                <option value="#14b8a6">Teal</option>
+                <option value="#ec4899">Pink</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200/70">
+            <button onclick="toggleChannelForm(false)" class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-600">
+              Cancel
+            </button>
+            <button onclick="saveChannel()" class="h-8 px-4 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium">
+              Save Channel
+            </button>
+          </div>
+        </div>
+
+        <!-- EMPTY STATE -->
+        <div id="channels-empty-state" class="hidden rounded-2xl border border-dashed border-slate-200 bg-[#fbfcfd] p-12 flex flex-col items-center justify-center text-center min-h-[220px]">
+          <div class="w-11 h-11 rounded-xl bg-white border border-slate-200/80 flex items-center justify-center text-slate-700 mb-3 card-shadow">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"/>
+            </svg>
+          </div>
+          <div class="text-sm font-semibold text-slate-900">No channels added yet</div>
+          <p class="text-xs text-slate-500 max-w-sm mt-1 mb-4">
+            Add your marketing channels here so Budget and Leads stay synced with a single source of truth.
+          </p>
+          <button
+            onclick="toggleChannelForm(true)"
+            class="h-8 px-3.5 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium flex items-center gap-1.5"
+          >
+            <span>+ Add Channel</span>
+          </button>
+        </div>
+
+        <!-- CHANNELS TABLE -->
+        <div id="channels-table-wrapper" class="rounded-2xl border border-slate-200/80 bg-white overflow-hidden card-shadow">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr class="border-b border-slate-200/80 bg-[#fbfcfd] text-slate-500">
+                  <th class="py-3 px-4 font-medium">Channel</th>
+                  <th class="py-3 px-4 font-medium">Category</th>
+                  <th class="py-3 px-4 font-medium text-right">Budget (NOK)</th>
+                  <th class="py-3 px-4 font-medium">Channel Share</th>
+                  <th class="py-3 px-4 font-medium text-right">Leads</th>
+                  <th class="py-3 px-4 font-medium">Lead Share</th>
+                  <th class="py-3 px-4 font-medium text-right"></th>
+                </tr>
+              </thead>
+              <tbody id="channels-table-body" class="divide-y divide-slate-200/70"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 2B: BUDGET APP -->
+      <section id="view-budget" class="hidden max-w-6xl mx-auto space-y-6 animate-fade">
+        <div class="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-200/80">
+          <div class="flex items-center gap-2 text-xs">
+            <button onclick="openHub()" class="text-slate-500 hover:text-slate-900 font-medium flex items-center gap-1.5 transition-colors">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+              </svg>
+              <span>Apps</span>
+            </button>
+            <span class="text-slate-300">/</span>
+            <button onclick="setBudgetSubView('summary')" class="font-semibold text-slate-900 hover:underline underline-offset-2">Budget</button>
+            <span id="budget-sub-crumb-sep" class="hidden text-slate-300">/</span>
+            <span id="budget-sub-crumb" class="hidden font-semibold text-slate-900"></span>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="flex items-center gap-1.5 bg-[#fbfcfd] border border-slate-200 rounded-lg px-2.5 h-8 text-xs">
+              <span class="text-slate-400">Year:</span>
+              <select id="budget-year-select" onchange="handleBudgetYearChange()" class="bg-transparent text-slate-900 font-medium text-xs focus:outline-none cursor-pointer">
+                <option value="2025">2025</option>
+                <option value="2026" selected>2026</option>
+                <option value="2027">2027</option>
+              </select>
+            </div>
+
+            <button
+              onclick="toggleBudgetForm(true)"
+              class="h-8 px-3.5 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium flex items-center gap-1.5 transition-colors"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+              </svg>
+              <span>Add Budget</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="space-y-1">
+            <h2 id="budget-page-title" class="text-xl font-bold tracking-tight text-slate-900">Budget</h2>
+            <p id="budget-page-desc" class="text-xs text-slate-500">
+              Summary of your marketing budget in NOK. Select any card below to open its detailed view.
+            </p>
+          </div>
+          <button id="budget-back-btn" onclick="setBudgetSubView('summary')" class="hidden h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700">
+            ← Back to Summary
+          </button>
+        </div>
+
+        <div id="budget-form-panel" class="hidden rounded-2xl border border-slate-200 bg-[#fbfcfd] p-5 space-y-4 animate-fade">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-200/80">
+            <h3 class="text-sm font-semibold text-slate-900">Add Channel Budget</h3>
+            <button onclick="toggleBudgetForm(false)" class="text-xs text-slate-400 hover:text-slate-700">✕ Close</button>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Channel</label>
+              <select
+                id="b-channel"
+                onchange="handleBudgetChannelSelectChange()"
+                class="w-full h-9 px-2.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-slate-400"
+              ></select>
+              <div id="b-channel-custom-wrap" class="hidden mt-1.5 flex items-center gap-1.5">
+                <input
+                  id="b-channel-custom"
+                  type="text"
+                  placeholder="New channel name..."
+                  onkeydown="if(event.key==='Enter'){event.preventDefault();confirmAddBudgetCustomChannel();}"
+                  class="flex-1 h-8 px-2.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400"
+                />
+                <button type="button" onclick="confirmAddBudgetCustomChannel()" class="h-8 px-2.5 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-[11px] font-medium">
+                  Add
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Month</label>
+              <select id="b-month" class="w-full h-9 px-2.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-slate-400">
+                <option value="all">All Months (Jan–Dec)</option>
+                <option value="0">January</option>
+                <option value="1">February</option>
+                <option value="2">March</option>
+                <option value="3">April</option>
+                <option value="4">May</option>
+                <option value="5">June</option>
+                <option value="6">July</option>
+                <option value="7">August</option>
+                <option value="8">September</option>
+                <option value="9">October</option>
+                <option value="10">November</option>
+                <option value="11">December</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Planned Budget (NOK)</label>
+              <input
+                id="b-planned"
+                type="number"
+                min="0"
+                step="any"
+                placeholder="0"
+                class="w-full h-9 px-3 text-xs tabular-nums bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400"
+              />
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Actual Spend (NOK, Optional)</label>
+              <input
+                id="b-actual"
+                type="number"
+                min="0"
+                step="any"
+                placeholder="0"
+                class="w-full h-9 px-3 text-xs tabular-nums bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400"
+              />
+            </div>
+          </div>
+
+          <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200/70">
+            <button onclick="toggleBudgetForm(false)" class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-600">
+              Cancel
+            </button>
+            <button onclick="saveBudgetEntry()" class="h-8 px-4 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium">
+              Save Budget
+            </button>
+          </div>
+        </div>
+
+        <div id="budget-sub-summary" class="space-y-6">
+          <div id="budget-summary-graphs" class="hidden grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div class="lg:col-span-2 rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-3">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 class="text-sm font-semibold text-slate-900">Budget vs. Actual by Month (<span id="budget-chart-year">2026</span>)</h3>
+                  <p class="text-[11px] text-slate-500">Monthly planned budget vs. actual spend in NOK</p>
+                </div>
+                <div class="flex items-center gap-3 text-[11px] text-slate-600">
+                  <span class="flex items-center gap-1.5">
+                    <span class="w-2.5 h-2.5 rounded-full bg-[#10b981] inline-block"></span>
+                    <span>Budget</span>
+                  </span>
+                  <span class="flex items-center gap-1.5">
+                    <span class="w-2.5 h-2.5 rounded-full bg-[#7c3aed] inline-block"></span>
+                    <span>Actual</span>
+                  </span>
+                </div>
+              </div>
+              <div class="w-full pt-1">
+                <canvas id="budgetCompareChart" height="200" class="w-full"></canvas>
+              </div>
+            </div>
+
+            <div class="rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-4">
+              <div>
+                <h3 class="text-sm font-semibold text-slate-900">Budget by Channel</h3>
+                <p class="text-[11px] text-slate-500">Annual share across active channels</p>
+              </div>
+              <div id="budget-channel-bars" class="space-y-3"></div>
+            </div>
+          </div>
+
+          <div id="budget-empty-state" class="rounded-2xl border border-dashed border-slate-200 bg-[#fbfcfd] p-10 flex flex-col items-center justify-center text-center min-h-[220px]">
+            <div class="w-11 h-11 rounded-xl bg-white border border-slate-200/80 flex items-center justify-center text-slate-700 mb-3 card-shadow">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/>
+              </svg>
+            </div>
+            <div class="text-sm font-semibold text-slate-900" id="budget-empty-title">No budgets for 2026 yet</div>
+            <p class="text-xs text-slate-500 max-w-sm mt-1 mb-4">
+              Set your Total Marketing Budget or add a channel budget to visualize monthly and channel graphs.
+            </p>
+            <div class="flex flex-wrap items-center justify-center gap-2">
+              <button onclick="setBudgetSubView('total')" class="h-8 px-3.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-xs font-medium">
+                Set Total Budget
+              </button>
+              <button onclick="toggleBudgetForm(true)" class="h-8 px-3.5 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium flex items-center gap-1.5">
+                <span>+ Add Channel Budget</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <button onclick="setBudgetSubView('total')" class="text-left p-4 rounded-xl border border-slate-200/80 bg-[#fbfcfd] hover:border-slate-300 transition-colors space-y-1">
+              <div class="flex items-center justify-between text-xs text-slate-500">
+                <span>Total Marketing Budget</span>
+                <span class="text-[11px] text-slate-400">Open →</span>
+              </div>
+              <div id="b-sum-annual" class="text-lg font-bold tabular-nums text-slate-900">0 NOK</div>
+              <div id="b-sum-annual-sub" class="text-[11px] text-slate-400">Set per year or month</div>
+            </button>
+
+            <button onclick="setBudgetSubView('allocated')" class="text-left p-4 rounded-xl border border-slate-200/80 bg-[#fbfcfd] hover:border-slate-300 transition-colors space-y-1">
+              <div class="flex items-center justify-between text-xs text-slate-500">
+                <span>Allocated to Channels</span>
+                <span class="text-[11px] text-slate-400">Open →</span>
+              </div>
+              <div id="b-sum-planned" class="text-lg font-bold tabular-nums text-slate-900">0 NOK</div>
+              <div id="b-sum-year-lbl" class="text-[11px] text-slate-400">Year 2026</div>
+            </button>
+
+            <button onclick="setBudgetSubView('actual')" class="text-left p-4 rounded-xl border border-slate-200/80 bg-[#fbfcfd] hover:border-slate-300 transition-colors space-y-1">
+              <div class="flex items-center justify-between text-xs text-slate-500">
+                <span>Total Actual Spend</span>
+                <span class="text-[11px] text-slate-400">Open →</span>
+              </div>
+              <div id="b-sum-actual" class="text-lg font-bold tabular-nums text-slate-900">0 NOK</div>
+              <div id="b-sum-actual-sub" class="text-[11px] text-slate-400">Recorded actuals</div>
+            </button>
+
+            <button onclick="setBudgetSubView('variance')" class="text-left p-4 rounded-xl border border-slate-200/80 bg-[#fbfcfd] hover:border-slate-300 transition-colors space-y-1">
+              <div class="flex items-center justify-between text-xs text-slate-500">
+                <span>Net Variance (Δ)</span>
+                <span class="text-[11px] text-slate-400">Open →</span>
+              </div>
+              <div id="b-sum-variance" class="text-lg font-bold tabular-nums text-slate-900">0 NOK</div>
+              <div id="b-sum-variance-sub" class="text-[11px] text-slate-400">Actual − Allocated</div>
+            </button>
+          </div>
+        </div>
+
+        <div id="budget-sub-total" class="hidden space-y-5">
+          <div class="rounded-2xl border border-slate-200/80 bg-[#fbfcfd] p-5 space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200/70">
+              <div>
+                <h3 class="text-sm font-semibold text-slate-900">Total Budget per Year (<span id="bt-year-lbl">2026</span>)</h3>
+                <p class="text-[11px] text-slate-500">Set an annual total and distribute evenly, or customize each month below.</p>
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <div class="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-3 h-8 text-xs">
+                  <span class="text-slate-400">Annual Total:</span>
+                  <input
+                    id="budget-annual-total"
+                    type="number"
+                    min="0"
+                    step="any"
+                    placeholder="0"
+                    oninput="handleAnnualBudgetChange()"
+                    class="w-28 bg-transparent text-slate-900 font-semibold tabular-nums text-xs focus:outline-none"
+                  />
+                  <span class="text-slate-400 text-[11px]">NOK</span>
+                </div>
+                <button onclick="distributeAnnualEvenly()" class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700">
+                  Distribute evenly across 12 months
+                </button>
+              </div>
+            </div>
+
+            <div class="space-y-2">
+              <div class="flex items-center justify-between text-xs">
+                <span class="font-medium text-slate-700">Budget per Month (NOK)</span>
+                <span id="bt-monthly-sum-lbl" class="tabular-nums text-[11px] text-slate-500">Monthly sum: 0 NOK</span>
+              </div>
+              <div id="bt-month-inputs" class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2.5"></div>
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 class="text-sm font-semibold text-slate-900">Monthly Budget Divided by Channels</h3>
+                <p class="text-[11px] text-slate-500">Shows each month's total budget cap split across your channels (NOK & % share).</p>
+              </div>
+              <div class="flex items-center gap-2 text-xs">
+                <span class="text-slate-400">Month:</span>
+                <select id="bt-divide-month" onchange="renderBudgetSubTotal()" class="h-8 px-2.5 rounded-lg border border-slate-200 bg-[#fbfcfd] text-xs font-medium text-slate-900 focus:outline-none">
+                  <option value="all">All 12 Months</option>
+                  <option value="0">January</option>
+                  <option value="1">February</option>
+                  <option value="2">March</option>
+                  <option value="3">April</option>
+                  <option value="4">May</option>
+                  <option value="5">June</option>
+                  <option value="6">July</option>
+                  <option value="7">August</option>
+                  <option value="8">September</option>
+                  <option value="9">October</option>
+                  <option value="10">November</option>
+                  <option value="11">December</option>
+                </select>
+              </div>
+            </div>
+
+            <div id="bt-divided-channels-container" class="space-y-3"></div>
+          </div>
+        </div>
+
+        <div id="budget-sub-allocated" class="hidden space-y-4">
+          <div id="budget-allocated-empty" class="hidden rounded-2xl border border-dashed border-slate-200 bg-[#fbfcfd] p-10 text-center text-xs text-slate-500">
+            No channels allocated yet. Click <strong>+ Add Budget</strong> above to add a channel.
+          </div>
+          <div id="budget-table-wrapper" class="rounded-2xl border border-slate-200/80 bg-white overflow-hidden card-shadow">
+            <div class="px-5 py-3.5 border-b border-slate-200/80 flex items-center justify-between">
+              <div>
+                <h3 class="text-sm font-semibold text-slate-900">Allocated Budget by Channel (NOK)</h3>
+                <p class="text-[11px] text-slate-500">Click any month cell to edit planned budget inline</p>
+              </div>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr class="border-b border-slate-200/80 bg-[#fbfcfd] text-slate-500">
+                    <th class="py-3 px-4 font-medium sticky left-0 bg-[#fbfcfd]">Channel</th>
+                    <th class="py-3 px-2.5 font-medium text-right">Jan</th>
+                    <th class="py-3 px-2.5 font-medium text-right">Feb</th>
+                    <th class="py-3 px-2.5 font-medium text-right">Mar</th>
+                    <th class="py-3 px-2.5 font-medium text-right">Apr</th>
+                    <th class="py-3 px-2.5 font-medium text-right">May</th>
+                    <th class="py-3 px-2.5 font-medium text-right">Jun</th>
+                    <th class="py-3 px-2.5 font-medium text-right">Jul</th>
+                    <th class="py-3 px-2.5 font-medium text-right">Aug</th>
+                    <th class="py-3 px-2.5 font-medium text-right">Sep</th>
+                    <th class="py-3 px-2.5 font-medium text-right">Oct</th>
+                    <th class="py-3 px-2.5 font-medium text-right">Nov</th>
+                    <th class="py-3 px-2.5 font-medium text-right">Dec</th>
+                    <th class="py-3 px-3 font-medium text-right">Total</th>
+                    <th class="py-3 px-3 font-medium text-right"></th>
+                  </tr>
+                </thead>
+                <tbody id="budget-table-body" class="divide-y divide-slate-200/70"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="budget-sub-actual" class="hidden space-y-4">
+          <div id="budget-actual-empty" class="hidden rounded-2xl border border-dashed border-slate-200 bg-[#fbfcfd] p-10 text-center text-xs text-slate-500">
+            No channels added yet. Click <strong>+ Add Budget</strong> above to start tracking actual spend.
+          </div>
+          <div id="budget-actual-wrapper" class="rounded-2xl border border-slate-200/80 bg-white overflow-hidden card-shadow">
+            <div class="px-5 py-3.5 border-b border-slate-200/80 flex items-center justify-between">
+              <div>
+                <h3 class="text-sm font-semibold text-slate-900">Actual Spend by Channel & Month (NOK)</h3>
+                <p class="text-[11px] text-slate-500">Click any month cell to record or update actual spend</p>
+              </div>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr class="border-b border-slate-200/80 bg-[#fbfcfd] text-slate-500">
+                    <th class="py-3 px-4 font-medium sticky left-0 bg-[#fbfcfd]">Channel</th>
+                    <th class="py-3 px-2.5 font-medium text-right">Jan</th>
+                    <th class="py-3 px-2.5 font-medium text-right">Feb</th>
+                    <th class="py-3 px-2.5 font-medium text-right">Mar</th>
+                    <th class="py-3 px-2.5 font-medium text-right">Apr</th>
+                    <th class="py-3 px-2.5 font-medium text-right">May</th>
+                    <th class="py-3 px-2.5 font-medium text-right">Jun</th>
+                    <th class="py-3 px-2.5 font-medium text-right">Jul</th>
+                    <th class="py-3 px-2.5 font-medium text-right">Aug</th>
+                    <th class="py-3 px-2.5 font-medium text-right">Sep</th>
+                    <th class="py-3 px-2.5 font-medium text-right">Oct</th>
+                    <th class="py-3 px-2.5 font-medium text-right">Nov</th>
+                    <th class="py-3 px-2.5 font-medium text-right">Dec</th>
+                    <th class="py-3 px-3 font-medium text-right">Actual Total</th>
+                  </tr>
+                </thead>
+                <tbody id="budget-actual-body" class="divide-y divide-slate-200/70"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="budget-sub-variance" class="hidden space-y-4">
+          <div id="budget-variance-empty" class="hidden rounded-2xl border border-dashed border-slate-200 bg-[#fbfcfd] p-10 text-center text-xs text-slate-500">
+            No variance data yet. Add channel budgets and actuals to inspect variance.
+          </div>
+          <div id="budget-variance-wrapper" class="rounded-2xl border border-slate-200/80 bg-white overflow-hidden card-shadow">
+            <div class="px-5 py-3.5 border-b border-slate-200/80">
+              <h3 class="text-sm font-semibold text-slate-900">Channel & Monthly Variance (NOK)</h3>
+              <p class="text-[11px] text-slate-500">Comparing allocated budget vs. actual spend per channel</p>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr class="border-b border-slate-200/80 bg-[#fbfcfd] text-slate-500">
+                    <th class="py-3 px-4 font-medium">Channel</th>
+                    <th class="py-3 px-4 font-medium text-right">Allocated (NOK)</th>
+                    <th class="py-3 px-4 font-medium text-right">Actual (NOK)</th>
+                    <th class="py-3 px-4 font-medium text-right">Variance (Δ)</th>
+                    <th class="py-3 px-4 font-medium text-right">Utilization</th>
+                  </tr>
+                </thead>
+                <tbody id="budget-variance-body" class="divide-y divide-slate-200/70"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 2C: CONTACTS APP -->
+      <section id="view-contacts" class="hidden max-w-6xl mx-auto space-y-6 animate-fade">
+        <div class="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-200/80">
+          <div class="flex items-center gap-2 text-xs">
+            <button onclick="openHub()" class="text-slate-500 hover:text-slate-900 font-medium flex items-center gap-1.5 transition-colors">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+              </svg>
+              <span>Apps</span>
+            </button>
+            <span class="text-slate-300">/</span>
+            <button onclick="selectContactGroup(null)" class="font-semibold text-slate-900 hover:underline underline-offset-2">Contacts</button>
+            <span id="contacts-crumb-sep" class="hidden text-slate-300">/</span>
+            <span id="contacts-crumb-group" class="hidden font-semibold text-slate-900"></span>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              id="contacts-back-btn"
+              onclick="selectContactGroup(null)"
+              class="hidden h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700"
+            >
+              ← All Groups
+            </button>
+            <button
+              onclick="toggleContactGroupForm(true)"
+              class="h-8 px-3.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-xs font-medium flex items-center gap-1.5 transition-colors"
+            >
+              <span>+ Add Group</span>
+            </button>
+            <button
+              id="contacts-add-partner-btn"
+              onclick="togglePartnerForm(true)"
+              class="hidden h-8 px-3.5 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium flex items-center gap-1.5 transition-colors"
+            >
+              <span>+ Add Partner / Entry</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="space-y-1">
+          <h2 id="contacts-page-title" class="text-xl font-bold tracking-tight text-slate-900">Contacts</h2>
+          <p id="contacts-page-desc" class="text-xs text-slate-500">
+            Create contact groups (e.g., Partners), add organizations with working countries, and manage contact persons.
+          </p>
+        </div>
+
+        <div id="contacts-top-chart" class="hidden rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-900" id="contacts-chart-title">Network Overview</h3>
+              <p class="text-[11px] text-slate-500" id="contacts-chart-sub">Distribution across groups and working countries</p>
+            </div>
+            <span id="contacts-chart-meta" class="text-[11px] tabular-nums text-slate-400"></span>
+          </div>
+          <div id="contacts-chart-segments" class="w-full h-2.5 rounded-full bg-slate-100 overflow-hidden flex gap-0.5"></div>
+          <div id="contacts-chart-legend" class="flex flex-wrap items-center gap-3 text-[11px] text-slate-600"></div>
+        </div>
+
+        <div id="contact-group-form" class="hidden rounded-2xl border border-slate-200 bg-[#fbfcfd] p-5 space-y-3 animate-fade">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-200/80">
+            <h3 class="text-sm font-semibold text-slate-900">Create Contact Group</h3>
+            <button onclick="toggleContactGroupForm(false)" class="text-xs text-slate-400 hover:text-slate-700">✕ Close</button>
+          </div>
+          <div class="flex flex-wrap items-end gap-3">
+            <div class="flex-1 min-w-[220px]">
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Group Name</label>
+              <input
+                id="cg-name-input"
+                type="text"
+                placeholder="e.g. Partners, Agencies, Media..."
+                onkeydown="if(event.key==='Enter'){event.preventDefault();saveContactGroup();}"
+                class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400"
+              />
+            </div>
+            <button onclick="saveContactGroup()" class="h-9 px-4 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium">
+              Create Group
+            </button>
+          </div>
+        </div>
+
+        <div id="contacts-groups-view" class="space-y-4">
+          <div id="contacts-groups-empty" class="rounded-2xl border border-dashed border-slate-200 bg-[#fbfcfd] p-12 flex flex-col items-center justify-center text-center min-h-[260px]">
+            <div class="w-11 h-11 rounded-xl bg-white border border-slate-200/80 flex items-center justify-center text-slate-700 mb-3 card-shadow">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+              </svg>
+            </div>
+            <div class="text-sm font-semibold text-slate-900">No contact groups yet</div>
+            <p class="text-xs text-slate-500 max-w-sm mt-1 mb-4">
+              Create a group such as "Partners" to organize partner companies, working countries, and contact persons.
+            </p>
+            <button
+              onclick="toggleContactGroupForm(true)"
+              class="h-8 px-3.5 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium flex items-center gap-1.5"
+            >
+              <span>+ Create First Group</span>
+            </button>
+          </div>
+
+          <div id="contacts-groups-grid" class="hidden grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+        </div>
+
+        <div id="contacts-group-detail" class="hidden space-y-5">
+          <div id="partner-form-panel" class="hidden rounded-2xl border border-slate-200 bg-[#fbfcfd] p-5 space-y-4 animate-fade">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-200/80">
+              <h3 id="partner-form-title" class="text-sm font-semibold text-slate-900">Add Partner / Entry</h3>
+              <button onclick="togglePartnerForm(false)" class="text-xs text-slate-400 hover:text-slate-700">✕ Close</button>
+            </div>
+            <input type="hidden" id="p-edit-id" value="" />
+
+            <div class="space-y-3.5">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                <div>
+                  <label class="block text-[11px] font-medium text-slate-600 mb-1">Partner / Organization Name</label>
+                  <input
+                    id="p-name-input"
+                    type="text"
+                    placeholder="e.g. Partner X"
+                    class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400"
+                  />
+                </div>
+                <div>
+                  <label class="block text-[11px] font-medium text-slate-600 mb-1">Partner Website (auto-retracts logo)</label>
+                  <div class="flex items-center gap-2">
+                    <div id="p-logo-preview" class="w-9 h-9 rounded-lg border border-slate-200 bg-white flex items-center justify-center shrink-0 overflow-hidden text-[11px] font-semibold text-slate-400">
+                      —
+                    </div>
+                    <input
+                      id="p-website-input"
+                      type="url"
+                      placeholder="https://partner.com"
+                      oninput="updatePartnerLogoPreview()"
+                      class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-[11px] font-medium text-slate-600 mb-1.5">Working Countries</label>
+                <div id="p-countries-pills" class="flex flex-wrap gap-1.5 mb-2"></div>
+                <div class="flex items-center gap-1.5 max-w-xs">
+                  <input
+                    id="p-country-custom"
+                    type="text"
+                    placeholder="Add other country..."
+                    onkeydown="if(event.key==='Enter'){event.preventDefault();addCustomCountry();}"
+                    class="flex-1 h-8 px-2.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400"
+                  />
+                  <button type="button" onclick="addCustomCountry()" class="h-8 px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-[11px] font-medium text-slate-700">
+                    Add
+                  </button>
+                </div>
+              </div>
+
+              <div id="p-country-websites-wrap" class="hidden pt-2 border-t border-slate-200/70 space-y-2">
+                <label class="block text-[11px] font-medium text-slate-600">Website per Country (optional — retracts country logo)</label>
+                <div id="p-country-websites-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5"></div>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200/70">
+              <button onclick="togglePartnerForm(false)" class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-600">
+                Cancel
+              </button>
+              <button onclick="savePartner()" class="h-8 px-4 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium">
+                Save
+              </button>
+            </div>
+          </div>
+
+          <div id="contact-person-form" class="hidden rounded-2xl border border-slate-200 bg-[#fbfcfd] p-5 space-y-4 animate-fade">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-200/80">
+              <h3 id="cp-form-title" class="text-sm font-semibold text-slate-900">Add Contact Person</h3>
+              <button onclick="toggleContactPersonForm(false)" class="text-xs text-slate-400 hover:text-slate-700">✕ Close</button>
+            </div>
+            <input type="hidden" id="cp-partner-id" value="" />
+            <input type="hidden" id="cp-edit-id" value="" />
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div>
+                <label class="block text-[11px] font-medium text-slate-600 mb-1">Name</label>
+                <input id="cp-name" type="text" placeholder="Full name" class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+              </div>
+              <div>
+                <label class="block text-[11px] font-medium text-slate-600 mb-1">Function</label>
+                <input id="cp-function" type="text" placeholder="Role / Title" class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+              </div>
+              <div>
+                <label class="block text-[11px] font-medium text-slate-600 mb-1">Phone</label>
+                <input id="cp-phone" type="text" placeholder="+47 ..." class="w-full h-9 px-3 text-xs tabular-nums bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+              </div>
+              <div>
+                <label class="block text-[11px] font-medium text-slate-600 mb-1">Email</label>
+                <input id="cp-email" type="email" placeholder="name@company.com" class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+              </div>
+              <div>
+                <label class="block text-[11px] font-medium text-slate-600 mb-1">Location</label>
+                <input id="cp-location" type="text" placeholder="City / Country" class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+              </div>
+              <div>
+                <label class="block text-[11px] font-medium text-slate-600 mb-1">LinkedIn</label>
+                <div class="flex items-center gap-2">
+                  <div id="cp-avatar-preview" class="w-9 h-9 rounded-full bg-slate-100 text-slate-500 border border-slate-200 flex items-center justify-center text-[11px] font-semibold shrink-0 overflow-hidden"></div>
+                  <input id="cp-linkedin" type="url" oninput="updateContactAvatarPreview()" placeholder="https://linkedin.com/in/..." class="flex-1 min-w-0 h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+                </div>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200/70">
+              <button onclick="toggleContactPersonForm(false)" class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-600">
+                Cancel
+              </button>
+              <button onclick="saveContactPerson()" class="h-8 px-4 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium">
+                Save Contact
+              </button>
+            </div>
+          </div>
+
+          <div id="partners-empty-state" class="rounded-2xl border border-dashed border-slate-200 bg-[#fbfcfd] p-10 text-center text-xs text-slate-500">
+            No entries in this group yet. Click <strong>+ Add Partner / Entry</strong> above to add one.
+          </div>
+
+          <div id="partners-list" class="space-y-4"></div>
+        </div>
+
+        <div id="contact-detail-modal" onclick="if(event.target===this) closeContactModal()" class="hidden fixed inset-0 z-50 bg-slate-900/30 backdrop-blur-[1px] flex items-center justify-center p-4">
+          <div class="w-full max-w-md rounded-2xl border border-slate-200 bg-white card-shadow p-6 space-y-5 animate-fade">
+            <div class="flex items-start justify-between gap-3 pb-3 border-b border-slate-200/80">
+              <div class="flex items-center gap-3">
+                <div id="modal-c-avatar" class="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center text-sm font-semibold shrink-0 overflow-hidden"></div>
+                <div>
+                  <h3 id="modal-c-name" class="text-base font-bold text-slate-900"></h3>
+                  <p id="modal-c-sub" class="text-xs text-slate-500"></p>
+                </div>
+              </div>
+              <button onclick="closeContactModal()" class="text-xs text-slate-400 hover:text-slate-700 p-1">✕</button>
+            </div>
+
+            <div class="space-y-3 text-xs">
+              <div class="flex items-center justify-between py-1.5 border-b border-slate-100">
+                <span class="text-slate-500">Function</span>
+                <span id="modal-c-function" class="font-medium text-slate-900"></span>
+              </div>
+              <div class="flex items-center justify-between py-1.5 border-b border-slate-100">
+                <span class="text-slate-500">Phone</span>
+                <a id="modal-c-phone" href="#" class="font-medium tabular-nums text-slate-900 hover:underline"></a>
+              </div>
+              <div class="flex items-center justify-between py-1.5 border-b border-slate-100">
+                <span class="text-slate-500">Email</span>
+                <a id="modal-c-email" href="#" class="font-medium text-slate-900 hover:underline"></a>
+              </div>
+              <div class="flex items-center justify-between py-1.5 border-b border-slate-100">
+                <span class="text-slate-500">Location</span>
+                <span id="modal-c-location" class="font-medium text-slate-900"></span>
+              </div>
+              <div class="flex items-center justify-between py-1.5">
+                <span class="text-slate-500">LinkedIn</span>
+                <a id="modal-c-linkedin" href="#" target="_blank" rel="noopener noreferrer" class="font-medium text-slate-900 hover:underline"></a>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between pt-3 border-t border-slate-200/70">
+              <button id="modal-c-delete-btn" class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-xs font-medium text-slate-600">
+                Delete
+              </button>
+              <div class="flex items-center gap-2">
+                <button onclick="closeContactModal()" class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-600">
+                  Close
+                </button>
+                <button id="modal-c-edit-btn" class="h-8 px-4 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium">
+                  Edit Contact
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 2D: LEADS APP -->
+      <section id="view-leads" class="hidden max-w-6xl mx-auto space-y-6 animate-fade">
+        <div class="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-200/80">
+          <div class="flex items-center gap-2 text-xs">
+            <button onclick="openHub()" class="text-slate-500 hover:text-slate-900 font-medium flex items-center gap-1.5 transition-colors">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+              </svg>
+              <span>Apps</span>
+            </button>
+            <span class="text-slate-300">/</span>
+            <span class="font-semibold text-slate-900">Leads</span>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              onclick="toggleLeadStageForm(true)"
+              class="h-8 px-3.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-xs font-medium flex items-center gap-1.5 transition-colors"
+            >
+              <span>+ Add Stage</span>
+            </button>
+            <button
+              onclick="toggleLeadForm(true)"
+              class="h-8 px-3.5 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium flex items-center gap-1.5 transition-colors"
+            >
+              <span>+ Add Lead</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="space-y-1">
+          <h2 class="text-xl font-bold tracking-tight text-slate-900">Leads</h2>
+          <p class="text-xs text-slate-500">
+            Track inbound leads across custom Kanban stages with company name, ERP system, integrations, channel, and NOK value.
+          </p>
+        </div>
+
+        <div id="lead-stage-form" class="hidden rounded-2xl border border-slate-200 bg-[#fbfcfd] p-5 space-y-3 animate-fade">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-200/80">
+            <h3 class="text-sm font-semibold text-slate-900">Add Kanban Stage</h3>
+            <button onclick="toggleLeadStageForm(false)" class="text-xs text-slate-400 hover:text-slate-700">✕ Close</button>
+          </div>
+          <div class="flex flex-wrap items-end gap-3">
+            <div class="flex-1 min-w-[220px]">
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Stage Name</label>
+              <input
+                id="ls-name-input"
+                type="text"
+                placeholder="e.g. Demo / Review, Quote Sent, Waiting Decision, Won..."
+                onkeydown="if(event.key==='Enter'){event.preventDefault();saveLeadStage();}"
+                class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400"
+              />
+            </div>
+            <button onclick="saveLeadStage()" class="h-9 px-4 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium">
+              Add Stage
+            </button>
+          </div>
+        </div>
+
+        <div id="lead-form-panel" class="hidden rounded-2xl border border-slate-200 bg-[#fbfcfd] p-5 space-y-4 animate-fade">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-200/80">
+            <h3 id="lead-form-title" class="text-sm font-semibold text-slate-900">New Lead</h3>
+            <button onclick="toggleLeadForm(false)" class="text-xs text-slate-400 hover:text-slate-700">✕ Close</button>
+          </div>
+          <input type="hidden" id="l-edit-id" value="" />
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Company Name</label>
+              <input id="l-company" type="text" placeholder="e.g. AV Partner" class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">ERP-system</label>
+              <input id="l-erp" type="text" placeholder="e.g. Multicase, Business NXT" class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Integration (optional, other than ERP)</label>
+              <input id="l-integration" type="text" placeholder="e.g. Logistra, Kardex" class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Channel</label>
+              <select
+                id="l-channel"
+                onchange="handleLeadChannelChange()"
+                class="w-full h-9 px-2.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-slate-400"
+              ></select>
+              <div id="l-channel-custom-wrap" class="hidden mt-1.5 flex items-center gap-1.5">
+                <input
+                  id="l-channel-custom"
+                  type="text"
+                  placeholder="New channel..."
+                  onkeydown="if(event.key==='Enter'){event.preventDefault();confirmAddLeadChannel();}"
+                  class="flex-1 h-8 px-2.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400"
+                />
+                <button type="button" onclick="confirmAddLeadChannel()" class="h-8 px-2.5 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-[11px] font-medium">
+                  Add
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Stage</label>
+              <select id="l-stage" class="w-full h-9 px-2.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-slate-400"></select>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Value (NOK, optional)</label>
+              <input id="l-value" type="number" min="0" step="any" placeholder="0" class="w-full h-9 px-3 text-xs tabular-nums bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+            </div>
+          </div>
+
+          <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200/70">
+            <button onclick="toggleLeadForm(false)" class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-600">
+              Cancel
+            </button>
+            <button onclick="saveLead()" class="h-8 px-4 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium">
+              Save Lead
+            </button>
+          </div>
+        </div>
+
+        <div id="leads-empty-state" class="rounded-2xl border border-dashed border-slate-200 bg-[#fbfcfd] p-12 flex flex-col items-center justify-center text-center min-h-[260px]">
+          <div class="w-11 h-11 rounded-xl bg-white border border-slate-200/80 flex items-center justify-center text-slate-700 mb-3 card-shadow">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/>
+            </svg>
+          </div>
+          <div class="text-sm font-semibold text-slate-900">No Kanban stages yet</div>
+          <p class="text-xs text-slate-500 max-w-sm mt-1 mb-4">
+            Create your first stage (e.g., Demo, Proposal Sent, Waiting Decision) to start organizing leads on the Kanban board.
+          </p>
+          <button
+            onclick="toggleLeadStageForm(true)"
+            class="h-8 px-3.5 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium flex items-center gap-1.5"
+          >
+            <span>+ Add First Stage</span>
+          </button>
+        </div>
+
+        <div id="leads-pipeline-bar" class="hidden rounded-2xl border border-slate-200/80 bg-white p-4 card-shadow space-y-2.5">
+          <div class="flex items-center justify-between text-xs">
+            <span class="font-semibold text-slate-900">Pipeline Distribution</span>
+            <span id="leads-pipeline-bar-meta" class="text-[11px] tabular-nums text-slate-400"></span>
+          </div>
+          <div id="leads-pipeline-segments" class="w-full h-2.5 rounded-full bg-slate-100 overflow-hidden flex gap-0.5"></div>
+          <div id="leads-pipeline-legend" class="flex flex-wrap items-center gap-3 text-[11px] text-slate-600"></div>
+        </div>
+
+        <div id="leads-kanban-board" class="hidden flex gap-4 overflow-x-auto pb-3 items-start"></div>
+
+        <!-- KANBAN CHART UNDERNEATH -->
+        <div id="leads-chart-card" class="hidden rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-200/70">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-900">Leads &amp; Value by Kanban Stage</h3>
+              <p class="text-[11px] text-slate-500">Hover bars to inspect lead count, stage share, and NOK pipeline value</p>
+            </div>
+            <div class="flex items-center gap-4 text-[11px] text-slate-500">
+              <span id="leads-chart-meta" class="tabular-nums text-slate-400"></span>
+              <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#7c3aed]"></span>Leads (%)</span>
+              <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#10b981]"></span>Value (%)</span>
+            </div>
+          </div>
+          <canvas id="leadsStageChart" height="200" class="w-full"></canvas>
+        </div>
+      </section>
+
+      <!-- VIEW 2F: COMPETITOR ANALYSIS APP -->
+      <section id="view-competitors" class="hidden max-w-6xl mx-auto space-y-6 animate-fade">
+        <div class="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-200/80">
+          <div class="flex items-center gap-2 text-xs">
+            <button onclick="openHub()" class="text-slate-500 hover:text-slate-900 font-medium flex items-center gap-1.5 transition-colors">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+              </svg>
+              <span>Apps</span>
+            </button>
+            <span class="text-slate-300">/</span>
+            <span class="font-semibold text-slate-900">Competitor Analysis</span>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              onclick="toggleCompetitorForm(true)"
+              class="h-8 px-3.5 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium flex items-center gap-1.5 transition-colors"
+            >
+              <span>+ Add Competitor</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="space-y-1">
+          <h2 class="text-xl font-bold tracking-tight text-slate-900">Competitor Analysis</h2>
+          <p class="text-xs text-slate-500">
+            Track competitors, positioning, pricing, strengths, weaknesses, and channel overlap synced with Channels.
+          </p>
+        </div>
+
+        <!-- CHART ON TOP -->
+        <div id="competitors-chart-card" class="hidden rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-200/70">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-900">Competitor Strength & Channel Overlap</h3>
+              <p class="text-[11px] text-slate-500">Hover bars to inspect strength score and active channel overlap</p>
+            </div>
+            <div class="flex items-center gap-4 text-[11px] text-slate-500">
+              <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#7c3aed]"></span>Strength (%)</span>
+              <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#10b981]"></span>Channel Overlap (%)</span>
+            </div>
+          </div>
+          <canvas id="competitorsChart" height="200" class="w-full"></canvas>
+        </div>
+
+        <!-- ADD / EDIT COMPETITOR FORM -->
+        <div id="competitor-form-panel" class="hidden rounded-2xl border border-slate-200 bg-[#fbfcfd] p-5 space-y-4 animate-fade">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-200/80">
+            <h3 id="competitor-form-title" class="text-sm font-semibold text-slate-900">Add Competitor</h3>
+            <button onclick="toggleCompetitorForm(false)" class="text-xs text-slate-400 hover:text-slate-700">✕ Close</button>
+          </div>
+
+          <input type="hidden" id="comp-edit-id" value="" />
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Company Name</label>
+              <input id="comp-name" type="text" placeholder="e.g. Acme Corp" class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+            </div>
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Website</label>
+              <input id="comp-website" type="text" placeholder="https://..." class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+            </div>
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Positioning</label>
+              <input id="comp-positioning" type="text" placeholder="e.g. Enterprise ERP" class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+            </div>
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Pricing</label>
+              <input id="comp-pricing" type="text" placeholder="e.g. 4,900 NOK/mo" class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+            </div>
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Strength Score (1–10)</label>
+              <input id="comp-score" type="number" min="1" max="10" step="1" placeholder="7" class="w-full h-9 px-3 text-xs tabular-nums bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+            </div>
+          </div>
+
+          <div class="space-y-1.5">
+            <label class="block text-[11px] font-medium text-slate-600">Active Channels (from Channels app)</label>
+            <div id="comp-channels-picker" class="flex flex-wrap gap-1.5"></div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Strengths</label>
+              <input id="comp-strengths" type="text" placeholder="Key advantages..." class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+            </div>
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Weaknesses / Gaps</label>
+              <input id="comp-weaknesses" type="text" placeholder="Where Modu wins..." class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+            </div>
+          </div>
+
+          <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200/70">
+            <button onclick="toggleCompetitorForm(false)" class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-600">
+              Cancel
+            </button>
+            <button onclick="saveCompetitor()" class="h-8 px-4 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium">
+              Save Competitor
+            </button>
+          </div>
+        </div>
+
+        <!-- EMPTY STATE -->
+        <div id="competitors-empty-state" class="rounded-2xl border border-dashed border-slate-200 bg-[#fbfcfd] p-12 flex flex-col items-center justify-center text-center min-h-[240px]">
+          <div class="w-11 h-11 rounded-xl bg-white border border-slate-200/80 flex items-center justify-center text-slate-700 mb-3 card-shadow">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+            </svg>
+          </div>
+          <div class="text-sm font-semibold text-slate-900">No competitors tracked yet</div>
+          <p class="text-xs text-slate-500 max-w-sm mt-1 mb-4">
+            Add competitors to compare positioning, pricing, strengths, weaknesses, and channel overlap.
+          </p>
+          <button
+            onclick="toggleCompetitorForm(true)"
+            class="h-8 px-3.5 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium flex items-center gap-1.5"
+          >
+            <span>+ Add Competitor</span>
+          </button>
+        </div>
+
+        <!-- COMPETITORS GRID -->
+        <div id="competitors-grid" class="hidden grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+
+        <!-- 4 SUMMARY CARDS UNDERNEATH -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+          <div class="p-4 rounded-xl border border-slate-200/80 bg-[#fbfcfd] space-y-1">
+            <div class="flex items-center justify-between text-xs text-slate-500">
+              <span>Competitors</span>
+              <span class="text-[11px] text-slate-400">Tracked</span>
+            </div>
+            <div id="comp-sum-count" class="text-lg font-bold tabular-nums text-slate-900">0</div>
+            <div class="text-[11px] text-slate-400">Active profiles</div>
+          </div>
+
+          <div class="p-4 rounded-xl border border-slate-200/80 bg-[#fbfcfd] space-y-1">
+            <div class="flex items-center justify-between text-xs text-slate-500">
+              <span>Avg. Strength</span>
+              <span class="text-[11px] text-slate-400">Score</span>
+            </div>
+            <div id="comp-sum-score" class="text-lg font-bold tabular-nums text-slate-900">0.0 / 10</div>
+            <div class="text-[11px] text-slate-400">Market threat index</div>
+          </div>
+
+          <div class="p-4 rounded-xl border border-slate-200/80 bg-[#fbfcfd] space-y-1">
+            <div class="flex items-center justify-between text-xs text-slate-500">
+              <span>Avg. Channel Overlap</span>
+              <span class="text-[11px] text-slate-400">Sync</span>
+            </div>
+            <div id="comp-sum-overlap" class="text-lg font-bold tabular-nums text-slate-900">0.0%</div>
+            <div class="text-[11px] text-slate-400">Of your Channels</div>
+          </div>
+
+          <div class="p-4 rounded-xl border border-slate-200/80 bg-[#fbfcfd] space-y-1">
+            <div class="flex items-center justify-between text-xs text-slate-500">
+              <span>Most Crowded Channel</span>
+              <span class="text-[11px] text-slate-400">Presence</span>
+            </div>
+            <div id="comp-sum-top-channel" class="text-lg font-bold text-slate-900 truncate">—</div>
+            <div id="comp-sum-top-channel-sub" class="text-[11px] text-slate-400">No channel data yet</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 2G: AEO & SEO COMPARISON APP -->
+      <section id="view-aeo-seo" class="hidden max-w-6xl mx-auto space-y-6 animate-fade">
+        <div class="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-200/80">
+          <div class="flex items-center gap-2 text-xs">
+            <button onclick="openHub()" class="text-slate-500 hover:text-slate-900 font-medium flex items-center gap-1.5 transition-colors">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+              </svg>
+              <span>Apps</span>
+            </button>
+            <span class="text-slate-300">/</span>
+            <span class="font-semibold text-slate-900">AEO &amp; SEO Comparison</span>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              onclick="toggleAeoSeoForm(true)"
+              class="h-8 px-3.5 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium flex items-center gap-1.5 transition-colors"
+            >
+              <span>+ Add Query</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="space-y-1">
+          <h2 class="text-xl font-bold tracking-tight text-slate-900">AEO &amp; SEO Comparison</h2>
+          <p class="text-xs text-slate-500">
+            Compare visibility across AI Answer Engines (AEO) and traditional Search rankings (SEO) per query.
+          </p>
+        </div>
+
+        <!-- CHART ON TOP -->
+        <div id="aeo-seo-chart-card" class="hidden rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-200/70">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-900">AEO vs. SEO Visibility (%)</h3>
+              <p class="text-[11px] text-slate-500">Hover bars to inspect AI Answer Engine vs. Search visibility per query</p>
+            </div>
+            <div class="flex items-center gap-4 text-[11px] text-slate-500">
+              <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#7c3aed]"></span>AEO Visibility (%)</span>
+              <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#10b981]"></span>SEO Visibility (%)</span>
+            </div>
+          </div>
+          <canvas id="aeoSeoChart" height="200" class="w-full"></canvas>
+        </div>
+
+        <!-- ADD / EDIT QUERY FORM -->
+        <div id="aeo-seo-form-panel" class="hidden rounded-2xl border border-slate-200 bg-[#fbfcfd] p-5 space-y-4 animate-fade">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-200/80">
+            <h3 id="aeo-seo-form-title" class="text-sm font-semibold text-slate-900">Add Query</h3>
+            <button onclick="toggleAeoSeoForm(false)" class="text-xs text-slate-400 hover:text-slate-700">✕ Close</button>
+          </div>
+
+          <input type="hidden" id="as-edit-id" value="" />
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Query / Topic</label>
+              <input id="as-query" type="text" placeholder="e.g. best B2B ERP integration" class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Intent</label>
+              <select id="as-intent" class="w-full h-9 px-2.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-slate-400">
+                <option value="Commercial">Commercial</option>
+                <option value="Comparison">Comparison</option>
+                <option value="Informational">Informational</option>
+                <option value="Brand">Brand</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">AI Engine</label>
+              <select id="as-aeo-engine" class="w-full h-9 px-2.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-slate-400">
+                <option value="ChatGPT">ChatGPT</option>
+                <option value="Perplexity">Perplexity</option>
+                <option value="Google AI Overview">Google AI Overview</option>
+                <option value="Claude">Claude</option>
+                <option value="Gemini">Gemini</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">AEO Visibility (%)</label>
+              <input id="as-aeo-score" type="number" min="0" max="100" step="1" placeholder="0–100" class="w-full h-9 px-3 text-xs tabular-nums bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">SEO Visibility (%)</label>
+              <input id="as-seo-score" type="number" min="0" max="100" step="1" placeholder="0–100" class="w-full h-9 px-3 text-xs tabular-nums bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+            </div>
+
+            <div class="grid grid-cols-2 gap-2.5">
+              <div>
+                <label class="block text-[11px] font-medium text-slate-600 mb-1">SEO Rank (#)</label>
+                <input id="as-seo-pos" type="number" min="0" max="100" step="1" placeholder="e.g. 3" class="w-full h-9 px-3 text-xs tabular-nums bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+              </div>
+              <div>
+                <label class="block text-[11px] font-medium text-slate-600 mb-1">AEO Status</label>
+                <select id="as-cited" class="w-full h-9 px-2 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-slate-400">
+                  <option value="Cited">Cited</option>
+                  <option value="Mentioned">Mentioned</option>
+                  <option value="Not Cited">Not Cited</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200/70">
+            <button onclick="toggleAeoSeoForm(false)" class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-600">
+              Cancel
+            </button>
+            <button onclick="saveAeoSeoEntry()" class="h-8 px-4 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium">
+              Save Query
+            </button>
+          </div>
+        </div>
+
+        <!-- EMPTY STATE -->
+        <div id="aeo-seo-empty-state" class="rounded-2xl border border-dashed border-slate-200 bg-[#fbfcfd] p-12 flex flex-col items-center justify-center text-center min-h-[240px]">
+          <div class="w-11 h-11 rounded-xl bg-white border border-slate-200/80 flex items-center justify-center text-slate-700 mb-3 card-shadow">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+          </div>
+          <div class="text-sm font-semibold text-slate-900">No queries tracked yet</div>
+          <p class="text-xs text-slate-500 max-w-sm mt-1 mb-4">
+            Add target queries to compare your AI Answer Engine visibility against traditional SEO rankings.
+          </p>
+          <button
+            onclick="toggleAeoSeoForm(true)"
+            class="h-8 px-3.5 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium flex items-center gap-1.5"
+          >
+            <span>+ Add Query</span>
+          </button>
+        </div>
+
+        <!-- COMPARISON TABLE -->
+        <div id="aeo-seo-table-wrapper" class="hidden rounded-2xl border border-slate-200/80 bg-white overflow-hidden card-shadow">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr class="border-b border-slate-200/80 bg-[#fbfcfd] text-slate-500">
+                  <th class="py-3 px-4 font-medium">Query</th>
+                  <th class="py-3 px-4 font-medium">Intent</th>
+                  <th class="py-3 px-4 font-medium">AEO Visibility</th>
+                  <th class="py-3 px-4 font-medium">SEO Visibility</th>
+                  <th class="py-3 px-4 font-medium">Status</th>
+                  <th class="py-3 px-4 font-medium text-right">Gap</th>
+                  <th class="py-3 px-4 font-medium text-right"></th>
+                </tr>
+              </thead>
+              <tbody id="aeo-seo-table-body" class="divide-y divide-slate-200/70"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 4 SUMMARY CARDS UNDERNEATH -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+          <div class="p-4 rounded-xl border border-slate-200/80 bg-[#fbfcfd] space-y-1">
+            <div class="flex items-center justify-between text-xs text-slate-500">
+              <span>Tracked Queries</span>
+              <span class="text-[11px] text-slate-400">Coverage</span>
+            </div>
+            <div id="as-sum-count" class="text-lg font-bold tabular-nums text-slate-900">0</div>
+            <div id="as-sum-cited" class="text-[11px] text-slate-400">0 cited in AI</div>
+          </div>
+
+          <div class="p-4 rounded-xl border border-slate-200/80 bg-[#fbfcfd] space-y-1">
+            <div class="flex items-center justify-between text-xs text-slate-500">
+              <span>Avg. AEO Visibility</span>
+              <span class="text-[11px] text-slate-400">AI Engines</span>
+            </div>
+            <div id="as-sum-aeo" class="text-lg font-bold tabular-nums text-slate-900">0.0%</div>
+            <div class="text-[11px] text-slate-400">Answer engine share</div>
+          </div>
+
+          <div class="p-4 rounded-xl border border-slate-200/80 bg-[#fbfcfd] space-y-1">
+            <div class="flex items-center justify-between text-xs text-slate-500">
+              <span>Avg. SEO Visibility</span>
+              <span class="text-[11px] text-slate-400">Search</span>
+            </div>
+            <div id="as-sum-seo" class="text-lg font-bold tabular-nums text-slate-900">0.0%</div>
+            <div id="as-sum-rank" class="text-[11px] text-slate-400">Avg. rank: —</div>
+          </div>
+
+          <div class="p-4 rounded-xl border border-slate-200/80 bg-[#fbfcfd] space-y-1">
+            <div class="flex items-center justify-between text-xs text-slate-500">
+              <span>AEO vs. SEO Gap</span>
+              <span class="text-[11px] text-slate-400">Delta</span>
+            </div>
+            <div id="as-sum-gap" class="text-lg font-bold tabular-nums text-slate-900">0.0%</div>
+            <div id="as-sum-gap-sub" class="text-[11px] text-slate-400">Parity</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 3: OTHER APP SHELLS -->
+      <section id="view-app-detail" class="hidden max-w-6xl mx-auto space-y-6 animate-fade">
+        <div class="flex items-center justify-between pb-4 border-b border-slate-200/80">
+          <div class="flex items-center gap-2 text-xs">
+            <button onclick="openHub()" class="text-slate-500 hover:text-slate-900 font-medium flex items-center gap-1.5 transition-colors">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+              </svg>
+              <span>Apps</span>
+            </button>
+            <span class="text-slate-300">/</span>
+            <span id="active-app-breadcrumb" class="font-semibold text-slate-900"></span>
+          </div>
+
+          <span id="active-app-status" class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700"></span>
+        </div>
+
+        <div class="space-y-1">
+          <h2 id="active-app-title" class="text-xl font-bold tracking-tight text-slate-900"></h2>
+          <p id="active-app-desc" class="text-sm text-slate-500"></p>
+        </div>
+
+        <div class="rounded-2xl border border-dashed border-slate-200 bg-[#fbfcfd] p-12 flex flex-col items-center justify-center text-center min-h-[340px]">
+          <div class="w-12 h-12 rounded-xl bg-white border border-slate-200/80 flex items-center justify-center text-slate-700 mb-3 card-shadow">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <rect x="3" y="3" width="18" height="18" rx="3" stroke-width="1.6"/>
+            </svg>
+          </div>
+          <div class="text-sm font-semibold text-slate-900" id="active-app-empty-title">Ready to build</div>
+          <p class="text-xs text-slate-500 max-w-sm mt-1">
+            This app workspace is intentionally empty with no mock content.
+          </p>
+        </div>
+      </section>
+
+      <!-- VIEW 4: GENERIC SECTION -->
+      <section id="view-generic-section" class="hidden max-w-6xl mx-auto space-y-6 animate-fade">
+        <div class="space-y-1">
+          <h1 id="generic-section-title" class="text-2xl font-bold tracking-tight text-slate-900"></h1>
+          <p id="generic-section-desc" class="text-sm text-slate-500"></p>
+        </div>
+        <div class="rounded-2xl border border-dashed border-slate-200 bg-[#fbfcfd] p-12 flex flex-col items-center justify-center text-center min-h-[300px]">
+          <p class="text-xs text-slate-500">Empty view — ready to configure.</p>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script is:inline src={`${base}app.js`}></script>
+</body>
+</html>
