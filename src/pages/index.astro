@@ -1796,6 +1796,9 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
                 <option value="2027">2027</option>
               </select>
             </div>
+            <button onclick="toggleReportsMetricsForm(true)" class="h-8 px-3 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium transition-colors">
+              + Log Metrics
+            </button>
             <button onclick="openApp('budget')" class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition-colors">
               Open Budget →
             </button>
@@ -1805,6 +1808,49 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
         <div class="space-y-1">
           <h2 class="text-xl font-bold tracking-tight text-slate-900">Marketing Reports</h2>
           <p class="text-xs text-slate-500">Overview of monthly marketing performance and per-channel breakdown in NOK.</p>
+        </div>
+
+        <div id="mr-metrics-panel" class="hidden rounded-2xl border border-slate-200 bg-[#fbfcfd] p-5 space-y-4 animate-fade">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-200/80">
+            <h3 class="text-sm font-semibold text-slate-900">Log Channel Metrics (Leads &amp; CTR)</h3>
+            <button type="button" onclick="toggleReportsMetricsForm(false)" class="text-xs text-slate-400 hover:text-slate-700">✕ Close</button>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Channel</label>
+              <select id="mr-m-channel" class="w-full h-9 px-2.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-slate-400"></select>
+            </div>
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Month</label>
+              <select id="mr-m-month" class="w-full h-9 px-2.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-slate-400">
+                <option value="all">All Months (÷ 12 for Leads)</option>
+                <option value="0">January</option>
+                <option value="1">February</option>
+                <option value="2">March</option>
+                <option value="3">April</option>
+                <option value="4">May</option>
+                <option value="5">June</option>
+                <option value="6">July</option>
+                <option value="7">August</option>
+                <option value="8">September</option>
+                <option value="9">October</option>
+                <option value="10">November</option>
+                <option value="11">December</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Leads</label>
+              <input id="mr-m-leads" type="number" min="0" step="1" placeholder="0" class="w-full h-9 px-3 text-xs tabular-nums bg-white border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-slate-400" />
+            </div>
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">CTR (%)</label>
+              <input id="mr-m-ctr" type="number" min="0" max="100" step="0.01" placeholder="0.00" class="w-full h-9 px-3 text-xs tabular-nums bg-white border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-slate-400" />
+            </div>
+          </div>
+          <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200/70">
+            <button type="button" onclick="toggleReportsMetricsForm(false)" class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-600">Cancel</button>
+            <button type="button" onclick="saveReportsMetrics()" class="h-8 px-4 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium">Save Metrics</button>
+          </div>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
@@ -1826,32 +1872,39 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
           <div class="p-4 rounded-xl border border-slate-200/80 bg-[#fbfcfd] space-y-1">
             <div class="text-xs text-slate-500">Remaining Budget</div>
             <div id="mr-kpi-remaining" class="text-lg font-bold tabular-nums text-slate-900">0 NOK</div>
-            <div class="text-[11px] text-slate-400">Planned − Actual</div>
+            <div id="mr-kpi-remaining-sub" class="text-[11px] text-slate-400">Planned − Actual</div>
           </div>
         </div>
 
         <div class="rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-3">
-          <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 class="text-sm font-semibold text-slate-900">Overview Chart (<span id="mr-chart-year">2026</span>)</h3>
-              <p class="text-[11px] text-slate-500">Monthly planned budget vs. actual spend across all channels</p>
+              <p id="mr-chart-subtitle" class="text-[11px] text-slate-500">Monthly planned budget vs. actual spend across all channels</p>
             </div>
-            <div class="flex items-center gap-3 text-[11px] text-slate-600">
-              <span class="flex items-center gap-1.5">
-                <span class="w-2.5 h-2.5 rounded-full bg-[#10b981] inline-block"></span>
-                <span>Planned</span>
-              </span>
-              <span class="flex items-center gap-1.5">
-                <span class="w-2.5 h-2.5 rounded-full bg-[#7c3aed] inline-block"></span>
-                <span>Actual</span>
-              </span>
+            <div class="flex flex-wrap items-center gap-3">
+              <div id="mr-chart-legend" class="flex items-center gap-3 text-[11px] text-slate-600">
+                <span class="flex items-center gap-1.5">
+                  <span class="w-2.5 h-2.5 rounded-full bg-[#10b981] inline-block"></span>
+                  <span>Planned</span>
+                </span>
+                <span class="flex items-center gap-1.5">
+                  <span class="w-2.5 h-2.5 rounded-full bg-[#7c3aed] inline-block"></span>
+                  <span>Actual</span>
+                </span>
+              </div>
+              <select id="mr-chart-metric" onchange="handleReportsMetricChange()" class="h-8 px-2.5 rounded-lg border border-slate-200 bg-[#fbfcfd] text-xs font-medium text-slate-900 focus:outline-none cursor-pointer">
+                <option value="cost" selected>Cost (NOK)</option>
+                <option value="leads">Leads</option>
+                <option value="ctr">CTR (%)</option>
+              </select>
             </div>
           </div>
           <div class="w-full pt-1">
             <canvas id="marketingReportsChart" height="220" class="w-full"></canvas>
           </div>
           <p id="mr-chart-empty-note" class="hidden text-[11px] text-slate-400 text-center pt-1">
-            No budget or spend recorded for this year yet — add numbers in Budget to populate the monthly overview.
+            No data recorded for this view yet — add numbers in Budget or click + Log Metrics above.
           </p>
         </div>
 

@@ -3974,6 +3974,19 @@ function renderAeoSeoView() {
 }
 
 let reportsYear = '2026';
+let reportsMetric = 'cost';
+let reportsMetricsByYear = {};
+
+function ensureReportsChannelMetrics(year, channel) {
+  if (!reportsMetricsByYear[year]) reportsMetricsByYear[year] = {};
+  if (!reportsMetricsByYear[year][channel]) {
+    reportsMetricsByYear[year][channel] = {
+      leads: Array(12).fill(0),
+      ctr: Array(12).fill(0)
+    };
+  }
+  return reportsMetricsByYear[year][channel];
+}
 
 function handleReportsYearChange() {
   const sel = document.getElementById('reports-year-select');
@@ -3981,11 +3994,59 @@ function handleReportsYearChange() {
   renderMarketingReportsView();
 }
 
-function drawMarketingReportsChart(monthlyPlanned, monthlyActual) {
+function handleReportsMetricChange() {
+  const sel = document.getElementById('mr-chart-metric');
+  if (sel) reportsMetric = sel.value || 'cost';
+  renderMarketingReportsView();
+}
+
+function toggleReportsMetricsForm(show) {
+  const panel = document.getElementById('mr-metrics-panel');
+  if (!panel) return;
+  if (!show) {
+    panel.classList.add('hidden');
+    return;
+  }
+  const chSel = document.getElementById('mr-m-channel');
+  if (chSel) {
+    const names = getChannelNames();
+    chSel.innerHTML = names.map(c => `<option value="${c}">${c}</option>`).join('');
+  }
+  document.getElementById('mr-m-month').value = 'all';
+  document.getElementById('mr-m-leads').value = '';
+  document.getElementById('mr-m-ctr').value = '';
+  panel.classList.remove('hidden');
+}
+
+function saveReportsMetrics() {
+  const channel = document.getElementById('mr-m-channel')?.value;
+  const monthVal = document.getElementById('mr-m-month')?.value || 'all';
+  const leadsVal = parseFloat(document.getElementById('mr-m-leads')?.value) || 0;
+  const ctrVal = parseFloat(document.getElementById('mr-m-ctr')?.value) || 0;
+  if (!channel) return;
+
+  const entry = ensureReportsChannelMetrics(reportsYear, channel);
+  if (monthVal === 'all') {
+    const leadsPerMonth = Math.round((leadsVal / 12) * 100) / 100;
+    for (let m = 0; m < 12; m++) {
+      if (document.getElementById('mr-m-leads').value !== '') entry.leads[m] = leadsPerMonth;
+      if (document.getElementById('mr-m-ctr').value !== '') entry.ctr[m] = ctrVal;
+    }
+  } else {
+    const mIdx = parseInt(monthVal, 10);
+    if (document.getElementById('mr-m-leads').value !== '') entry.leads[mIdx] = leadsVal;
+    if (document.getElementById('mr-m-ctr').value !== '') entry.ctr[mIdx] = ctrVal;
+  }
+
+  toggleReportsMetricsForm(false);
+  renderMarketingReportsView();
+  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+}
+
+function drawMarketingReportsChart(mode, seriesA, seriesB = null) {
   const canvas = document.getElementById('marketingReportsChart');
   if (!canvas) return;
-  const totalYearPlanned = monthlyPlanned.reduce((a, b) => a + b, 0);
-  canvas._barMeta = { monthlyPlanned, monthlyActual, totalYearPlanned, hoverIdx: -1 };
+  canvas._barMeta = { mode, seriesA, seriesB, hoverIdx: -1 };
 
   const renderBars = (hoverIdx = -1) => {
     const ctx = canvas.getContext('2d');
@@ -3998,7 +4059,9 @@ function drawMarketingReportsChart(monthlyPlanned, monthlyActual) {
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, width, height);
 
-    const maxVal = Math.max(100, ...monthlyPlanned, ...monthlyActual) * 1.15;
+    const allVals = seriesB ? [...seriesA, ...seriesB] : [...seriesA];
+    const minPeak = mode === 'ctr' ? 5 : mode === 'leads' ? 10 : 100;
+    const maxVal = Math.max(minPeak, ...allVals) * 1.15;
     const padL = 48, padR = 14, padT = 14, padB = 30;
     const plotW = width - padL - padR;
     const plotH = height - padT - padB;
@@ -4015,19 +4078,27 @@ function drawMarketingReportsChart(monthlyPlanned, monthlyActual) {
     ctx.fillStyle = '#94a3b8';
     ctx.font = `10px ${uiFont}`;
     [0, 0.5, 1].forEach(frac => {
-      const val = Math.round(maxVal * frac);
+      const val = maxVal * frac;
       const y = padT + plotH - frac * plotH;
       ctx.beginPath();
       ctx.moveTo(padL, y);
       ctx.lineTo(width - padR, y);
       ctx.stroke();
-      ctx.fillText(val >= 1000 ? Math.round(val / 1000) + 'k' : String(val), 4, y + 3);
+      let label = '';
+      if (mode === 'ctr') label = val.toFixed(1) + '%';
+      else if (mode === 'leads') label = String(Math.round(val));
+      else label = val >= 1000 ? Math.round(val / 1000) + 'k' : String(Math.round(val));
+      ctx.fillText(label, 4, y + 3);
     });
     ctx.setLineDash([]);
 
     const groupW = plotW / 12;
-    const barW = Math.min(13, Math.max(5, (groupW - 12) / 2));
+    const isDual = Boolean(seriesB);
+    const barW = isDual
+      ? Math.min(13, Math.max(5, (groupW - 12) / 2))
+      : Math.min(20, Math.max(8, groupW - 16));
     const pillR = barW / 2;
+    const singleColor = mode === 'leads' ? '#0ea5e9' : '#f59e0b';
 
     monthNames.forEach((mLbl, idx) => {
       const colX = padL + idx * groupW;
@@ -4041,22 +4112,30 @@ function drawMarketingReportsChart(monthlyPlanned, monthlyActual) {
         ctx.fill();
       }
 
-      const pH = (monthlyPlanned[idx] / maxVal) * plotH;
-      const aH = (monthlyActual[idx] / maxVal) * plotH;
-
       ctx.globalAlpha = hoverIdx !== -1 && !isHovered ? 0.55 : 1;
-      if (pH > 0) {
-        ctx.fillStyle = '#10b981';
-        ctx.beginPath();
-        ctx.roundRect(centerX - barW - 1.5, padT + plotH - pH, barW, pH, [pillR, pillR, pillR, pillR]);
-        ctx.fill();
-      }
-
-      if (aH > 0) {
-        ctx.fillStyle = '#7c3aed';
-        ctx.beginPath();
-        ctx.roundRect(centerX + 1.5, padT + plotH - aH, barW, aH, [pillR, pillR, pillR, pillR]);
-        ctx.fill();
+      if (isDual) {
+        const pH = (seriesA[idx] / maxVal) * plotH;
+        const aH = (seriesB[idx] / maxVal) * plotH;
+        if (pH > 0) {
+          ctx.fillStyle = '#10b981';
+          ctx.beginPath();
+          ctx.roundRect(centerX - barW - 1.5, padT + plotH - pH, barW, pH, [pillR, pillR, pillR, pillR]);
+          ctx.fill();
+        }
+        if (aH > 0) {
+          ctx.fillStyle = '#7c3aed';
+          ctx.beginPath();
+          ctx.roundRect(centerX + 1.5, padT + plotH - aH, barW, aH, [pillR, pillR, pillR, pillR]);
+          ctx.fill();
+        }
+      } else {
+        const h = (seriesA[idx] / maxVal) * plotH;
+        if (h > 0) {
+          ctx.fillStyle = singleColor;
+          ctx.beginPath();
+          ctx.roundRect(centerX - barW / 2, padT + plotH - h, barW, h, [pillR, pillR, pillR, pillR]);
+          ctx.fill();
+        }
       }
       ctx.globalAlpha = 1;
 
@@ -4091,16 +4170,19 @@ function drawMarketingReportsChart(monthlyPlanned, monthlyActual) {
         meta.hoverIdx = idx;
         renderBars(idx);
       }
-      const pVal = meta.monthlyPlanned[idx] || 0;
-      const aVal = meta.monthlyActual[idx] || 0;
-      const utilPct = pVal > 0 ? ((aVal / pVal) * 100).toFixed(1) : '0.0';
-      showChartTooltip(
-        e.clientX,
-        e.clientY,
-        `<div class="font-semibold text-white mb-1">${monthNames[idx]} ${reportsYear}</div>
-         <div class="flex items-center justify-between gap-4"><span class="text-emerald-300">Planned</span><span class="tabular-nums font-medium">${Math.round(pVal).toLocaleString()} NOK</span></div>
-         <div class="flex items-center justify-between gap-4"><span class="text-violet-300">Actual</span><span class="tabular-nums font-medium">${Math.round(aVal).toLocaleString()} NOK (${utilPct}%)</span></div>`
-      );
+      const vA = meta.seriesA[idx] || 0;
+      const vB = meta.seriesB ? (meta.seriesB[idx] || 0) : 0;
+      let html = `<div class="font-semibold text-white mb-1">${monthNames[idx]} ${reportsYear}</div>`;
+      if (meta.mode === 'cost') {
+        const utilPct = vA > 0 ? ((vB / vA) * 100).toFixed(1) : '0.0';
+        html += `<div class="flex items-center justify-between gap-4"><span class="text-emerald-300">Planned</span><span class="tabular-nums font-medium">${Math.round(vA).toLocaleString()} NOK</span></div>
+                 <div class="flex items-center justify-between gap-4"><span class="text-violet-300">Actual</span><span class="tabular-nums font-medium">${Math.round(vB).toLocaleString()} NOK (${utilPct}%)</span></div>`;
+      } else if (meta.mode === 'leads') {
+        html += `<div class="flex items-center justify-between gap-4"><span class="text-sky-300">Leads</span><span class="tabular-nums font-medium">${Math.round(vA).toLocaleString()}</span></div>`;
+      } else {
+        html += `<div class="flex items-center justify-between gap-4"><span class="text-amber-300">Avg. CTR</span><span class="tabular-nums font-medium">${vA.toFixed(2)}%</span></div>`;
+      }
+      showChartTooltip(e.clientX, e.clientY, html);
     });
     canvas.addEventListener('mouseleave', () => {
       if (canvas._barMeta && canvas._barMeta.hoverIdx !== -1) {
@@ -4117,7 +4199,13 @@ function renderMarketingReportsView() {
   if (sel && sel.value !== reportsYear) {
     reportsYear = sel.value || budgetYear || '2026';
   }
+  const metricSel = document.getElementById('mr-chart-metric');
+  if (metricSel && metricSel.value !== reportsMetric) {
+    metricSel.value = reportsMetric;
+  }
+
   const yearObj = budgetData[reportsYear] || {};
+  const metricsYearObj = reportsMetricsByYear[reportsYear] || {};
   const knownNames = getChannelNames();
   const budgetNames = Object.keys(yearObj);
   const allChannelNames = [...knownNames];
@@ -4129,21 +4217,47 @@ function renderMarketingReportsView() {
 
   const monthlyPlanned = Array(12).fill(0);
   const monthlyActual = Array(12).fill(0);
+  const monthlyLeads = Array(12).fill(0);
+  const monthlyCtrSum = Array(12).fill(0);
+  const monthlyCtrCount = Array(12).fill(0);
   let totalPlanned = 0;
   let totalActual = 0;
 
   allChannelNames.forEach(name => {
     const row = yearObj[name];
-    if (!row) return;
-    for (let m = 0; m < 12; m++) {
-      const p = row.planned[m] || 0;
-      const a = row.actual[m] || 0;
-      monthlyPlanned[m] += p;
-      monthlyActual[m] += a;
-      totalPlanned += p;
-      totalActual += a;
+    if (row) {
+      for (let m = 0; m < 12; m++) {
+        const p = row.planned[m] || 0;
+        const a = row.actual[m] || 0;
+        monthlyPlanned[m] += p;
+        monthlyActual[m] += a;
+        totalPlanned += p;
+        totalActual += a;
+      }
+    }
+    const mRow = metricsYearObj[name];
+    if (mRow) {
+      for (let m = 0; m < 12; m++) {
+        monthlyLeads[m] += mRow.leads[m] || 0;
+        if ((mRow.ctr[m] || 0) > 0) {
+          monthlyCtrSum[m] += mRow.ctr[m];
+          monthlyCtrCount[m] += 1;
+        }
+      }
     }
   });
+
+  // Also include leads from Leads pipeline if they have a date or fallback to current month
+  (leadEntries || []).forEach(l => {
+    const d = l.createdAt ? new Date(l.createdAt) : null;
+    if (d && !isNaN(d.getTime())) {
+      if (String(d.getFullYear()) === reportsYear) {
+        monthlyLeads[d.getMonth()] += 1;
+      }
+    }
+  });
+
+  const monthlyCtr = monthlyCtrSum.map((sum, m) => (monthlyCtrCount[m] > 0 ? sum / monthlyCtrCount[m] : 0));
 
   const caps = ensureMonthlyCaps(reportsYear);
   const capSum = caps.reduce((a, b) => a + b, 0);
@@ -4161,9 +4275,37 @@ function renderMarketingReportsView() {
   document.getElementById('mr-kpi-actual-sub').textContent = `${utilPct}% utilized`;
   document.getElementById('mr-kpi-remaining').textContent = `${Math.round(remaining).toLocaleString()} NOK`;
 
-  const hasChartData = totalPlanned > 0 || totalActual > 0;
+  const subtitleEl = document.getElementById('mr-chart-subtitle');
+  const legendEl = document.getElementById('mr-chart-legend');
+  let hasChartData = false;
+
+  if (reportsMetric === 'leads') {
+    if (subtitleEl) subtitleEl.textContent = 'Monthly leads generated across all channels';
+    if (legendEl) {
+      legendEl.innerHTML = `<span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#0ea5e9] inline-block"></span><span>Leads</span></span>`;
+    }
+    hasChartData = monthlyLeads.some(v => v > 0);
+    drawMarketingReportsChart('leads', monthlyLeads, null);
+  } else if (reportsMetric === 'ctr') {
+    if (subtitleEl) subtitleEl.textContent = 'Monthly average Click-Through Rate (%) across channels';
+    if (legendEl) {
+      legendEl.innerHTML = `<span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#f59e0b] inline-block"></span><span>Avg. CTR (%)</span></span>`;
+    }
+    hasChartData = monthlyCtr.some(v => v > 0);
+    drawMarketingReportsChart('ctr', monthlyCtr, null);
+  } else {
+    if (subtitleEl) subtitleEl.textContent = 'Monthly planned budget vs. actual spend across all channels';
+    if (legendEl) {
+      legendEl.innerHTML = `
+        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#10b981] inline-block"></span><span>Planned</span></span>
+        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#7c3aed] inline-block"></span><span>Actual</span></span>
+      `;
+    }
+    hasChartData = totalPlanned > 0 || totalActual > 0;
+    drawMarketingReportsChart('cost', monthlyPlanned, monthlyActual);
+  }
+
   document.getElementById('mr-chart-empty-note')?.classList.toggle('hidden', hasChartData);
-  drawMarketingReportsChart(monthlyPlanned, monthlyActual);
 
   const cardsContainer = document.getElementById('marketing-reports-channel-cards');
   if (!cardsContainer) return;
@@ -4179,11 +4321,16 @@ function renderMarketingReportsView() {
     const color = getChannelColor(name, idx);
     const typeLabel = chObj?.type || 'Channel';
     const row = yearObj[name];
+    const mRow = metricsYearObj[name];
     const chPlanned = row ? row.planned.reduce((a, b) => a + b, 0) : 0;
     const chActual = row ? row.actual.reduce((a, b) => a + b, 0) : 0;
+    const loggedLeads = mRow ? mRow.leads.reduce((a, b) => a + b, 0) : 0;
+    const pipelineLeads = (leadEntries || []).filter(l => String(l.source || l.channel || '').toLowerCase() === name.toLowerCase()).length;
+    const leadCount = Math.round(loggedLeads + pipelineLeads);
+    const nonZeroCtrs = mRow ? mRow.ctr.filter(v => v > 0) : [];
+    const avgCtr = nonZeroCtrs.length > 0 ? (nonZeroCtrs.reduce((a, b) => a + b, 0) / nonZeroCtrs.length).toFixed(2) : '0.00';
     const sharePct = totalPlanned > 0 ? ((chPlanned / shareDenom) * 100).toFixed(1) : '0.0';
     const chUtilPct = chPlanned > 0 ? Math.min(100, (chActual / chPlanned) * 100) : 0;
-    const leadCount = (leadEntries || []).filter(l => String(l.source || l.channel || '').toLowerCase() === name.toLowerCase()).length;
 
     return `
       <div class="rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow flex flex-col justify-between gap-4 hover:border-slate-300 transition-colors">
@@ -4198,7 +4345,7 @@ function renderMarketingReportsView() {
           <span class="px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-700 tabular-nums shrink-0">${sharePct}% share</span>
         </div>
 
-        <div class="grid grid-cols-3 gap-2 pt-1 border-t border-slate-100">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-100">
           <div>
             <div class="text-[10px] text-slate-400">Planned</div>
             <div class="text-xs font-semibold tabular-nums text-slate-900">${Math.round(chPlanned).toLocaleString()}</div>
@@ -4210,6 +4357,10 @@ function renderMarketingReportsView() {
           <div>
             <div class="text-[10px] text-slate-400">Leads</div>
             <div class="text-xs font-semibold tabular-nums text-slate-900">${leadCount}</div>
+          </div>
+          <div>
+            <div class="text-[10px] text-slate-400">CTR</div>
+            <div class="text-xs font-semibold tabular-nums text-slate-900">${avgCtr}%</div>
           </div>
         </div>
 
@@ -4469,6 +4620,7 @@ function getWorkspaceSnapshot() {
     budgetMonthlyCapByYear,
     budgetTotalLockByYear,
     budgetMonthLocksByYear,
+    reportsMetricsByYear,
     budgetYear,
     contactGroups,
     availableCountries,
@@ -4491,6 +4643,7 @@ function applyWorkspaceSnapshot(snap) {
     if (snap.budgetMonthlyCapByYear && typeof snap.budgetMonthlyCapByYear === 'object') budgetMonthlyCapByYear = snap.budgetMonthlyCapByYear;
     if (snap.budgetTotalLockByYear && typeof snap.budgetTotalLockByYear === 'object') budgetTotalLockByYear = snap.budgetTotalLockByYear;
     if (snap.budgetMonthLocksByYear && typeof snap.budgetMonthLocksByYear === 'object') budgetMonthLocksByYear = snap.budgetMonthLocksByYear;
+    if (snap.reportsMetricsByYear && typeof snap.reportsMetricsByYear === 'object') reportsMetricsByYear = snap.reportsMetricsByYear;
     if (snap.budgetYear) budgetYear = String(snap.budgetYear);
     if (Array.isArray(snap.contactGroups)) contactGroups = snap.contactGroups;
     if (Array.isArray(snap.availableCountries)) availableCountries = snap.availableCountries;
