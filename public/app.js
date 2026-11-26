@@ -3824,8 +3824,8 @@ function deleteIntegration(intId) {
   });
 }
 
-function drawIntegrationsPieChart(segments) {
-  const canvas = document.getElementById('integrationsPieChart');
+function drawIntegrationsPieChart(segments, canvasId = 'integrationsPieChart') {
+  const canvas = document.getElementById(canvasId);
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
   const size = 160;
@@ -3943,6 +3943,46 @@ function renderIntegrationsView() {
               <span class="font-medium text-slate-800">${t}</span>
             </div>
             <span class="tabular-nums text-slate-600">${count} <span class="text-slate-400">(${pct}%)</span></span>
+          </div>
+        `;
+      }).join('');
+    }
+  }
+
+  const leadSharePalette = ['#6366f1', '#10b981', '#0ea5e9', '#f59e0b', '#ec4899', '#8b5cf6', '#14b8a6', '#f97316'];
+  const integrationLeadCounts = integrationsList.map((item, idx) => {
+    const count = (leadEntries || []).filter(l =>
+      String(l.erp || '').toLowerCase() === item.name.toLowerCase() ||
+      String(l.integration || '').toLowerCase() === item.name.toLowerCase()
+    ).length;
+    return {
+      label: item.name,
+      value: count,
+      color: leadSharePalette[idx % leadSharePalette.length]
+    };
+  });
+  const totalLeadUsage = integrationLeadCounts.reduce((acc, s) => acc + s.value, 0);
+  const leadShareSegments = integrationLeadCounts.filter(s => s.value > 0).sort((a, b) => b.value - a.value);
+
+  drawIntegrationsPieChart(leadShareSegments, 'integrationsLeadSharePieChart');
+
+  const leadShareTotalLbl = document.getElementById('integrations-lead-share-total-label');
+  if (leadShareTotalLbl) leadShareTotalLbl.textContent = `${totalLeadUsage} lead${totalLeadUsage === 1 ? '' : 's'}`;
+
+  const leadShareLegendEl = document.getElementById('integrations-lead-share-legend');
+  if (leadShareLegendEl) {
+    if (totalLeadUsage === 0) {
+      leadShareLegendEl.innerHTML = `<p class="text-xs text-slate-400">Connect integrations to leads to see lead share per integration.</p>`;
+    } else {
+      leadShareLegendEl.innerHTML = leadShareSegments.map(seg => {
+        const pct = ((seg.value / totalLeadUsage) * 100).toFixed(1);
+        return `
+          <div class="flex items-center justify-between gap-2 text-xs">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${seg.color}"></span>
+              <span class="font-medium text-slate-800 truncate">${seg.label}</span>
+            </div>
+            <span class="tabular-nums text-slate-600 shrink-0">${seg.value} <span class="text-slate-400">(${pct}%)</span></span>
           </div>
         `;
       }).join('');

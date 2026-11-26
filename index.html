@@ -1999,19 +1999,37 @@
           <p class="text-xs text-slate-500">Manage ERP, TA, and other integrations and view their distribution across your workspace.</p>
         </div>
 
-        <div class="rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-4">
-          <div class="flex items-center justify-between gap-2 pb-3 border-b border-slate-200/70">
-            <div>
-              <h3 class="text-sm font-semibold text-slate-900">Integration Distribution</h3>
-              <p class="text-[11px] text-slate-500">Breakdown by integration type (ERP, TA, Other Integration)</p>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div class="rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-4">
+            <div class="flex items-center justify-between gap-2 pb-3 border-b border-slate-200/70">
+              <div>
+                <h3 class="text-sm font-semibold text-slate-900">Integration Distribution</h3>
+                <p class="text-[11px] text-slate-500">Breakdown by integration type (ERP, TA, Other Integration)</p>
+              </div>
+              <span id="integrations-total-label" class="text-[11px] tabular-nums text-slate-400">0 integrations</span>
             </div>
-            <span id="integrations-total-label" class="text-[11px] tabular-nums text-slate-400">0 integrations</span>
+            <div class="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
+              <div class="sm:col-span-5 flex items-center justify-center">
+                <canvas id="integrationsPieChart" width="160" height="160"></canvas>
+              </div>
+              <div id="integrations-pie-legend" class="sm:col-span-7 space-y-2"></div>
+            </div>
           </div>
-          <div class="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
-            <div class="sm:col-span-4 flex items-center justify-center">
-              <canvas id="integrationsPieChart" width="160" height="160"></canvas>
+
+          <div class="rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-4">
+            <div class="flex items-center justify-between gap-2 pb-3 border-b border-slate-200/70">
+              <div>
+                <h3 class="text-sm font-semibold text-slate-900">Lead Share per Integration</h3>
+                <p class="text-[11px] text-slate-500">Share of leads connected to each integration</p>
+              </div>
+              <span id="integrations-lead-share-total-label" class="text-[11px] tabular-nums text-slate-400">0 leads</span>
             </div>
-            <div id="integrations-pie-legend" class="sm:col-span-8 space-y-2"></div>
+            <div class="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
+              <div class="sm:col-span-5 flex items-center justify-center">
+                <canvas id="integrationsLeadSharePieChart" width="160" height="160"></canvas>
+              </div>
+              <div id="integrations-lead-share-legend" class="sm:col-span-7 space-y-2 max-h-44 overflow-y-auto pr-1"></div>
+            </div>
           </div>
         </div>
 
