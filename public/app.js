@@ -7055,6 +7055,15 @@ function getMetricSeries12(ds, metric) {
       return lds > 0 ? act / lds : 0;
     });
   }
+  if (metric === 'roas') {
+    return ds.monthlyActual.map((act, m) => {
+      const manualSum = ds.monthlyMetricSum.roas?.[m] || 0;
+      const manualCnt = ds.monthlyMetricCount.roas?.[m] || 0;
+      if (manualCnt > 0 && manualSum > 0) return manualSum / manualCnt;
+      const pipe = ds.monthlyPipeline[m] || 0;
+      return act > 0 && pipe > 0 ? pipe / act : 0;
+    });
+  }
   const gd = getGoalDef(metric);
   if (gd.agg === 'avg') {
     return ds.monthlyMetricSum[gd.key].map((sum, m) => (ds.monthlyMetricCount[gd.key][m] > 0 ? sum / ds.monthlyMetricCount[gd.key][m] : 0));
@@ -7073,6 +7082,20 @@ function getChannelMetricValue(ds, chName, metric, monthIdx = null) {
     const act = pick(chData.actual);
     const lds = pick(chData.leads);
     return lds > 0 ? act / lds : 0;
+  }
+  if (metric === 'roas') {
+    const arr = (chData.mRow && chData.mRow.roas) || Array(12).fill(0);
+    if (monthIdx !== null) {
+      if ((arr[monthIdx] || 0) > 0) return arr[monthIdx];
+      const act = chData.actual[monthIdx] || 0;
+      const pipe = chData.pipeline[monthIdx] || 0;
+      return act > 0 && pipe > 0 ? pipe / act : 0;
+    }
+    const manualAgg = aggregateChannelGoalValue(chName, chData.mRow, 'roas');
+    if (manualAgg > 0) return manualAgg;
+    const act = pick(chData.actual);
+    const pipe = pick(chData.pipeline);
+    return act > 0 && pipe > 0 ? pipe / act : 0;
   }
   const gd = getGoalDef(metric);
   const arr = (chData.mRow && chData.mRow[gd.key]) || Array(12).fill(0);
@@ -7134,8 +7157,9 @@ function renderMarketingReportsView() {
   if (kActSub) kActSub.textContent = `${utilPct}% of planned budget`;
   if (kLeads) kLeads.textContent = String(ds.totalLeads);
   if (kLeadsSub) kLeadsSub.textContent = ds.totalLeads > 0 && ds.totalActual > 0 ? `CPL: ${cpl.toLocaleString()} NOK` : `Connected with Leads`;
+  const roasRatio = ds.totalActual > 0 && ds.totalPipeline > 0 ? (ds.totalPipeline / ds.totalActual) : 0;
   if (kPipe) kPipe.textContent = `${Math.round(ds.totalPipeline).toLocaleString()} NOK`;
-  if (kPipeSub) kPipeSub.textContent = `${integrationsList.length} integration${integrationsList.length === 1 ? '' : 's'} active`;
+  if (kPipeSub) kPipeSub.textContent = `${integrationsList.length} integration${integrationsList.length === 1 ? '' : 's'} active${roasRatio > 0 ? ` · ROAS: ${roasRatio.toFixed(2)}x` : ''}`;
 
   document.getElementById('mr-chart-year').textContent = compareActive ? `${reportsYear} vs ${reportsCompareYear}` : reportsYear;
   const subtitleEl = document.getElementById('mr-chart-subtitle');
@@ -7178,9 +7202,27 @@ function renderMarketingReportsView() {
       const slice = arr12.slice(q * 3, q * 3 + 3);
       return gd?.agg === 'avg' ? (slice.filter(v => v > 0).reduce((a, b) => a + b, 0) / Math.max(1, slice.filter(v => v > 0).length)) : slice.reduce((a, b) => a + b, 0);
     });
+    const toQMetric = (dset, mKey) => {
+      if (mKey === 'roas') {
+        const manualQ = toQ(getMetricSeries12(dset, 'roas'));
+        return [0, 1, 2, 3].map(q => {
+          const qAct = dset.monthlyActual.slice(q * 3, q * 3 + 3).reduce((a, b) => a + b, 0);
+          const qPipe = dset.monthlyPipeline.slice(q * 3, q * 3 + 3).reduce((a, b) => a + b, 0);
+          return qAct > 0 && qPipe > 0 ? (qPipe / qAct) : manualQ[q];
+        });
+      }
+      if (mKey === 'cpl') {
+        return [0, 1, 2, 3].map(q => {
+          const qAct = dset.monthlyActual.slice(q * 3, q * 3 + 3).reduce((a, b) => a + b, 0);
+          const qLds = dset.monthlyMetricSum.leads.slice(q * 3, q * 3 + 3).reduce((a, b) => a + b, 0);
+          return qLds > 0 ? (qAct / qLds) : 0;
+        });
+      }
+      return toQ(getMetricSeries12(dset, mKey));
+    };
     if (compareActive) {
-      seriesA = toQ(getMetricSeries12(ds, reportsMetric));
-      seriesB = toQ(getMetricSeries12(cmpDs, reportsMetric));
+      seriesA = toQMetric(ds, reportsMetric);
+      seriesB = toQMetric(cmpDs, reportsMetric);
       chartOpts = { labels, seriesALabel: `${reportsYear} ${metricLabel}`, seriesBLabel: `${reportsCompareYear} ${metricLabel}`, colorA: primaryColor, colorB: '#94a3b8' };
       if (subtitleEl) subtitleEl.textContent = `Quarterly ${metricLabel} (${reportsYear} vs ${reportsCompareYear})`;
     } else if (reportsMetric === 'cost') {
@@ -7189,7 +7231,7 @@ function renderMarketingReportsView() {
       chartOpts = { labels, seriesALabel: 'Planned', seriesBLabel: 'Actual', colorA: '#10b981', colorB: '#7c3aed' };
       if (subtitleEl) subtitleEl.textContent = 'Quarterly planned budget vs. actual spend';
     } else {
-      seriesA = toQ(getMetricSeries12(ds, reportsMetric));
+      seriesA = toQMetric(ds, reportsMetric);
       chartOpts = { labels, seriesALabel: metricLabel, colorA: primaryColor };
       if (subtitleEl) subtitleEl.textContent = `Quarterly ${metricLabel}`;
     }
