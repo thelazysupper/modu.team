@@ -40,3 +40,45 @@ body {
 .hidden {
   display: none !important;
 }
+
+.home-canvas-grid {
+  background-color: #f8fafc;
+  background-image: radial-gradient(#cbd5e1 1.25px, transparent 1.25px);
+  background-size: 20px 20px;
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 1.25rem;
+  padding: 1.25rem;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.home-widget-card {
+  position: relative;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+}
+
+.home-widget-card.home-drop-target {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.22) !important;
+}
+
+.home-resize-handle {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: #94a3b8;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.home-resize-handle:hover {
+  color: #0f172a;
+  background-color: rgba(226, 232, 240, 0.8);
+}
+

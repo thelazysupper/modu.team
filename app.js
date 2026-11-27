@@ -720,7 +720,7 @@ function setActiveNavHighlight(activeId) {
 }
 
 function hideAllViews() {
-  ['view-home', 'view-hub', 'view-app-group', 'view-channels', 'view-budget', 'view-contacts', 'view-leads', 'view-integrations', 'view-competitors', 'view-aeo-seo', 'view-marketing-reports', 'view-app-detail', 'view-wishlist', 'view-generic-section'].forEach(id => {
+  ['view-home', 'view-hub', 'view-app-group', 'view-channels', 'view-budget', 'view-contacts', 'view-leads', 'view-integrations', 'view-competitors', 'view-aeo-seo', 'view-seo-audit', 'view-marketing-reports', 'view-app-detail', 'view-wishlist', 'view-generic-section', 'channels-hub-bar', 'search-hub-bar'].forEach(id => {
     document.getElementById(id)?.classList.add('hidden');
   });
 }
@@ -1059,12 +1059,99 @@ function removeHomeWidget(widgetId) {
   if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
 }
 
+let homeDraggedDockType = null;
+
 function setHomeWidgetSpan(widgetId, span) {
   const w = homeDashboardLayout.widgets.find(x => x.id === widgetId);
   if (!w) return;
   w.span = Math.min(homeDashboardLayout.cols || 3, Math.max(1, Number(span) || 1));
   renderHomeView();
   if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+}
+
+function duplicateHomeWidget(widgetId) {
+  const idx = homeDashboardLayout.widgets.findIndex(x => x.id === widgetId);
+  if (idx === -1) return;
+  const orig = homeDashboardLayout.widgets[idx];
+  const copy = {
+    ...orig,
+    id: `hw_${Date.now()}_${Math.floor(Math.random() * 1000)}`
+  };
+  homeDashboardLayout.widgets.splice(idx + 1, 0, copy);
+  renderHomeWidgetCatalog();
+  renderHomeView();
+  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+}
+
+function renameHomeWidget(widgetId) {
+  const w = homeDashboardLayout.widgets.find(x => x.id === widgetId);
+  if (!w) return;
+  const def = HOME_WIDGET_CATALOG.find(c => c.type === w.type) || { title: w.type };
+  const next = window.prompt('Widget title:', w.customTitle || def.title);
+  if (next === null) return;
+  const trimmed = next.trim();
+  if (trimmed) w.customTitle = trimmed;
+  else delete w.customTitle;
+  renderHomeView();
+  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+}
+
+function startHomeWidgetResize(e, widgetId) {
+  e.preventDefault();
+  e.stopPropagation();
+  const w = homeDashboardLayout.widgets.find(x => x.id === widgetId);
+  const gridEl = document.getElementById('home-widgets-grid');
+  const cardEl = document.querySelector(`[data-home-widget="${widgetId}"]`);
+  if (!w || !gridEl || !cardEl) return;
+
+  const cols = Number(homeDashboardLayout.cols) === 2 ? 2 : 3;
+  const gridRect = gridEl.getBoundingClientRect();
+  const colW = Math.max(160, gridRect.width / cols);
+  const startX = e.clientX;
+  const startY = e.clientY;
+  const startSpan = Math.min(cols, Math.max(1, w.span || 1));
+  const startRect = cardEl.getBoundingClientRect();
+
+  const badge = document.createElement('div');
+  badge.className = 'fixed z-50 px-2.5 py-1 rounded-lg bg-slate-900 text-white text-[11px] font-semibold shadow-lg pointer-events-none tabular-nums';
+  document.body.appendChild(badge);
+
+  let nextSpan = startSpan;
+  let nextHeight = w.height || 'auto';
+
+  const updateBadge = (cx, cy) => {
+    const hLabel = nextHeight === 'tall' ? 'Tall' : nextHeight === 'medium' ? 'Med' : nextHeight === 'compact' ? 'Compact' : 'Auto';
+    badge.textContent = `${nextSpan} col${nextSpan === 1 ? '' : 's'} · ${hLabel}`;
+    badge.style.left = `${cx + 12}px`;
+    badge.style.top = `${cy + 12}px`;
+  };
+  updateBadge(startX, startY);
+
+  const onMove = ev => {
+    const dx = ev.clientX - startX;
+    const dy = ev.clientY - startY;
+    const targetW = startRect.width + dx;
+    nextSpan = Math.min(cols, Math.max(1, Math.round(targetW / colW)));
+
+    const targetH = startRect.height + dy;
+    if (Math.abs(dy) > 18) {
+      nextHeight = targetH >= 380 ? 'tall' : targetH >= 270 ? 'medium' : 'compact';
+    }
+    updateBadge(ev.clientX, ev.clientY);
+  };
+
+  const onUp = () => {
+    window.removeEventListener('mousemove', onMove);
+    window.removeEventListener('mouseup', onUp);
+    badge.remove();
+    w.span = nextSpan;
+    if (nextHeight !== 'auto') w.height = nextHeight;
+    renderHomeView();
+    if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+  };
+
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('mouseup', onUp);
 }
 
 function moveHomeWidget(widgetId, dir) {
@@ -1078,13 +1165,56 @@ function moveHomeWidget(widgetId, dir) {
   if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
 }
 
+function onHomeDockDragStart(e, type) {
+  homeDraggedDockType = type;
+  homeDraggedWidgetId = null;
+  if (e?.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'copy';
+    e.dataTransfer.setData('text/plain', type);
+  }
+}
+
 function onHomeWidgetDragStart(e, widgetId) {
   homeDraggedWidgetId = widgetId;
-  if (e?.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+  homeDraggedDockType = null;
+  if (e?.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', widgetId);
+  }
+}
+
+function onHomeWidgetDragOver(e, targetWidgetId) {
+  e?.preventDefault();
+  document.querySelectorAll('.home-widget-card.home-drop-target').forEach(el => el.classList.remove('home-drop-target'));
+  if (homeDraggedWidgetId !== targetWidgetId) {
+    document.querySelector(`[data-home-widget="${targetWidgetId}"]`)?.classList.add('home-drop-target');
+  }
+}
+
+function onHomeWidgetDragLeave(e, targetWidgetId) {
+  document.querySelector(`[data-home-widget="${targetWidgetId}"]`)?.classList.remove('home-drop-target');
 }
 
 function onHomeWidgetDrop(e, targetWidgetId) {
   e?.preventDefault();
+  e?.stopPropagation();
+  document.querySelectorAll('.home-widget-card.home-drop-target').forEach(el => el.classList.remove('home-drop-target'));
+
+  if (homeDraggedDockType) {
+    const def = HOME_WIDGET_CATALOG.find(c => c.type === homeDraggedDockType);
+    homeDraggedDockType = null;
+    if (!def) return;
+    const span = Math.min(homeDashboardLayout.cols || 3, def.defaultSpan || 1);
+    const newW = { id: `hw_${Date.now()}_${Math.floor(Math.random() * 1000)}`, type: def.type, span };
+    const toIdx = homeDashboardLayout.widgets.findIndex(w => w.id === targetWidgetId);
+    if (toIdx === -1) homeDashboardLayout.widgets.push(newW);
+    else homeDashboardLayout.widgets.splice(toIdx, 0, newW);
+    renderHomeWidgetCatalog();
+    renderHomeView();
+    if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+    return;
+  }
+
   if (!homeDraggedWidgetId || homeDraggedWidgetId === targetWidgetId) return;
   const arr = homeDashboardLayout.widgets;
   const fromIdx = arr.findIndex(w => w.id === homeDraggedWidgetId);
@@ -1095,6 +1225,52 @@ function onHomeWidgetDrop(e, targetWidgetId) {
   homeDraggedWidgetId = null;
   renderHomeView();
   if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+}
+
+function onHomeCanvasDragOver(e) {
+  if (homeDraggedDockType || homeDraggedWidgetId) e.preventDefault();
+}
+
+function onHomeCanvasDrop(e) {
+  if (!homeDraggedDockType) return;
+  e.preventDefault();
+  const type = homeDraggedDockType;
+  homeDraggedDockType = null;
+  addHomeWidget(type);
+}
+
+function renderHomeCanvasDock() {
+  const dockEl = document.getElementById('home-canvas-dock');
+  const itemsEl = document.getElementById('home-dock-items');
+  if (!dockEl || !itemsEl) return;
+  dockEl.classList.toggle('hidden', !homeEditMode);
+  if (!homeEditMode) return;
+
+  const shortLabels = {
+    'workspace-kpis': 'KPIs',
+    'budget-monthly-bar': 'Budget Bar',
+    'channels-budget-donut': 'Channel Share',
+    'channels-leads-donut': 'Lead Share',
+    'leads-pipeline-pie': 'Pipeline Pie',
+    'integrations-dist-pie': 'Integrations Pie',
+    'integrations-lead-pie': 'Integration Leads',
+    'channels-table': 'Channels Table',
+    'budget-planned-table': 'Planned Table',
+    'budget-actual-table': 'Actual Table',
+    'integrations-table': 'Integrations Table',
+    'wishlist-table': 'Wishlist'
+  };
+
+  itemsEl.innerHTML = HOME_WIDGET_CATALOG.slice(0, 7).map(item => `
+    <button
+      type="button"
+      draggable="true"
+      ondragstart="onHomeDockDragStart(event, '${item.type}')"
+      onclick="addHomeWidget('${item.type}')"
+      title="Drag onto canvas or click to add ${item.title}"
+      class="h-7 px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-[11px] font-medium text-slate-700 cursor-grab active:cursor-grabbing shrink-0 transition-colors"
+    >+ ${shortLabels[item.type] || item.title}</button>
+  `).join('');
 }
 
 function resetHomeDashboard() {
@@ -1173,9 +1349,8 @@ function renderHomeView() {
   const emptyEl = document.getElementById('home-empty-state');
   if (!gridEl || !emptyEl) return;
 
-  gridEl.className = cols === 2
-    ? 'grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch'
-    : 'grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch';
+  gridEl.className = `${cols === 2 ? 'grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch' : 'grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch'} ${homeEditMode ? 'home-canvas-grid' : ''}`;
+  renderHomeCanvasDock();
 
   const widgets = homeDashboardLayout.widgets || [];
   if (widgets.length === 0) {
@@ -1206,30 +1381,27 @@ function renderHomeView() {
   const totalPipelineVal = leadEntries.reduce((a, l) => a + (l.value || 0), 0);
 
   const spanClsMap = { 1: 'lg:col-span-1', 2: 'lg:col-span-2', 3: cols === 2 ? 'lg:col-span-2' : 'lg:col-span-3' };
+  const heightClsMap = { compact: 'min-h-[210px]', medium: 'min-h-[310px]', tall: 'min-h-[430px]' };
   const postRenderTasks = [];
 
   gridEl.innerHTML = widgets.map((w, idx) => {
     const span = Math.min(cols, Math.max(1, w.span || 1));
     const spanCls = spanClsMap[span] || 'lg:col-span-1';
-    const def = HOME_WIDGET_CATALOG.find(c => c.type === w.type) || { title: w.type, desc: '' };
+    const heightCls = heightClsMap[w.height] || '';
+    const rawDef = HOME_WIDGET_CATALOG.find(c => c.type === w.type) || { title: w.type, desc: '' };
+    const def = { ...rawDef, title: w.customTitle || rawDef.title };
     const canvasId = `home-cv-${w.id}`;
 
     const editBarHtml = homeEditMode ? `
-      <div class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-[#fbfcfd] border-b border-slate-200/80 text-[11px]">
-        <div class="flex items-center gap-1.5 text-slate-500 font-medium cursor-grab">
-          <span>⋮⋮</span>
-          <span>Widget ${idx + 1}</span>
-        </div>
-        <div class="flex items-center gap-1">
-          <select onchange="setHomeWidgetSpan('${w.id}', this.value)" class="h-6 px-1.5 rounded border border-slate-200 bg-white text-[11px] text-slate-700">
-            <option value="1" ${span === 1 ? 'selected' : ''}>1 col</option>
-            <option value="2" ${span === 2 ? 'selected' : ''}>2 cols</option>
-            ${cols === 3 ? `<option value="3" ${span === 3 ? 'selected' : ''}>Full (3 cols)</option>` : ''}
-          </select>
-          <button type="button" onclick="moveHomeWidget('${w.id}', -1)" ${idx === 0 ? 'disabled' : ''} class="w-6 h-6 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 text-slate-600">←</button>
-          <button type="button" onclick="moveHomeWidget('${w.id}', 1)" ${idx === widgets.length - 1 ? 'disabled' : ''} class="w-6 h-6 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 text-slate-600">→</button>
-          <button type="button" onclick="removeHomeWidget('${w.id}')" class="w-6 h-6 rounded border border-slate-200 bg-white hover:bg-red-50 hover:text-red-600 text-slate-500">✕</button>
-        </div>
+      <div class="home-floating-toolbar absolute -top-3 right-3 z-30 flex items-center gap-1 px-2 py-1 rounded-full bg-slate-900 text-white shadow-lg text-[10px] opacity-90 group-hover:opacity-100 transition-opacity">
+        <span class="cursor-grab px-1 text-slate-300" title="Drag to reorder">⋮⋮</span>
+        <span class="px-1 font-semibold tabular-nums text-slate-200">${span}×${w.height === 'tall' ? 'L' : w.height === 'medium' ? 'M' : w.height === 'compact' ? 'S' : 'Auto'}</span>
+        <button type="button" onclick="renameHomeWidget('${w.id}')" title="Rename widget" class="w-5 h-5 rounded-full hover:bg-slate-700 flex items-center justify-center">✎</button>
+        <button type="button" onclick="duplicateHomeWidget('${w.id}')" title="Duplicate widget" class="w-5 h-5 rounded-full hover:bg-slate-700 flex items-center justify-center">⧉</button>
+        <button type="button" onclick="removeHomeWidget('${w.id}')" title="Remove widget" class="w-5 h-5 rounded-full hover:bg-rose-600 flex items-center justify-center">✕</button>
+      </div>
+      <div onmousedown="startHomeWidgetResize(event, '${w.id}')" title="Drag corner to resize width &amp; height" class="home-resize-handle">
+        <svg class="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M11 5L5 11M11 9L9 11"/></svg>
       </div>
     ` : '';
 
@@ -1448,11 +1620,11 @@ function renderHomeView() {
       <div
         data-home-widget="${w.id}"
         draggable="${homeEditMode ? 'true' : 'false'}"
-        ${homeEditMode ? `ondragstart="onHomeWidgetDragStart(event, '${w.id}')" ondragover="event.preventDefault()" ondrop="onHomeWidgetDrop(event, '${w.id}')"` : ''}
-        class="${spanCls} rounded-2xl border ${homeEditMode ? 'border-slate-300 ring-1 ring-slate-200/70' : 'border-slate-200/80'} bg-white card-shadow overflow-hidden flex flex-col"
+        ${homeEditMode ? `ondragstart="onHomeWidgetDragStart(event, '${w.id}')" ondragover="onHomeWidgetDragOver(event, '${w.id}')" ondragleave="onHomeWidgetDragLeave(event, '${w.id}')" ondrop="onHomeWidgetDrop(event, '${w.id}')"` : ''}
+        class="group home-widget-card ${spanCls} ${heightCls} rounded-2xl border ${homeEditMode ? 'border-slate-300 ring-1 ring-slate-200/80 overflow-visible' : 'border-slate-200/80 overflow-hidden'} bg-white card-shadow flex flex-col"
       >
         ${editBarHtml}
-        <div class="flex-1">${bodyHtml}</div>
+        <div class="flex-1 rounded-2xl overflow-hidden">${bodyHtml}</div>
       </div>
     `;
   }).join('');
@@ -1471,22 +1643,98 @@ function openHub() {
   syncRouteUrl('/');
 }
 
+let activeChannelsHubTab = 'channels';
+let activeSearchHubTab = 'aeo-seo';
+
+function switchChannelsHubTab(tab = 'channels') {
+  activeChannelsHubTab = tab;
+  hideAllViews();
+  syncAllYearSelects(budgetYear);
+  document.getElementById('channels-hub-bar')?.classList.remove('hidden');
+
+  const tabMap = {
+    channels: 'ch-hub-tab-channels',
+    reports: 'ch-hub-tab-reports',
+    budget: 'ch-hub-tab-budget'
+  };
+  Object.entries(tabMap).forEach(([k, btnId]) => {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    const isAct = k === tab;
+    btn.className = isAct
+      ? 'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors bg-white text-slate-900 shadow-xs'
+      : 'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors text-slate-500 hover:text-slate-900';
+  });
+
+  if (tab === 'reports') {
+    activeReportChannel = null;
+    document.getElementById('view-marketing-reports')?.classList.remove('hidden');
+    renderMarketingReportsView();
+    syncRouteUrl('/marketing-reports');
+  } else if (tab === 'budget') {
+    document.getElementById('view-budget')?.classList.remove('hidden');
+    renderBudgetView();
+    syncRouteUrl(budgetSubView === 'summary' ? '/budget' : `/budget/${budgetSubView}`);
+  } else {
+    activeChannelDetailName = null;
+    document.getElementById('view-channels')?.classList.remove('hidden');
+    renderChannelsView();
+    syncRouteUrl('/channels');
+  }
+  setActiveNavHighlight('side-app-channels');
+}
+
+function switchSearchHubTab(tab = 'aeo-seo') {
+  activeSearchHubTab = tab;
+  hideAllViews();
+  document.getElementById('search-hub-bar')?.classList.remove('hidden');
+
+  const tabMap = {
+    'aeo-seo': 'search-hub-tab-aeo',
+    'seo-audit': 'search-hub-tab-audit'
+  };
+  Object.entries(tabMap).forEach(([k, btnId]) => {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    const isAct = k === tab;
+    btn.className = isAct
+      ? 'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors bg-white text-slate-900 shadow-xs'
+      : 'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors text-slate-500 hover:text-slate-900';
+  });
+
+  if (tab === 'seo-audit') {
+    document.getElementById('view-seo-audit')?.classList.remove('hidden');
+    const qEl = document.getElementById('audit-sum-queries');
+    const sEl = document.getElementById('audit-sum-seo');
+    const cEl = document.getElementById('audit-sum-cited');
+    if (qEl) qEl.textContent = String(aeoSeoEntries.length);
+    if (sEl) {
+      const avgSeo = aeoSeoEntries.length > 0 ? aeoSeoEntries.reduce((a, e) => a + (e.seoScore || 0), 0) / aeoSeoEntries.length : 0;
+      sEl.textContent = `${avgSeo.toFixed(1)}%`;
+    }
+    if (cEl) cEl.textContent = String(aeoSeoEntries.filter(e => e.cited === 'Cited').length);
+    syncRouteUrl('/apps/seo-audit');
+  } else {
+    document.getElementById('view-aeo-seo')?.classList.remove('hidden');
+    renderAeoSeoView();
+    syncRouteUrl('/aeo-seo');
+  }
+  setActiveNavHighlight('side-app-aeo-seo');
+}
+
 function openApp(appId) {
+  if (appId === 'channels') return switchChannelsHubTab('channels');
+  if (appId === 'budget') return switchChannelsHubTab('budget');
+  if (appId === 'marketing-reports') return switchChannelsHubTab('reports');
+  if (appId === 'aeo-seo') return switchSearchHubTab('aeo-seo');
+  if (appId === 'seo-audit') return switchSearchHubTab('seo-audit');
+
   const app = apps.find(a => a.id === appId);
   if (!app) return;
   hideAllViews();
   syncAllYearSelects(budgetYear);
 
-  if (appId === 'channels') {
-    activeChannelDetailName = null;
-    document.getElementById('view-channels').classList.remove('hidden');
-    renderChannelsView();
-    syncRouteUrl('/channels');
-  } else if (appId === 'budget') {
-    document.getElementById('view-budget').classList.remove('hidden');
-    renderBudgetView();
-    syncRouteUrl(budgetSubView === 'summary' ? '/budget' : `/budget/${budgetSubView}`);
-  } else if (appId === 'contacts') {
+  if (appId === 'contacts') {
     document.getElementById('view-contacts').classList.remove('hidden');
     renderContactsView();
     syncRouteUrl('/contacts');
@@ -1502,15 +1750,6 @@ function openApp(appId) {
     document.getElementById('view-competitors').classList.remove('hidden');
     renderCompetitorsView();
     syncRouteUrl('/competitors');
-  } else if (appId === 'aeo-seo') {
-    document.getElementById('view-aeo-seo').classList.remove('hidden');
-    renderAeoSeoView();
-    syncRouteUrl('/aeo-seo');
-  } else if (appId === 'marketing-reports') {
-    activeReportChannel = null;
-    document.getElementById('view-marketing-reports').classList.remove('hidden');
-    renderMarketingReportsView();
-    syncRouteUrl('/marketing-reports');
   } else {
     document.getElementById('view-app-detail').classList.remove('hidden');
     document.getElementById('active-app-breadcrumb').textContent = app.title;
@@ -6725,11 +6964,9 @@ function openChannelReportSubpage(channelName) {
   reportsYear = budgetYear || reportsYear || '2026';
   const sel = document.getElementById('reports-year-select');
   if (sel) sel.value = reportsYear;
-  hideAllViews();
+  switchChannelsHubTab('reports');
   activeReportChannel = channelName;
-  document.getElementById('view-marketing-reports')?.classList.remove('hidden');
   renderMarketingReportsView();
-  setActiveNavHighlight('side-app-marketing-reports');
   syncRouteUrl(`/marketing-reports/${slugifyRouteSegment(channelName)}`);
 }
 

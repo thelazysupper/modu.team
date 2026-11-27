@@ -275,7 +275,15 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
           <button type="button" onclick="toggleHomeWidgetPicker(true)" class="h-8 px-3.5 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium">+ Add Widget</button>
         </div>
 
-        <div id="home-widgets-grid" class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch"></div>
+        <div id="home-widgets-grid" ondragover="onHomeCanvasDragOver(event)" ondrop="onHomeCanvasDrop(event)" class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch"></div>
+
+        <div id="home-canvas-dock" class="hidden fixed bottom-5 left-1/2 -translate-x-1/2 z-40 max-w-[92vw] rounded-2xl border border-slate-200 bg-white/95 backdrop-blur-md shadow-2xl px-3 py-2 flex items-center gap-2 overflow-x-auto animate-fade">
+          <span class="text-[11px] font-semibold text-slate-500 px-1.5 shrink-0">Drag or click to add:</span>
+          <div id="home-dock-items" class="flex items-center gap-1.5 shrink-0"></div>
+          <div class="w-px h-5 bg-slate-200 mx-0.5 shrink-0"></div>
+          <button type="button" onclick="toggleHomeWidgetPicker()" class="h-7 px-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-[11px] font-medium text-slate-800 shrink-0 transition-colors">All Widgets</button>
+          <button type="button" onclick="toggleHomeEditMode(false)" class="h-7 px-3 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-[11px] font-medium shrink-0 transition-colors">Done</button>
+        </div>
       </section>
 
       <!-- VIEW 1: APPS DIRECTORY -->
@@ -408,6 +416,16 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
 
         <div id="group-apps-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5"></div>
       </section>
+
+      <!-- UNIFIED CHANNELS & PERFORMANCE HUB BAR -->
+      <div id="channels-hub-bar" class="hidden max-w-6xl mx-auto mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div class="inline-flex items-center gap-1 p-1 rounded-xl bg-slate-100 border border-slate-200/70">
+          <button type="button" id="ch-hub-tab-channels" onclick="switchChannelsHubTab('channels')" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors bg-white text-slate-900 shadow-xs">Channels &amp; Share</button>
+          <button type="button" id="ch-hub-tab-reports" onclick="switchChannelsHubTab('reports')" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors text-slate-500 hover:text-slate-900">Reports &amp; KPIs</button>
+          <button type="button" id="ch-hub-tab-budget" onclick="switchChannelsHubTab('budget')" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors text-slate-500 hover:text-slate-900">Budget Planner</button>
+        </div>
+        <span class="text-[11px] text-slate-400">Unified Channels, Budget &amp; Performance</span>
+      </div>
 
       <!-- VIEW 2: CHANNELS APP -->
       <section id="view-channels" class="hidden max-w-6xl mx-auto space-y-6 animate-fade">
@@ -1903,6 +1921,57 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
       </section>
 
       <!-- VIEW 2G: AEO & SEO COMPARISON APP -->
+      <!-- UNIFIED SEARCH & AI VISIBILITY HUB BAR -->
+      <div id="search-hub-bar" class="hidden max-w-6xl mx-auto mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div class="inline-flex items-center gap-1 p-1 rounded-xl bg-slate-100 border border-slate-200/70">
+          <button type="button" id="search-hub-tab-aeo" onclick="switchSearchHubTab('aeo-seo')" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors bg-white text-slate-900 shadow-xs">AEO &amp; SEO Comparison</button>
+          <button type="button" id="search-hub-tab-audit" onclick="switchSearchHubTab('seo-audit')" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors text-slate-500 hover:text-slate-900">SEO Audit</button>
+        </div>
+        <span class="text-[11px] text-slate-400">Unified Search &amp; AI Visibility</span>
+      </div>
+
+      <!-- VIEW 6b: SEO AUDIT TAB -->
+      <section id="view-seo-audit" class="hidden max-w-6xl mx-auto space-y-6 animate-fade">
+        <div class="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-200/80">
+          <div class="flex items-center gap-2 text-xs">
+            <button onclick="openHub()" class="text-slate-500 hover:text-slate-900 font-medium flex items-center gap-1.5 transition-colors">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+              </svg>
+              <span>Apps</span>
+            </button>
+            <span class="text-slate-300">/</span>
+            <span class="font-semibold text-slate-900">SEO Audit</span>
+          </div>
+        </div>
+        <div class="space-y-1">
+          <h2 class="text-xl font-bold tracking-tight text-slate-900">Technical &amp; On-Page SEO Audit</h2>
+          <p class="text-xs text-slate-500">Audit crawlability, Core Web Vitals, metadata, and structured data alongside your AEO &amp; SEO query rankings.</p>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-1">
+            <div class="text-[11px] text-slate-500">Tracked Queries</div>
+            <div id="audit-sum-queries" class="text-2xl font-bold text-slate-900 tabular-nums">0</div>
+            <div class="text-[11px] text-slate-400">Synced from AEO &amp; SEO Comparison</div>
+          </div>
+          <div class="rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-1">
+            <div class="text-[11px] text-slate-500">Avg. SEO Visibility</div>
+            <div id="audit-sum-seo" class="text-2xl font-bold text-emerald-600 tabular-nums">0%</div>
+            <div class="text-[11px] text-slate-400">Traditional search ranking score</div>
+          </div>
+          <div class="rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-1">
+            <div class="text-[11px] text-slate-500">AI Citations</div>
+            <div id="audit-sum-cited" class="text-2xl font-bold text-[#7c3aed] tabular-nums">0</div>
+            <div class="text-[11px] text-slate-400">Queries cited in AI answer engines</div>
+          </div>
+        </div>
+        <div class="rounded-2xl border border-dashed border-slate-200 bg-[#fbfcfd] p-8 text-center space-y-2">
+          <div class="text-sm font-semibold text-slate-900">On-Page &amp; Schema Checklist</div>
+          <p class="text-xs text-slate-500 max-w-md mx-auto">Use AEO &amp; SEO Comparison to track query-level visibility, then prioritize pages ranking below #5 or uncited in AI engines.</p>
+          <button type="button" onclick="switchSearchHubTab('aeo-seo')" class="mt-2 h-8 px-3.5 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium">Open Query Comparison →</button>
+        </div>
+      </section>
+
       <section id="view-aeo-seo" class="hidden max-w-6xl mx-auto space-y-6 animate-fade">
         <div class="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-200/80">
           <div class="flex items-center gap-2 text-xs">
