@@ -1443,7 +1443,11 @@ function renderChannelIconHtml(name, sizeClass = 'w-6 h-6', colorOverride = '') 
     bg = '#E1306C';
     border = 'border-[#E1306C]';
     svg = `<svg viewBox="0 0 24 24" class="w-full h-full stroke-white fill-none" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" class="fill-white stroke-none"/></svg>`;
-  } else if (n.includes('meta') || n.includes('facebook')) {
+  } else if (n.includes('meta')) {
+    bg = '#0081FB';
+    border = 'border-[#0081FB]';
+    svg = `<svg viewBox="0 0 24 24" class="w-full h-full stroke-white fill-none" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 12c-1.8-2.9-3.6-4.4-5.4-4.4C4.2 7.6 2.5 9.6 2.5 12.2c0 2.5 1.5 4.2 3.4 4.2 1.6 0 3.1-1.2 4.9-4.1l1.2-1.9 1.2 1.9c1.8 2.9 3.3 4.1 4.9 4.1 1.9 0 3.4-1.7 3.4-4.2 0-2.6-1.7-4.6-4.1-4.6-1.8 0-3.6 1.5-5.4 4.4Z"/></svg>`;
+  } else if (n.includes('facebook')) {
     bg = '#0866FF';
     border = 'border-[#0866FF]';
     svg = `<svg viewBox="0 0 24 24" class="w-full h-full fill-white"><path d="M13.5 21v-7.5h2.5l.4-3h-2.9V8.6c0-.87.24-1.46 1.5-1.46h1.6V4.45c-.28-.04-1.23-.12-2.34-.12-2.31 0-3.89 1.41-3.89 4v2.17H7.8v3h2.57V21h3.13Z"/></svg>`;
