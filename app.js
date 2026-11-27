@@ -147,6 +147,25 @@ const illustrations = {
       <path d="M196 35l3 3 6-6" stroke="#10b981" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
   `,
+  traffic: `
+    <svg class="w-56 h-32" viewBox="0 0 240 120" fill="none">
+      <rect x="28" y="16" width="184" height="88" rx="8" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
+      <line x1="40" y1="86" x2="146" y2="86" stroke="#f1f5f9" stroke-width="1.2"/>
+      <line x1="40" y1="64" x2="146" y2="64" stroke="#f1f5f9" stroke-width="1.2"/>
+      <line x1="40" y1="42" x2="146" y2="42" stroke="#f1f5f9" stroke-width="1.2"/>
+      <path d="M40 42 C66 38, 92 28, 118 32 C130 34, 138 28, 146 27" stroke="#ef4444" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="M40 62 C66 64, 92 50, 118 51 C130 52, 138 44, 146 42" stroke="#2563eb" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="M40 76 C66 72, 92 78, 118 74 C130 72, 138 76, 146 76" stroke="#22c55e" stroke-width="2" stroke-linecap="round"/>
+      <line x1="158" y1="26" x2="158" y2="94" stroke="#e2e8f0" stroke-width="1"/>
+      <rect x="168" y="30" width="24" height="6" rx="3" fill="#0f172a"/>
+      <rect x="168" y="46" width="32" height="4" rx="2" fill="#f1f5f9"/>
+      <rect x="168" y="46" width="18" height="4" rx="2" fill="#ef4444"/>
+      <rect x="168" y="58" width="32" height="4" rx="2" fill="#f1f5f9"/>
+      <rect x="168" y="58" width="12" height="4" rx="2" fill="#2563eb"/>
+      <rect x="168" y="70" width="32" height="4" rx="2" fill="#f1f5f9"/>
+      <rect x="168" y="70" width="7" height="4" rx="2" fill="#22c55e"/>
+    </svg>
+  `,
   integrations: `
     <svg class="w-56 h-32" viewBox="0 0 240 120" fill="none">
       <line x1="88" y1="60" x2="112" y2="40" stroke="#cbd5e1" stroke-width="1.6" stroke-dasharray="3 3"/>
@@ -213,6 +232,14 @@ const apps = [
     status: 'Active',
     description: 'Technical SEO, SSR readiness, Schema.org matrix, competitor comparison, and live SERP.',
     illustration: illustrations.seoAudit,
+    actionType: 'open'
+  },
+  {
+    id: 'traffic',
+    title: 'Traffic',
+    status: 'Active',
+    description: 'Monitor website traffic, channel trends, top pages, devices, and sources across your domains.',
+    illustration: illustrations.traffic,
     actionType: 'open'
   },
   {
@@ -704,7 +731,7 @@ function setActiveNavHighlight(activeId) {
 }
 
 function hideAllViews() {
-  ['view-home', 'view-hub', 'view-app-group', 'view-channels', 'view-budget', 'view-contacts', 'view-leads', 'view-integrations', 'view-competitors', 'view-aeo-seo', 'view-seo-audit', 'view-marketing-reports', 'view-app-detail', 'view-wishlist', 'view-generic-section', 'channels-hub-bar', 'search-hub-bar'].forEach(id => {
+  ['view-home', 'view-hub', 'view-app-group', 'view-channels', 'view-budget', 'view-contacts', 'view-leads', 'view-integrations', 'view-competitors', 'view-aeo-seo', 'view-seo-audit', 'view-traffic', 'view-marketing-reports', 'view-app-detail', 'view-wishlist', 'view-generic-section', 'channels-hub-bar', 'search-hub-bar'].forEach(id => {
     document.getElementById(id)?.classList.add('hidden');
   });
 }
@@ -876,8 +903,16 @@ function navigateToRoute(rawPath, { push = false } = {}) {
       }
       return;
     }
-    if (['contacts', 'leads', 'integrations', 'competitors', 'aeo-seo'].includes(head)) {
+    if (['contacts', 'leads', 'integrations', 'competitors', 'aeo-seo', 'seo-audit', 'traffic'].includes(head)) {
       openApp(head);
+      return;
+    }
+    if (head === 'seo') {
+      openApp('seo-audit');
+      return;
+    }
+    if (head === 'aeo') {
+      openApp('aeo-seo');
       return;
     }
     if (head === 'apps' && sub) {
@@ -1736,6 +1771,14 @@ function openApp(appId) {
     switchSeoTab(activeSeoTab || 'overview');
     setActiveNavHighlight('side-app-seo-audit');
     syncRouteUrl('/seo');
+    return;
+  }
+  if (appId === 'traffic') {
+    hideAllViews();
+    document.getElementById('view-traffic')?.classList.remove('hidden');
+    if (typeof renderTrafficView === 'function') renderTrafficView();
+    setActiveNavHighlight('side-app-traffic');
+    syncRouteUrl('/traffic');
     return;
   }
 
@@ -7874,6 +7917,548 @@ async function runLiveAeoScan() {
   }
 }
 
+const TRAFFIC_CHANNEL_DEFS = [
+  { key: 'direct', label: 'Direct', color: '#2563eb' },
+  { key: 'ai', label: 'AI Traffic', color: '#fbbf24' },
+  { key: 'referral', label: 'Referral', color: '#22c55e' },
+  { key: 'paid', label: 'Paid', color: '#a78bfa' },
+  { key: 'social', label: 'Social', color: '#d97706' },
+  { key: 'search', label: 'Search', color: '#ef4444' }
+];
+
+let trafficDomains = [];
+let activeTrafficDomain = '';
+let activeTrafficRange = '30d';
+let trafficDataByDomain = {};
+let trafficHiddenChannels = new Set();
+
+function normalizeTrafficDomain(raw) {
+  return String(raw || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/^www\./, '')
+    .split('/')[0];
+}
+
+function formatTrafficCompact(n) {
+  const num = Number(n) || 0;
+  if (num >= 1000000) {
+    const m = num / 1000000;
+    return (m >= 10 || Number.isInteger(m) ? m.toFixed(0) : m.toFixed(1).replace(/\.0$/, '')) + 'M';
+  }
+  if (num >= 1000) {
+    const k = num / 1000;
+    return (k >= 100 || Number.isInteger(k) ? k.toFixed(0) : k.toFixed(1).replace(/\.0$/, '')) + 'K';
+  }
+  return Math.round(num).toLocaleString();
+}
+
+function buildDefaultTrafficRecord(domain) {
+  let hash = 0;
+  for (let i = 0; i < domain.length; i++) hash = (hash * 31 + domain.charCodeAt(i)) % 100000;
+  const scale = 0.65 + (hash % 70) / 100;
+  const direct = Math.round(48000 * scale);
+  const ai = Math.round(4200 * scale);
+  const referral = Math.round(13500 * scale);
+  const paid = Math.round(13200 * scale);
+  const social = Math.round(7800 * scale);
+  const search = Math.round(104000 * scale);
+  const total = direct + ai + referral + paid + social + search;
+  return {
+    channels: { direct, ai, referral, paid, social, search },
+    uniqueVisitors: Math.round(total * 0.72),
+    avgDurationSec: 158 + (hash % 75),
+    pagesPerSession: Number((2.6 + (hash % 14) / 10).toFixed(1)),
+    bounceRate: Number((34.5 + (hash % 12)).toFixed(1)),
+    deltaPct: Number((8.4 + (hash % 15)).toFixed(1)),
+    topPages: [
+      { path: '/', title: 'Home', visits: Math.round(total * 0.34), avgSec: 145, bounce: 31.2 },
+      { path: '/pricing', title: 'Pricing & Plans', visits: Math.round(total * 0.19), avgSec: 210, bounce: 28.4 },
+      { path: '/product', title: 'Platform Overview', visits: Math.round(total * 0.15), avgSec: 184, bounce: 33.0 },
+      { path: '/blog/aeo-guide', title: 'AEO & AI Search Guide', visits: Math.round(total * 0.11), avgSec: 265, bounce: 41.5 },
+      { path: '/docs', title: 'Documentation', visits: Math.round(total * 0.08), avgSec: 312, bounce: 24.8 }
+    ],
+    devices: [
+      { label: 'Desktop', pct: 64, color: '#0f172a' },
+      { label: 'Mobile', pct: 31, color: '#2563eb' },
+      { label: 'Tablet', pct: 5, color: '#94a3b8' }
+    ],
+    countries: [
+      { name: 'Norway', pct: 46 },
+      { name: 'Sweden', pct: 18 },
+      { name: 'United States', pct: 14 },
+      { name: 'United Kingdom', pct: 11 },
+      { name: 'Denmark', pct: 11 }
+    ],
+    referrers: [
+      { source: 'google.com', type: 'Search', visits: Math.round(search * 0.84) },
+      { source: 'chatgpt.com', type: 'AI Traffic', visits: Math.round(ai * 0.56) },
+      { source: 'perplexity.ai', type: 'AI Traffic', visits: Math.round(ai * 0.31) },
+      { source: 'linkedin.com', type: 'Social', visits: Math.round(social * 0.62) },
+      { source: 'github.com', type: 'Referral', visits: Math.round(referral * 0.38) }
+    ]
+  };
+}
+
+function ensureTrafficDomainsInitialized() {
+  const discovered = new Set();
+  (trafficDomains || []).forEach(d => {
+    const norm = normalizeTrafficDomain(d);
+    if (norm) discovered.add(norm);
+  });
+  (typeof searchReportRuns !== 'undefined' ? searchReportRuns : []).forEach(r => {
+    const norm = normalizeTrafficDomain(r?.primaryDomain);
+    if (norm) discovered.add(norm);
+  });
+  (typeof aeoReportRuns !== 'undefined' ? aeoReportRuns : []).forEach(r => {
+    const norm = normalizeTrafficDomain(r?.primaryDomain);
+    if (norm) discovered.add(norm);
+  });
+  const auditDom = normalizeTrafficDomain(document.getElementById('audit-primary-domain')?.value);
+  if (auditDom) discovered.add(auditDom);
+  const aeoDom = normalizeTrafficDomain(document.getElementById('aeo-live-domain')?.value);
+  if (aeoDom) discovered.add(aeoDom);
+
+  if (discovered.size === 0) {
+    discovered.add('modu.team');
+    discovered.add('app.modu.team');
+  }
+  trafficDomains = Array.from(discovered);
+  if (!activeTrafficDomain || !trafficDomains.includes(activeTrafficDomain)) {
+    activeTrafficDomain = trafficDomains[0];
+  }
+  trafficDomains.forEach(d => {
+    if (!trafficDataByDomain[d]) trafficDataByDomain[d] = buildDefaultTrafficRecord(d);
+  });
+}
+
+function getTrafficRangeMultiplier(range) {
+  if (range === '7d') return 0.25;
+  if (range === '90d') return 2.85;
+  if (range === '12m') return 11.4;
+  return 1;
+}
+
+function buildTrafficTrendSeries(rec, range) {
+  const mult = getTrafficRangeMultiplier(range);
+  const points = range === '7d' ? 7 : range === '12m' ? 12 : 8;
+  const labels = range === '7d'
+    ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    : range === '12m'
+      ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+      : Array.from({ length: points }, (_, i) => `W${i + 1}`);
+
+  const curveShapes = {
+    search:   [0.78, 0.82, 0.85, 0.88, 0.98, 0.96, 1.02, 1.05, 1.01, 1.08, 1.12, 1.15],
+    direct:   [0.72, 0.70, 0.71, 0.84, 0.87, 0.91, 1.06, 1.10, 1.04, 1.09, 1.14, 1.18],
+    referral: [1.05, 1.08, 0.96, 0.82, 0.95, 0.88, 0.78, 0.76, 0.84, 0.80, 0.86, 0.82],
+    paid:     [0.52, 0.56, 0.65, 0.78, 0.92, 1.05, 1.12, 1.18, 1.15, 1.20, 1.24, 1.28],
+    social:   [0.95, 0.96, 0.95, 0.96, 0.95, 0.96, 0.95, 0.96, 0.95, 0.96, 0.95, 0.96],
+    ai:       [0.35, 0.45, 0.58, 0.66, 0.72, 0.76, 1.05, 1.18, 1.25, 1.38, 1.48, 1.60]
+  };
+
+  const seriesList = TRAFFIC_CHANNEL_DEFS.map(ch => {
+    const baseVal = (rec.channels?.[ch.key] || 0) * mult;
+    const shape = curveShapes[ch.key] || curveShapes.direct;
+    const values = labels.map((_, idx) => {
+      const f = shape[idx % shape.length];
+      return Math.round((baseVal / points) * f * 1.15);
+    });
+    return { key: ch.key, label: ch.label, color: ch.color, values };
+  });
+
+  return { labels, seriesList };
+}
+
+function drawTrafficChannelTrendChart(canvasId, labels, seriesList) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  if (!canvas.dataset.baseHeight) {
+    canvas.dataset.baseHeight = String(Number(canvas.getAttribute('height')) || 230);
+  }
+  const baseHeight = Number(canvas.dataset.baseHeight) || 230;
+
+  const visibleSeries = seriesList.filter(s => !trafficHiddenChannels.has(s.key));
+  const allVals = visibleSeries.flatMap(s => s.values || []);
+  const rawMax = Math.max(10, ...allVals);
+  const mag = Math.pow(10, Math.floor(Math.log10(rawMax)));
+  const niceMax = Math.ceil((rawMax * 1.12) / mag) * mag;
+
+  canvas._trafficMeta = { labels, visibleSeries, maxVal: niceMax, hoverIdx: -1 };
+
+  const renderTrend = (hoverIdx = -1) => {
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    const width = Math.max(300, Math.floor(rect.width || 620));
+    const height = baseHeight;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    canvas.style.width = '100%';
+    canvas.style.height = height + 'px';
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, width, height);
+
+    const padL = 42, padR = 12, padT = 14, padB = 22;
+    const plotW = width - padL - padR;
+    const plotH = height - padT - padB;
+    const uiFont = '-apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif';
+    canvas._trafficMeta.padL = padL;
+    canvas._trafficMeta.plotW = plotW;
+
+    ctx.strokeStyle = '#f1f5f9';
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = `10px ${uiFont}`;
+    [0, 0.25, 0.5, 0.75, 1].forEach(frac => {
+      const y = padT + plotH - frac * plotH;
+      ctx.beginPath();
+      ctx.moveTo(padL, y);
+      ctx.lineTo(width - padR, y);
+      ctx.stroke();
+      const lbl = frac === 0 ? '0' : formatTrafficCompact(niceMax * frac);
+      ctx.fillText(lbl, 4, y + 3);
+    });
+
+    const n = Math.max(1, labels.length);
+    const getX = i => (n === 1 ? padL + plotW / 2 : padL + (i / (n - 1)) * plotW);
+    const getY = v => padT + plotH - (Math.min(niceMax, Math.max(0, v)) / niceMax) * plotH;
+
+    if (hoverIdx >= 0 && hoverIdx < n) {
+      const hx = getX(hoverIdx);
+      ctx.strokeStyle = '#cbd5e1';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(hx, padT);
+      ctx.lineTo(hx, padT + plotH);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    visibleSeries.forEach(s => {
+      const pts = (s.values || []).map((v, i) => ({ x: getX(i), y: getY(v), v }));
+      if (pts.length === 0) return;
+
+      ctx.strokeStyle = s.color;
+      ctx.lineWidth = 3.2;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      pts.forEach((p, i) => {
+        if (i === 0) ctx.moveTo(p.x, p.y);
+        else {
+          const prev = pts[i - 1];
+          const cx = (prev.x + p.x) / 2;
+          ctx.bezierCurveTo(cx, prev.y, cx, p.y, p.x, p.y);
+        }
+      });
+      ctx.stroke();
+
+      if (hoverIdx >= 0 && hoverIdx < pts.length) {
+        const hp = pts[hoverIdx];
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(hp.x, hp.y, 4.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+    });
+
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = `10px ${uiFont}`;
+    ctx.textAlign = 'center';
+    labels.forEach((lbl, i) => {
+      ctx.fillText(String(lbl), getX(i), height - 6);
+    });
+    ctx.textAlign = 'left';
+  };
+
+  canvas._renderTrafficTrend = renderTrend;
+  renderTrend(-1);
+
+  if (!canvas._hasTrafficHover) {
+    canvas._hasTrafficHover = true;
+    canvas.style.cursor = 'crosshair';
+    canvas.addEventListener('mousemove', e => {
+      const meta = canvas._trafficMeta;
+      if (!meta || !meta.labels?.length) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const n = meta.labels.length;
+      let idx = 0;
+      if (n > 1) {
+        const rel = Math.max(0, Math.min(1, (x - meta.padL) / Math.max(1, meta.plotW)));
+        idx = Math.round(rel * (n - 1));
+      }
+      if (meta.hoverIdx !== idx) {
+        meta.hoverIdx = idx;
+        canvas._renderTrafficTrend?.(idx);
+      }
+      let html = `<div class="font-semibold text-white mb-1">${meta.labels[idx]}</div>`;
+      meta.visibleSeries.forEach(s => {
+        const v = s.values?.[idx] ?? 0;
+        html += `<div class="flex items-center justify-between gap-4"><span style="color:${s.color}">${s.label}</span><span class="tabular-nums font-medium">${formatTrafficCompact(v)}</span></div>`;
+      });
+      showChartTooltip(e.clientX, e.clientY, html);
+    });
+    canvas.addEventListener('mouseleave', () => {
+      if (canvas._trafficMeta && canvas._trafficMeta.hoverIdx !== -1) {
+        canvas._trafficMeta.hoverIdx = -1;
+        canvas._renderTrafficTrend?.(-1);
+      }
+      hideChartTooltip();
+    });
+  }
+}
+
+function toggleTrafficLegendChannel(key) {
+  if (trafficHiddenChannels.has(key)) trafficHiddenChannels.delete(key);
+  else if (trafficHiddenChannels.size < TRAFFIC_CHANNEL_DEFS.length - 1) trafficHiddenChannels.add(key);
+  renderTrafficView();
+}
+
+function onTrafficDomainChange(domain) {
+  activeTrafficDomain = normalizeTrafficDomain(domain) || trafficDomains[0];
+  renderTrafficView();
+  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+}
+
+function setTrafficRange(range) {
+  activeTrafficRange = range || '30d';
+  renderTrafficView();
+}
+
+function toggleTrafficDomainForm(forceState) {
+  const panel = document.getElementById('traffic-domain-form-panel');
+  if (!panel) return;
+  const shouldShow = typeof forceState === 'boolean' ? forceState : panel.classList.contains('hidden');
+  panel.classList.toggle('hidden', !shouldShow);
+  if (shouldShow) document.getElementById('traffic-new-domain-input')?.focus();
+}
+
+function addTrafficDomain() {
+  const input = document.getElementById('traffic-new-domain-input');
+  const norm = normalizeTrafficDomain(input?.value);
+  if (!norm) return;
+  if (!trafficDomains.includes(norm)) trafficDomains.push(norm);
+  if (!trafficDataByDomain[norm]) trafficDataByDomain[norm] = buildDefaultTrafficRecord(norm);
+  activeTrafficDomain = norm;
+  if (input) input.value = '';
+  toggleTrafficDomainForm(false);
+  renderTrafficView();
+  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+}
+
+function removeSelectedTrafficDomain() {
+  if (trafficDomains.length <= 1) return;
+  trafficDomains = trafficDomains.filter(d => d !== activeTrafficDomain);
+  activeTrafficDomain = trafficDomains[0];
+  toggleTrafficDomainForm(false);
+  renderTrafficView();
+  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+}
+
+function toggleTrafficDataForm(forceState) {
+  const panel = document.getElementById('traffic-data-form-panel');
+  if (!panel) return;
+  const shouldShow = typeof forceState === 'boolean' ? forceState : panel.classList.contains('hidden');
+  panel.classList.toggle('hidden', !shouldShow);
+  if (shouldShow) {
+    ensureTrafficDomainsInitialized();
+    const rec = trafficDataByDomain[activeTrafficDomain] || buildDefaultTrafficRecord(activeTrafficDomain);
+    const lbl = document.getElementById('traffic-edit-domain-label');
+    if (lbl) lbl.textContent = `Domain: ${activeTrafficDomain} (30d baseline)`;
+    document.getElementById('tf-ch-direct').value = rec.channels.direct || 0;
+    document.getElementById('tf-ch-ai').value = rec.channels.ai || 0;
+    document.getElementById('tf-ch-referral').value = rec.channels.referral || 0;
+    document.getElementById('tf-ch-paid').value = rec.channels.paid || 0;
+    document.getElementById('tf-ch-social').value = rec.channels.social || 0;
+    document.getElementById('tf-ch-search').value = rec.channels.search || 0;
+    document.getElementById('tf-unique').value = rec.uniqueVisitors || 0;
+    document.getElementById('tf-duration').value = rec.avgDurationSec || 120;
+    document.getElementById('tf-pages-session').value = rec.pagesPerSession || 2.5;
+    document.getElementById('tf-bounce').value = rec.bounceRate || 35;
+  }
+}
+
+function saveTrafficMetricsFromForm() {
+  ensureTrafficDomainsInitialized();
+  const rec = trafficDataByDomain[activeTrafficDomain] || buildDefaultTrafficRecord(activeTrafficDomain);
+  rec.channels = {
+    direct: Math.max(0, Number(document.getElementById('tf-ch-direct')?.value) || 0),
+    ai: Math.max(0, Number(document.getElementById('tf-ch-ai')?.value) || 0),
+    referral: Math.max(0, Number(document.getElementById('tf-ch-referral')?.value) || 0),
+    paid: Math.max(0, Number(document.getElementById('tf-ch-paid')?.value) || 0),
+    social: Math.max(0, Number(document.getElementById('tf-ch-social')?.value) || 0),
+    search: Math.max(0, Number(document.getElementById('tf-ch-search')?.value) || 0)
+  };
+  rec.uniqueVisitors = Math.max(0, Number(document.getElementById('tf-unique')?.value) || 0);
+  rec.avgDurationSec = Math.max(0, Number(document.getElementById('tf-duration')?.value) || 0);
+  rec.pagesPerSession = Math.max(1, Number(document.getElementById('tf-pages-session')?.value) || 1);
+  rec.bounceRate = Math.min(100, Math.max(0, Number(document.getElementById('tf-bounce')?.value) || 0));
+  trafficDataByDomain[activeTrafficDomain] = rec;
+  toggleTrafficDataForm(false);
+  renderTrafficView();
+  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+}
+
+function renderTrafficView() {
+  ensureTrafficDomainsInitialized();
+  const sel = document.getElementById('traffic-domain-select');
+  if (sel) {
+    sel.innerHTML = trafficDomains.map(d => `<option value="${d}" ${d === activeTrafficDomain ? 'selected' : ''}>${d}</option>`).join('');
+  }
+  const rmBtn = document.getElementById('traffic-remove-domain-btn');
+  if (rmBtn) rmBtn.disabled = trafficDomains.length <= 1;
+
+  document.querySelectorAll('.traffic-range-btn').forEach(btn => {
+    const active = btn.dataset.range === activeTrafficRange;
+    btn.className = active
+      ? 'traffic-range-btn px-2.5 py-1 rounded-md text-[11px] font-medium bg-white text-slate-900 shadow-xs transition-colors'
+      : 'traffic-range-btn px-2.5 py-1 rounded-md text-[11px] font-medium text-slate-500 hover:text-slate-900 transition-colors';
+  });
+
+  const rec = trafficDataByDomain[activeTrafficDomain] || buildDefaultTrafficRecord(activeTrafficDomain);
+  const mult = getTrafficRangeMultiplier(activeTrafficRange);
+  const chTotals = TRAFFIC_CHANNEL_DEFS.map(ch => ({
+    ...ch,
+    value: Math.round((rec.channels?.[ch.key] || 0) * mult)
+  }));
+  const grandTotal = chTotals.reduce((a, c) => a + c.value, 0);
+  const uniqueTotal = Math.round((rec.uniqueVisitors || 0) * mult);
+  const uniqueRatio = grandTotal > 0 ? Math.round((uniqueTotal / grandTotal) * 100) : 0;
+  const aiItem = chTotals.find(c => c.key === 'ai');
+  const aiShare = grandTotal > 0 && aiItem ? ((aiItem.value / grandTotal) * 100).toFixed(1) : '0.0';
+  const durMin = Math.floor((rec.avgDurationSec || 0) / 60);
+  const durSec = String((rec.avgDurationSec || 0) % 60).padStart(2, '0');
+
+  const setTxt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  setTxt('traffic-kpi-visits', formatTrafficCompact(grandTotal));
+  setTxt('traffic-kpi-visits-delta', `+${rec.deltaPct || 0}%`);
+  setTxt('traffic-kpi-unique', formatTrafficCompact(uniqueTotal));
+  setTxt('traffic-kpi-unique-ratio', `${uniqueRatio}% of visits`);
+  setTxt('traffic-kpi-duration', `${durMin}m ${durSec}s`);
+  setTxt('traffic-kpi-pages-session', `${(rec.pagesPerSession || 0).toFixed(1)} pages/visit`);
+  setTxt('traffic-kpi-bounce', `${(rec.bounceRate || 0).toFixed(1)}%`);
+  setTxt('traffic-kpi-ai-share', `${aiShare}% AI traffic`);
+  setTxt('traffic-trend-domain-badge', activeTrafficDomain);
+  setTxt('traffic-hero-total', formatTrafficCompact(grandTotal));
+  setTxt('traffic-hero-sub', `Visits (${activeTrafficRange}) · ${activeTrafficDomain}`);
+
+  const legendEl = document.getElementById('traffic-channel-legend');
+  if (legendEl) {
+    legendEl.innerHTML = TRAFFIC_CHANNEL_DEFS.map(ch => {
+      const hidden = trafficHiddenChannels.has(ch.key);
+      return `
+        <button type="button" onclick="toggleTrafficLegendChannel('${ch.key}')" class="inline-flex items-center gap-1.5 text-xs font-medium transition-opacity ${hidden ? 'opacity-35 line-through' : 'text-slate-700 hover:text-slate-900'}">
+          <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${ch.color}"></span>
+          <span>${ch.label}</span>
+        </button>
+      `;
+    }).join('');
+  }
+
+  const barsEl = document.getElementById('traffic-channel-bars');
+  if (barsEl) {
+    barsEl.innerHTML = chTotals.map(ch => {
+      const pct = grandTotal > 0 ? Math.round((ch.value / grandTotal) * 100) : 0;
+      return `
+        <div class="space-y-1.5">
+          <div class="grid grid-cols-3 items-center text-xs">
+            <span class="font-medium text-slate-700">${ch.label}</span>
+            <span class="text-center text-slate-400 tabular-nums">${pct}%</span>
+            <span class="text-right font-semibold text-slate-800 tabular-nums">${formatTrafficCompact(ch.value)}</span>
+          </div>
+          <div class="h-2.5 w-full rounded-md bg-slate-100 overflow-hidden">
+            <div class="h-full rounded-md transition-all duration-300" style="width:${Math.max(pct, ch.value > 0 ? 2 : 0)}%; background:${ch.color}"></div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  const { labels, seriesList } = buildTrafficTrendSeries(rec, activeTrafficRange);
+  drawTrafficChannelTrendChart('trafficChannelTrendCanvas', labels, seriesList);
+
+  const pagesBody = document.getElementById('traffic-top-pages-body');
+  if (pagesBody) {
+    const pages = (rec.topPages || []).map(p => ({ ...p, scaledVisits: Math.round((p.visits || 0) * mult) }));
+    const maxP = Math.max(1, ...pages.map(p => p.scaledVisits));
+    pagesBody.innerHTML = pages.map(p => {
+      const m = Math.floor((p.avgSec || 0) / 60);
+      const s = String((p.avgSec || 0) % 60).padStart(2, '0');
+      const share = grandTotal > 0 ? Math.round((p.scaledVisits / grandTotal) * 100) : 0;
+      const barW = Math.round((p.scaledVisits / maxP) * 100);
+      return `
+        <tr class="hover:bg-slate-50/70 transition-colors">
+          <td class="py-3 px-4">
+            <div class="font-medium text-slate-900">${p.path}</div>
+            <div class="text-[11px] text-slate-400">${p.title || ''}</div>
+          </td>
+          <td class="py-3 px-4 text-right font-semibold text-slate-800 tabular-nums">${formatTrafficCompact(p.scaledVisits)}</td>
+          <td class="py-3 px-4 text-right text-slate-600 tabular-nums">${m}m ${s}s</td>
+          <td class="py-3 px-4 text-right text-slate-600 tabular-nums">${p.bounce}%</td>
+          <td class="py-3 px-4">
+            <div class="flex items-center gap-2">
+              <div class="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                <div class="h-full rounded-full bg-[#0f172a]" style="width:${barW}%"></div>
+              </div>
+              <span class="text-[10px] text-slate-400 tabular-nums w-7 text-right">${share}%</span>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  const devicesEl = document.getElementById('traffic-devices-list');
+  if (devicesEl) {
+    devicesEl.innerHTML = (rec.devices || []).map(d => `
+      <div class="space-y-1">
+        <div class="flex items-center justify-between text-xs">
+          <span class="font-medium text-slate-700">${d.label}</span>
+          <span class="font-semibold text-slate-900 tabular-nums">${d.pct}%</span>
+        </div>
+        <div class="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
+          <div class="h-full rounded-full" style="width:${d.pct}%; background:${d.color}"></div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  const countriesEl = document.getElementById('traffic-countries-list');
+  if (countriesEl) {
+    countriesEl.innerHTML = (rec.countries || []).map(c => `
+      <div class="flex items-center justify-between gap-3 text-xs">
+        <span class="text-slate-700 font-medium">${c.name}</span>
+        <div class="flex items-center gap-2 w-36">
+          <div class="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+            <div class="h-full rounded-full bg-blue-500" style="width:${c.pct}%"></div>
+          </div>
+          <span class="text-[11px] text-slate-500 tabular-nums w-8 text-right">${c.pct}%</span>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  const refEl = document.getElementById('traffic-referrers-list');
+  if (refEl) {
+    refEl.innerHTML = (rec.referrers || []).map(r => `
+      <div class="flex items-center justify-between gap-2 text-xs">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="font-medium text-slate-800 truncate">${r.source}</span>
+          <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-500">${r.type}</span>
+        </div>
+        <span class="font-semibold text-slate-900 tabular-nums">${formatTrafficCompact(Math.round((r.visits || 0) * mult))}</span>
+      </div>
+    `).join('');
+  }
+}
+
 let reportsYear = '2026';
 let reportsMetric = 'cost';
 let reportsChannelMetric = 'cost';
@@ -8980,6 +9565,9 @@ function getWorkspaceSnapshot() {
     integrationsList,
     competitorsList,
     aeoSeoEntries,
+    trafficDomains,
+    activeTrafficDomain,
+    trafficDataByDomain,
     wishlistItems,
     homeDashboardLayout,
     appGroups,
@@ -9012,6 +9600,9 @@ function applyWorkspaceSnapshot(snap) {
     if (Array.isArray(snap.integrationsList)) integrationsList = snap.integrationsList;
     if (Array.isArray(snap.competitorsList)) competitorsList = snap.competitorsList;
     if (Array.isArray(snap.aeoSeoEntries)) aeoSeoEntries = snap.aeoSeoEntries;
+    if (Array.isArray(snap.trafficDomains)) trafficDomains = snap.trafficDomains;
+    if (snap.activeTrafficDomain) activeTrafficDomain = snap.activeTrafficDomain;
+    if (snap.trafficDataByDomain && typeof snap.trafficDataByDomain === 'object') trafficDataByDomain = snap.trafficDataByDomain;
     if (Array.isArray(snap.wishlistItems)) wishlistItems = snap.wishlistItems;
     if (snap.homeDashboardLayout && Array.isArray(snap.homeDashboardLayout.widgets)) homeDashboardLayout = snap.homeDashboardLayout;
     if (Array.isArray(snap.appGroups)) appGroups = snap.appGroups;
@@ -9033,6 +9624,7 @@ function applyWorkspaceSnapshot(snap) {
       if (!document.getElementById('view-integrations')?.classList.contains('hidden')) renderIntegrationsView();
       if (!document.getElementById('view-competitors')?.classList.contains('hidden')) renderCompetitorsView();
       if (!document.getElementById('view-aeo-seo')?.classList.contains('hidden')) renderAeoSeoView();
+      if (!document.getElementById('view-traffic')?.classList.contains('hidden')) renderTrafficView();
       if (!document.getElementById('view-marketing-reports')?.classList.contains('hidden')) renderMarketingReportsView();
     }
   } finally {
