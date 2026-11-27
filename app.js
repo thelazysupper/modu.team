@@ -5190,6 +5190,28 @@ async function fetchNewLeadLogo() {
   }
 }
 
+function isWonStage(stageId) {
+  const st = leadStages.find(s => s.id === Number(stageId));
+  return Boolean(st && /\b(won|vunnet)\b/i.test(st.name || ''));
+}
+
+function formatLeadDateDisplay(isoStr) {
+  if (!isoStr) return '—';
+  const d = new Date(isoStr);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function toDateInputValue(isoStr) {
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  if (isNaN(d.getTime())) return '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function saveLead() {
   const editId = document.getElementById('l-edit-id').value;
   const company = (document.getElementById('l-company').value || '').trim();
@@ -5237,6 +5259,7 @@ function saveLead() {
   if (!stageId) return;
 
   const existingLead = editId ? leadEntries.find(l => l.id === Number(editId)) : null;
+  const nowIso = new Date().toISOString();
   const data = {
     id: editId ? Number(editId) : Date.now(),
     company,
@@ -5248,7 +5271,8 @@ function saveLead() {
     stageId,
     value,
     notes: existingLead?.notes || '',
-    createdAt: existingLead?.createdAt || new Date().toISOString()
+    createdAt: existingLead?.createdAt || nowIso,
+    wonAt: isWonStage(stageId) ? (existingLead?.wonAt || nowIso) : ''
   };
 
   if (editId) {
@@ -5314,7 +5338,72 @@ function syncLeadDrawerHeaderPreview() {
   }
 }
 
-function openLeadDrawer(leadId) {
+function renderLeadDrawerViewMode(lead) {
+  const stageObj = leadStages.find(s => s.id === lead.stageId);
+  const stageName = stageObj?.name || '—';
+  const isWon = isWonStage(lead.stageId) || Boolean(lead.wonAt);
+
+  const valEl = document.getElementById('ld-view-value');
+  if (valEl) valEl.textContent = lead.value > 0 ? `${Math.round(lead.value).toLocaleString()} NOK` : '—';
+
+  const stEl = document.getElementById('ld-view-stage');
+  if (stEl) {
+    stEl.innerHTML = `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${isWon ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-800'}">${stageName}</span>`;
+  }
+
+  const chEl = document.getElementById('ld-view-channel');
+  if (chEl) {
+    chEl.innerHTML = lead.channel
+      ? `<span class="inline-flex items-center gap-1.5">${renderChannelIconHtml(lead.channel, 'w-4 h-4')}<span>${lead.channel}</span></span>`
+      : '—';
+  }
+
+  const erpEl = document.getElementById('ld-view-erp');
+  if (erpEl) erpEl.textContent = lead.erp || '—';
+
+  const intEl = document.getElementById('ld-view-integration');
+  if (intEl) intEl.textContent = lead.integration || '—';
+
+  const createdEl = document.getElementById('ld-view-created');
+  if (createdEl) createdEl.textContent = formatLeadDateDisplay(lead.createdAt);
+
+  const wonRow = document.getElementById('ld-view-won-row');
+  const wonEl = document.getElementById('ld-view-won');
+  if (wonRow && wonEl) {
+    if (isWon) {
+      wonEl.textContent = formatLeadDateDisplay(lead.wonAt || lead.createdAt);
+      wonRow.classList.remove('hidden');
+    } else {
+      wonRow.classList.add('hidden');
+    }
+  }
+
+  const notesEl = document.getElementById('ld-view-notes');
+  if (notesEl) {
+    notesEl.textContent = (lead.notes || '').trim() || 'No notes added.';
+    notesEl.classList.toggle('text-slate-400', !(lead.notes || '').trim());
+    notesEl.classList.toggle('text-slate-700', Boolean((lead.notes || '').trim()));
+  }
+}
+
+let leadDrawerEditMode = false;
+
+function toggleLeadDrawerEditMode(forceEdit = null) {
+  const next = forceEdit === null ? !leadDrawerEditMode : Boolean(forceEdit);
+  leadDrawerEditMode = next;
+  document.getElementById('ld-view-mode')?.classList.toggle('hidden', next);
+  document.getElementById('ld-edit-mode')?.classList.toggle('hidden', !next);
+  document.getElementById('ld-footer-view')?.classList.toggle('hidden', next);
+  document.getElementById('ld-footer-edit')?.classList.toggle('hidden', !next);
+  const editBtn = document.getElementById('ld-edit-toggle-btn');
+  if (editBtn) {
+    editBtn.classList.toggle('bg-slate-900', next);
+    editBtn.classList.toggle('text-white', next);
+    editBtn.classList.toggle('hover:text-slate-900', !next);
+  }
+}
+
+function openLeadDrawer(leadId, startInEdit = false) {
   const lead = leadEntries.find(l => l.id === leadId);
   if (!lead) return;
   document.getElementById('ld-id').value = String(lead.id);
@@ -5323,6 +5412,10 @@ function openLeadDrawer(leadId) {
   document.getElementById('ld-logo').value = lead.logo || '';
   document.getElementById('ld-value').value = lead.value > 0 ? String(lead.value) : '';
   document.getElementById('ld-notes').value = lead.notes || '';
+  const createdInput = document.getElementById('ld-created-date');
+  if (createdInput) createdInput.value = toDateInputValue(lead.createdAt);
+  const wonInput = document.getElementById('ld-won-date');
+  if (wonInput) wonInput.value = toDateInputValue(lead.wonAt);
   const statusEl = document.getElementById('ld-fetch-status');
   if (statusEl) {
     statusEl.textContent = '';
@@ -5331,6 +5424,8 @@ function openLeadDrawer(leadId) {
   if (lead.channel) ensureChannelExists(lead.channel);
   populateLeadDrawerSelects(lead);
   syncLeadDrawerHeaderPreview();
+  renderLeadDrawerViewMode(lead);
+  toggleLeadDrawerEditMode(Boolean(startInEdit));
   document.getElementById('lead-detail-drawer')?.classList.remove('hidden');
 }
 
@@ -5392,18 +5487,41 @@ function saveLeadFromDrawer() {
   }
   const website = normalizeWebsiteUrl(document.getElementById('ld-website')?.value || '');
   const logo = (document.getElementById('ld-logo')?.value || '').trim() || (website ? getLogoUrl(website) : '');
+  const nextStageId = Number(document.getElementById('ld-stage')?.value) || lead.stageId;
   lead.company = company;
   lead.website = website;
   lead.logo = logo;
-  lead.stageId = Number(document.getElementById('ld-stage')?.value) || lead.stageId;
+  lead.stageId = nextStageId;
   lead.channel = document.getElementById('ld-channel')?.value || lead.channel;
   lead.erp = document.getElementById('ld-erp')?.value || '';
   lead.integration = document.getElementById('ld-integration')?.value || '';
   lead.value = Math.max(0, parseFloat(document.getElementById('ld-value')?.value) || 0);
   lead.notes = (document.getElementById('ld-notes')?.value || '').trim();
 
+  const createdVal = document.getElementById('ld-created-date')?.value;
+  if (createdVal) {
+    if (toDateInputValue(lead.createdAt) !== createdVal) {
+      lead.createdAt = `${createdVal}T12:00:00.000Z`;
+    }
+  } else if (!lead.createdAt) {
+    lead.createdAt = new Date().toISOString();
+  }
+
+  const wonVal = document.getElementById('ld-won-date')?.value;
+  if (wonVal) {
+    if (toDateInputValue(lead.wonAt) !== wonVal) {
+      lead.wonAt = `${wonVal}T12:00:00.000Z`;
+    }
+  } else if (isWonStage(nextStageId)) {
+    lead.wonAt = lead.wonAt || new Date().toISOString();
+  } else {
+    lead.wonAt = '';
+  }
+
   syncLeadsToCustomersGroup();
-  closeLeadDrawer();
+  syncLeadDrawerHeaderPreview();
+  renderLeadDrawerViewMode(lead);
+  toggleLeadDrawerEditMode(false);
   renderLeadsView();
   if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
 }
@@ -5427,7 +5545,13 @@ function moveLeadToStage(leadId, newStageId) {
   const lead = leadEntries.find(l => l.id === leadId);
   if (!lead) return;
   lead.stageId = Number(newStageId);
+  if (isWonStage(lead.stageId)) {
+    if (!lead.wonAt) lead.wonAt = new Date().toISOString();
+  } else {
+    lead.wonAt = '';
+  }
   renderLeadsView();
+  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
 }
 
 function onLeadDragStart(e, leadId) {
@@ -5700,30 +5824,17 @@ function renderLeadsView() {
               onclick="openLeadDrawer(${l.id})"
               class="group rounded-xl border border-slate-200/80 bg-white p-3.5 card-shadow space-y-2.5 cursor-pointer hover:border-slate-300 transition-all"
             >
-              <div class="flex items-start justify-between gap-2">
-                <div class="flex items-center gap-2 min-w-0">
-                  ${logoHtml}
-                  <div class="min-w-0">
-                    <div class="font-semibold text-xs text-slate-900 leading-snug truncate">${l.company}</div>
-                    ${l.website ? `<a href="${l.website}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" class="text-[10px] text-slate-500 hover:text-slate-900 underline underline-offset-2 truncate block">${domain || l.website} ↗</a>` : ''}
-                  </div>
-                </div>
-                ${renderActionMenuHtml(`openLeadDrawer(${l.id})`, `deleteLead(${l.id})`, 'w-6 h-6 shrink-0')}
+              <div class="flex items-center gap-2.5 min-w-0">
+                ${logoHtml}
+                <div class="font-semibold text-xs text-slate-900 leading-snug truncate">${l.company}</div>
               </div>
 
-              ${(l.erp || l.integration) ? `
-                <div class="flex flex-wrap items-center gap-1.5 text-[11px]">
-                  ${l.erp ? `<span class="px-2 py-0.5 rounded-md bg-[#f5f7fa] text-slate-700 border border-slate-200/60">${l.erp}</span>` : ''}
-                  ${l.integration ? `<span class="px-2 py-0.5 rounded-md bg-white text-slate-500 border border-slate-200/70">+ ${l.integration}</span>` : ''}
-                </div>
-              ` : ''}
-
-              <div class="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-100">
-                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-700">
+              <div class="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                <span class="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-600 truncate">
                   ${renderChannelIconHtml(l.channel, 'w-3.5 h-3.5')}
-                  <span>${l.channel}</span>
+                  <span class="truncate">${l.channel}</span>
                 </span>
-                ${l.value > 0 ? `<span class="text-[11px] font-semibold tabular-nums text-slate-900">${Math.round(l.value).toLocaleString()} NOK</span>` : ''}
+                ${l.value > 0 ? `<span class="text-[11px] font-semibold tabular-nums text-slate-900 shrink-0">${Math.round(l.value).toLocaleString()} NOK</span>` : ''}
               </div>
             </div>
           `;
