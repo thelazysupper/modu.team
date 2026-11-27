@@ -7571,7 +7571,106 @@ function extractTableCellText(td) {
   return (td.innerText || td.textContent || '').replace(/\s+/g, ' ').trim();
 }
 
-function renderExportCanvas(entry, { transparent = true, bgColor = '#ffffff' } = {}) {
+function drawRoundedRectPath(ctx, x, y, w, h, r) {
+  const rad = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rad, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rad);
+  ctx.arcTo(x + w, y + h, x, y + h, rad);
+  ctx.arcTo(x, y + h, x, y, rad);
+  ctx.arcTo(x, y, x + w, y, rad);
+  ctx.closePath();
+}
+
+function loadSvgElementAsImage(svgEl) {
+  return new Promise(resolve => {
+    try {
+      const clone = svgEl.cloneNode(true);
+      clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      if (!clone.getAttribute('width')) clone.setAttribute('width', '24');
+      if (!clone.getAttribute('height')) clone.setAttribute('height', '24');
+      // Resolve Tailwind fill-white / stroke-white classes for standalone SVG serialization
+      clone.querySelectorAll('*').forEach(el => {
+        const cls = el.getAttribute('class') || '';
+        if (cls.includes('fill-white')) el.setAttribute('fill', '#ffffff');
+        if (cls.includes('stroke-white')) el.setAttribute('stroke', '#ffffff');
+        if (cls.includes('fill-none')) el.setAttribute('fill', 'none');
+        if (cls.includes('stroke-none')) el.setAttribute('stroke', 'none');
+      });
+      const clsRoot = clone.getAttribute('class') || '';
+      if (clsRoot.includes('fill-white')) clone.setAttribute('fill', '#ffffff');
+      if (clsRoot.includes('stroke-white')) clone.setAttribute('stroke', '#ffffff');
+      if (clsRoot.includes('fill-none')) clone.setAttribute('fill', 'none');
+
+      const xml = new XMLSerializer().serializeToString(clone);
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => resolve(null);
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
+    } catch (e) {
+      resolve(null);
+    }
+  });
+}
+
+function loadSafeImg(src) {
+  return new Promise(resolve => {
+    if (!src) return resolve(null);
+    const img = new Image();
+    if (!src.startsWith('data:')) img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
+async function drawBadgeAt(ctx, badgeEl, x, y, w, h) {
+  const cs = getComputedStyle(badgeEl);
+  const bg = cs.backgroundColor;
+  const br = parseFloat(cs.borderRadius) || 6;
+  if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
+    ctx.save();
+    ctx.fillStyle = bg;
+    drawRoundedRectPath(ctx, x, y, w, h, br);
+    ctx.fill();
+    if (cs.borderWidth && parseFloat(cs.borderWidth) > 0 && cs.borderColor && cs.borderColor !== 'transparent') {
+      ctx.strokeStyle = cs.borderColor;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  const svg = badgeEl.querySelector('svg');
+  if (svg) {
+    const svgImg = await loadSvgElementAsImage(svg);
+    if (svgImg) {
+      const pad = Math.max(2, w * 0.18);
+      ctx.drawImage(svgImg, x + pad, y + pad, w - pad * 2, h - pad * 2);
+    }
+    return;
+  }
+  const imgEl = badgeEl.querySelector('img');
+  if (imgEl) {
+    const loaded = await loadSafeImg(imgEl.src);
+    if (loaded) {
+      const pad = Math.max(2, w * 0.15);
+      ctx.drawImage(loaded, x + pad, y + pad, w - pad * 2, h - pad * 2);
+      return;
+    }
+  }
+  const txt = (badgeEl.textContent || '').trim();
+  if (txt) {
+    ctx.save();
+    ctx.fillStyle = cs.color || '#ffffff';
+    ctx.font = `700 ${Math.max(9, Math.round(h * 0.45))}px Inter, system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(txt, x + w / 2, y + h / 2);
+    ctx.restore();
+  }
+}
+
+async function renderExportCanvas(entry, { transparent = true, bgColor = '#ffffff' } = {}) {
   const dpr = 2;
   const isDark = !transparent && isDarkHexColor(bgColor);
   const titleColor = isDark ? '#f8fafc' : '#0f172a';
@@ -7580,62 +7679,163 @@ function renderExportCanvas(entry, { transparent = true, bgColor = '#ffffff' } =
   const headerBg = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(248,250,252,0.85)';
 
   if (entry.kind === 'chart') {
-    const srcCanvas = entry.el;
-    const rect = srcCanvas.getBoundingClientRect();
-    const cw = Math.max(180, Math.round(rect.width || srcCanvas.width || 400));
-    const ch = Math.max(120, Math.round(rect.height || srcCanvas.height || 220));
-    const pad = 28;
-    const titleH = entry.title ? 34 : 0;
+    const card = entry.card;
+    const cardRect = card.getBoundingClientRect();
+    const cw = Math.max(320, Math.round(cardRect.width || 600));
+    const ch = Math.max(180, Math.round(cardRect.height || 300));
 
     const out = document.createElement('canvas');
-    out.width = (cw + pad * 2) * dpr;
-    out.height = (ch + pad * 2 + titleH) * dpr;
+    out.width = cw * dpr;
+    out.height = ch * dpr;
     const ctx = out.getContext('2d');
     ctx.scale(dpr, dpr);
 
     if (!transparent) {
       ctx.fillStyle = bgColor;
-      ctx.fillRect(0, 0, cw + pad * 2, ch + pad * 2 + titleH);
+      ctx.fillRect(0, 0, cw, ch);
     }
-    if (entry.title) {
+
+    // 1. Draw border dividers inside card (e.g., header bottom border)
+    card.querySelectorAll('.border-b').forEach(divEl => {
+      if (divEl.closest('[data-export-menu-wrap]')) return;
+      const r = divEl.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) return;
+      ctx.strokeStyle = borderColor;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(r.left - cardRect.left, r.bottom - cardRect.top);
+      ctx.lineTo(r.right - cardRect.left, r.bottom - cardRect.top);
+      ctx.stroke();
+    });
+
+    // 2. Draw all canvases inside the card
+    card.querySelectorAll('canvas').forEach(cv => {
+      const r = cv.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) return;
+      ctx.drawImage(cv, r.left - cardRect.left, r.top - cardRect.top, r.width, r.height);
+    });
+
+    // 3. Draw colored legend dots and channel icon badges
+    const drawnBadges = new Set();
+    const badgeEls = Array.from(card.querySelectorAll('span')).filter(sp => {
+      if (sp.closest('[data-export-menu-wrap]')) return false;
+      const r = sp.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) return false;
+      if (sp.querySelector('svg') || sp.querySelector('img')) return true;
+      const cs = getComputedStyle(sp);
+      const hasBg = cs.backgroundColor && cs.backgroundColor !== 'rgba(0, 0, 0, 0)' && cs.backgroundColor !== 'transparent';
+      return hasBg && r.width <= 18 && r.height <= 18 && (sp.textContent || '').trim() === '';
+    });
+
+    for (const sp of badgeEls) {
+      if (drawnBadges.has(sp)) continue;
+      drawnBadges.add(sp);
+      const r = sp.getBoundingClientRect();
+      await drawBadgeAt(ctx, sp, r.left - cardRect.left, r.top - cardRect.top, r.width, r.height);
+    }
+
+    // 4. Draw selected <select> labels (if any in header)
+    card.querySelectorAll('select').forEach(sel => {
+      if (sel.closest('[data-export-menu-wrap]')) return;
+      const r = sel.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) return;
+      const label = sel.options?.[sel.selectedIndex]?.text || sel.value || '';
+      if (!label) return;
+      ctx.save();
+      ctx.strokeStyle = borderColor;
+      ctx.lineWidth = 1;
+      drawRoundedRectPath(ctx, r.left - cardRect.left, r.top - cardRect.top, r.width, r.height, 8);
+      ctx.stroke();
       ctx.fillStyle = titleColor;
-      ctx.font = '600 15px Inter, system-ui, sans-serif';
+      ctx.font = '600 11px Inter, system-ui, sans-serif';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, r.left - cardRect.left + 10, r.top - cardRect.top + r.height / 2);
+      ctx.restore();
+    });
+
+    // 5. Draw all visible text nodes at their exact positions
+    const walker = document.createTreeWalker(card, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      const text = node.nodeValue;
+      if (!text || !text.trim()) continue;
+      const parentEl = node.parentElement;
+      if (!parentEl) continue;
+      if (parentEl.closest('[data-export-menu-wrap], select, svg')) continue;
+      if (drawnBadges.has(parentEl)) continue;
+
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const rect = range.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) continue;
+
+      const cs = getComputedStyle(parentEl);
+      if (cs.visibility === 'hidden' || cs.display === 'none') continue;
+      const fontSize = parseFloat(cs.fontSize) || 12;
+      const fontWeight = cs.fontWeight || '400';
+
+      let textColor = cs.color || titleColor;
+      if (isDark) {
+        textColor = parseInt(fontWeight, 10) >= 600 || fontSize >= 13 ? titleColor : mutedColor;
+      }
+
+      ctx.save();
+      ctx.font = `${fontWeight} ${fontSize}px Inter, system-ui, sans-serif`;
+      ctx.fillStyle = textColor;
       ctx.textBaseline = 'top';
-      ctx.fillText(entry.title, pad, pad);
+      ctx.fillText(text.replace(/\s+/g, ' ').trim(), rect.left - cardRect.left, rect.top - cardRect.top);
+      ctx.restore();
     }
-    ctx.drawImage(srcCanvas, pad, pad + titleH, cw, ch);
+
     return out;
   }
 
-  // Table renderer
+  // Table renderer with logos & progress bars
   const tbl = entry.el;
   const headCells = Array.from(tbl.querySelectorAll('thead th')).map(th => (th.innerText || th.textContent || '').trim());
-  const bodyRows = Array.from(tbl.querySelectorAll('tbody tr')).map(tr =>
-    Array.from(tr.querySelectorAll('td')).map(td => extractTableCellText(td))
+  const trEls = Array.from(tbl.querySelectorAll('tbody tr'));
+  const bodyRowsMeta = trEls.map(tr =>
+    Array.from(tr.querySelectorAll('td')).map(td => {
+      const badgeEl = td.querySelector('span svg, span img')?.closest('span') || null;
+      const imgEl = !badgeEl ? td.querySelector('img') : null;
+      const barInner = td.querySelector('div.rounded-full > div.h-full.rounded-full');
+      const barPct = barInner ? (parseFloat(barInner.style.width) || 0) : null;
+      const barColor = barInner ? (barInner.style.backgroundColor || barInner.style.background || '#0f172a') : null;
+      return {
+        text: extractTableCellText(td),
+        badgeEl,
+        imgEl,
+        barPct,
+        barColor
+      };
+    })
   );
 
   // Drop trailing empty action column if present
   const keepCols = headCells.map((h, i) => {
-    const allEmpty = h === '' && bodyRows.every(r => !r[i] || r[i] === '•••');
+    const allEmpty = h === '' && bodyRowsMeta.every(r => !r[i] || !r[i].text || r[i].text === '•••');
     return !allEmpty;
   });
   const headers = headCells.filter((_, i) => keepCols[i]);
-  const rows = bodyRows.map(r => r.filter((_, i) => keepCols[i]));
+  const rows = bodyRowsMeta.map(r => r.filter((_, i) => keepCols[i]));
 
   const tmp = document.createElement('canvas').getContext('2d');
   tmp.font = '500 12px Inter, system-ui, sans-serif';
   const colWidths = headers.map((h, colIdx) => {
     let maxW = tmp.measureText(h).width;
     rows.forEach(r => {
-      const w = tmp.measureText(r[colIdx] || '').width;
+      const cell = r[colIdx];
+      let w = tmp.measureText(cell?.text || '').width;
+      if (cell?.badgeEl || cell?.imgEl) w += 30;
+      if (cell?.barPct !== null) w += 76;
       if (w > maxW) maxW = w;
     });
-    return Math.min(260, Math.max(68, Math.ceil(maxW) + 28));
+    return Math.min(280, Math.max(72, Math.ceil(maxW) + 28));
   });
 
   const pad = 28;
   const titleH = entry.title ? 34 : 0;
-  const rowH = 34;
+  const rowH = 38;
   const headH = 36;
   const tableW = Math.max(360, colWidths.reduce((a, b) => a + b, 0));
   const tableH = headH + Math.max(1, rows.length) * rowH;
@@ -7680,14 +7880,49 @@ function renderExportCanvas(entry, { transparent = true, bgColor = '#ffffff' } =
   });
 
   ctx.font = '500 12px Inter, system-ui, sans-serif';
-  rows.forEach((r, rIdx) => {
+  for (let rIdx = 0; rIdx < rows.length; rIdx++) {
+    const r = rows[rIdx];
     const y = startY + headH + rIdx * rowH;
     let cx = pad;
-    r.forEach((cell, cIdx) => {
+
+    for (let cIdx = 0; cIdx < r.length; cIdx++) {
+      const cell = r[cIdx];
+      let textX = cx + 12;
+
+      if (cell.badgeEl) {
+        await drawBadgeAt(ctx, cell.badgeEl, cx + 12, y + (rowH - 20) / 2, 20, 20);
+        textX += 28;
+      } else if (cell.imgEl) {
+        const loaded = await loadSafeImg(cell.imgEl.src);
+        if (loaded) {
+          ctx.drawImage(loaded, cx + 12, y + (rowH - 18) / 2, 18, 18);
+          textX += 26;
+        }
+      }
+
+      if (cell.barPct !== null) {
+        const barW = 58;
+        const barH = 6;
+        const barX = cx + 12;
+        const barY = y + (rowH - barH) / 2;
+        ctx.save();
+        ctx.fillStyle = isDark ? 'rgba(255,255,255,0.14)' : '#f1f5f9';
+        drawRoundedRectPath(ctx, barX, barY, barW, barH, 3);
+        ctx.fill();
+        if (cell.barPct > 0) {
+          ctx.fillStyle = cell.barColor || '#0f172a';
+          drawRoundedRectPath(ctx, barX, barY, Math.max(4, (Math.min(100, cell.barPct) / 100) * barW), barH, 3);
+          ctx.fill();
+        }
+        ctx.restore();
+        textX = barX + barW + 8;
+      }
+
       ctx.fillStyle = cIdx === 0 ? titleColor : mutedColor;
-      ctx.fillText(cell || '—', cx + 12, y + rowH / 2, colWidths[cIdx] - 20);
+      ctx.fillText(cell.text || '—', textX, y + rowH / 2, Math.max(24, colWidths[cIdx] - (textX - cx) - 10));
       cx += colWidths[cIdx];
-    });
+    }
+
     if (rIdx < rows.length - 1) {
       ctx.strokeStyle = borderColor;
       ctx.beginPath();
@@ -7695,7 +7930,7 @@ function renderExportCanvas(entry, { transparent = true, bgColor = '#ffffff' } =
       ctx.lineTo(pad + tableW, y + rowH);
       ctx.stroke();
     }
-  });
+  }
 
   return out;
 }
@@ -7704,7 +7939,7 @@ async function exportTargetAsPng(targetId, copyToClipboard = true) {
   closeAllExportDropdowns();
   const entry = exportTargetRegistry.get(targetId);
   if (!entry) return;
-  const canvas = renderExportCanvas(entry, { transparent: true });
+  const canvas = await renderExportCanvas(entry, { transparent: true });
   const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
   if (!blob) return;
 
@@ -7833,7 +8068,7 @@ async function copyCurrentExportWithBg() {
   const entry = exportTargetRegistry.get(activePdfExportTargetId);
   if (!entry) return;
   const bg = exportPdfBgMode === 'custom' ? exportPdfCustomColor : '#ffffff';
-  const canvas = renderExportCanvas(entry, { transparent: false, bgColor: bg });
+  const canvas = await renderExportCanvas(entry, { transparent: false, bgColor: bg });
   const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
   if (!blob) return;
   if (navigator.clipboard && typeof ClipboardItem !== 'undefined') {
@@ -7854,11 +8089,11 @@ async function copyCurrentExportWithBg() {
   showExportToast('Downloaded slide image');
 }
 
-function downloadCurrentExportPdf() {
+async function downloadCurrentExportPdf() {
   const entry = exportTargetRegistry.get(activePdfExportTargetId);
   if (!entry) return;
   const bg = exportPdfBgMode === 'custom' ? exportPdfCustomColor : '#ffffff';
-  const canvas = renderExportCanvas(entry, { transparent: false, bgColor: bg });
+  const canvas = await renderExportCanvas(entry, { transparent: false, bgColor: bg });
   const pdfBlob = buildPdfBlobFromCanvas(canvas);
   const url = URL.createObjectURL(pdfBlob);
   const a = document.createElement('a');
