@@ -1965,7 +1965,7 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
             </div>
             <div class="md:col-span-4">
               <label class="block text-[11px] font-medium text-slate-600 mb-1">Competitor Domains (comma-separated)</label>
-              <input id="audit-competitor-domains" type="text" placeholder="e.g. comp1.no, comp2.com" class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+              <input id="audit-competitor-domains" type="text" onchange="onCompetitorDomainsInputChange('seo', this.value)" placeholder="e.g. comp1.no, comp2.com" class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
             </div>
             <div class="md:col-span-4">
               <label class="block text-[11px] font-medium text-slate-600 mb-1">Keyword (Suggest + Live SERP)</label>
@@ -2163,7 +2163,8 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
             </div>
             <div>
               <label class="block text-[11px] font-medium text-slate-600 mb-1">Competitors (comma-sep)</label>
-              <input id="aeo-live-competitors" type="text" placeholder="comp1.no, comp2.com" class="w-full h-8 px-2.5 text-xs bg-white border border-slate-200 rounded-lg" />
+              <input id="aeo-live-competitors" type="text" onchange="onCompetitorDomainsInputChange('aeo', this.value)" placeholder="comp1.no, comp2.com" class="w-full h-8 px-2.5 text-xs bg-white border border-slate-200 rounded-lg" />
+              <div id="aeo-competitor-chips" class="flex flex-wrap items-center gap-1.5 mt-1.5"></div>
             </div>
             <div>
               <label class="block text-[11px] font-medium text-slate-600 mb-1">Gemini API Key (optional if env set)</label>

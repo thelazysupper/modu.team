@@ -1752,6 +1752,7 @@ function openApp(appId) {
   if (appId === 'aeo-seo') {
     hideAllViews();
     document.getElementById('view-aeo-seo')?.classList.remove('hidden');
+    if (typeof prefillAeoCompetitors === 'function') prefillAeoCompetitors();
     renderAeoSeoView();
     switchAeoTab(activeAeoTab || 'dashboard');
     setActiveNavHighlight('side-app-aeo-seo');
@@ -7119,6 +7120,61 @@ function drawMultiLineChart(canvasId, labels, seriesList, opts = {}) {
   }
 }
 
+function syncCompetitorDomainsAcrossApps(domains, source = 'SEO/AEO') {
+  const cleanList = Array.from(new Set(
+    (domains || []).map(d => getDomainFromUrl(d)).filter(Boolean)
+  ));
+  if (cleanList.length === 0) return [];
+
+  let added = false;
+  cleanList.forEach(dom => {
+    const exists = (competitorsList || []).some(c => {
+      const wDom = getDomainFromUrl(c.website);
+      return wDom && wDom.toLowerCase() === dom.toLowerCase();
+    });
+    if (!exists) {
+      const label = dom.split('.')[0] || dom;
+      const prettyName = label.charAt(0).toUpperCase() + label.slice(1);
+      competitorsList.push({
+        id: Date.now() + Math.floor(Math.random() * 10000),
+        name: prettyName,
+        website: `https://${dom}`,
+        positioning: '',
+        pricing: '',
+        channels: [],
+        strengths: [],
+        weaknesses: [],
+        notes: `Synced from ${source}`
+      });
+      added = true;
+    }
+  });
+
+  if (added) {
+    if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+    if (!document.getElementById('view-competitors')?.classList.contains('hidden') && typeof renderCompetitorsView === 'function') {
+      renderCompetitorsView();
+    }
+  }
+  renderAuditCompetitorChips();
+  renderAeoCompetitorChips();
+  return cleanList;
+}
+
+function onCompetitorDomainsInputChange(source, rawValue) {
+  const list = String(rawValue || '').split(',').map(s => s.trim()).filter(Boolean);
+  const synced = syncCompetitorDomainsAcrossApps(list, source === 'aeo' ? 'AEO' : 'SEO');
+  if (source === 'seo') {
+    const aeoEl = document.getElementById('aeo-live-competitors');
+    if (aeoEl && synced.length > 0) aeoEl.value = synced.join(', ');
+  } else if (source === 'aeo') {
+    const seoEl = document.getElementById('audit-competitor-domains');
+    if (seoEl && synced.length > 0) seoEl.value = synced.join(', ');
+  }
+  renderAuditCompetitorChips();
+  renderAeoCompetitorChips();
+}
+
 function renderAuditCompetitorChips() {
   const wrap = document.getElementById('audit-competitor-chips');
   if (!wrap) return;
@@ -7127,7 +7183,7 @@ function renderAuditCompetitorChips() {
     .filter(c => c.domain);
 
   if (comps.length === 0) {
-    wrap.innerHTML = `<span class="text-[11px] text-slate-400">Add websites in Competitor Analysis to select them here.</span>`;
+    wrap.innerHTML = `<span class="text-[11px] text-slate-400">Add websites in Competitor Analysis or type domains above to sync.</span>`;
     return;
   }
 
@@ -7172,6 +7228,54 @@ function prefillAuditCompetitors() {
   renderAuditCompetitorChips();
 }
 
+function renderAeoCompetitorChips() {
+  const wrap = document.getElementById('aeo-competitor-chips');
+  if (!wrap) return;
+  const comps = (competitorsList || [])
+    .map(c => ({ name: c.name, domain: getDomainFromUrl(c.website) }))
+    .filter(c => c.domain);
+
+  if (comps.length === 0) {
+    wrap.innerHTML = `<span class="text-[11px] text-slate-400">Add websites in Competitor Analysis or type domains above to sync.</span>`;
+    return;
+  }
+
+  const inputEl = document.getElementById('aeo-live-competitors');
+  const currentSet = new Set((inputEl?.value || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean));
+  wrap.innerHTML = comps.map(c => {
+    const active = currentSet.has(c.domain.toLowerCase());
+    return `<button type="button" onclick="toggleAeoCompetitorChip('${c.domain}')" class="px-2.5 py-0.5 rounded-full text-[11px] font-medium border transition-colors ${active ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'}">${c.name} (${c.domain})</button>`;
+  }).join('') + `<button type="button" onclick="loadAllAeoCompetitors()" class="px-2 py-0.5 rounded-full text-[11px] font-medium text-slate-500 hover:text-slate-900 underline underline-offset-2">Use all</button>`;
+}
+
+function toggleAeoCompetitorChip(domain) {
+  const inputEl = document.getElementById('aeo-live-competitors');
+  if (!inputEl) return;
+  const list = inputEl.value.split(',').map(s => s.trim()).filter(Boolean);
+  const idx = list.findIndex(d => d.toLowerCase() === domain.toLowerCase());
+  if (idx !== -1) list.splice(idx, 1);
+  else list.push(domain);
+  inputEl.value = list.join(', ');
+  renderAeoCompetitorChips();
+}
+
+function loadAllAeoCompetitors() {
+  const inputEl = document.getElementById('aeo-live-competitors');
+  if (!inputEl) return;
+  const domains = (competitorsList || []).map(c => getDomainFromUrl(c.website)).filter(Boolean);
+  inputEl.value = Array.from(new Set(domains)).slice(0, 5).join(', ');
+  renderAeoCompetitorChips();
+}
+
+function prefillAeoCompetitors() {
+  const compEl = document.getElementById('aeo-live-competitors');
+  if (compEl && !compEl.value.trim() && Array.isArray(competitorsList) && competitorsList.length > 0) {
+    const domains = competitorsList.map(c => getDomainFromUrl(c.website)).filter(Boolean);
+    if (domains.length > 0) compEl.value = Array.from(new Set(domains)).slice(0, 4).join(', ');
+  }
+  renderAeoCompetitorChips();
+}
+
 function updateAuditDailyBadge(snapshot) {
   const badge = document.getElementById('audit-daily-badge');
   if (!badge) return;
@@ -7202,6 +7306,7 @@ async function runTechnicalSeoAudit(opts = {}) {
   }
 
   const competitorDomains = (compEl?.value || '').split(',').map(s => s.trim()).filter(Boolean);
+  syncCompetitorDomainsAcrossApps(competitorDomains, 'SEO');
   const keyword = (kwEl?.value || '').trim();
   const today = getTodayDateKey();
 
@@ -7799,11 +7904,7 @@ function toggleLiveAeoPanel(force = null) {
     const savedKey = localStorage.getItem('modu_gemini_key') || '';
     const keyInput = document.getElementById('aeo-live-apikey');
     if (keyInput && savedKey && !keyInput.value) keyInput.value = savedKey;
-    const compEl = document.getElementById('aeo-live-competitors');
-    if (compEl && !compEl.value.trim() && Array.isArray(competitorsList) && competitorsList.length > 0) {
-      const domains = competitorsList.map(c => getDomainFromUrl(c.website)).filter(Boolean);
-      if (domains.length > 0) compEl.value = Array.from(new Set(domains)).slice(0, 4).join(', ');
-    }
+    if (typeof prefillAeoCompetitors === 'function') prefillAeoCompetitors();
   }
 }
 
@@ -7811,6 +7912,7 @@ async function runLiveAeoScan() {
   const primaryDomain = (document.getElementById('aeo-live-domain')?.value || '').trim();
   const brandName = (document.getElementById('aeo-live-brand')?.value || '').trim();
   const competitorDomains = (document.getElementById('aeo-live-competitors')?.value || '').split(',').map(s => s.trim()).filter(Boolean);
+  syncCompetitorDomainsAcrossApps(competitorDomains, 'AEO');
   const geminiApiKey = (document.getElementById('aeo-live-apikey')?.value || '').trim();
   const prompts = (document.getElementById('aeo-live-prompts')?.value || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
   const statusEl = document.getElementById('aeo-live-status');
@@ -8253,7 +8355,7 @@ function removeSelectedTrafficDomain() {
 
 function getTrafficSnippetHtml(domain) {
   const origin = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : 'https://modu.team';
-  return `<script defer src="${origin}/t.js" data-domain="${domain}"></script>`;
+  return `<script defer src="${origin}/t.js" data-domain="${domain}"><\/script>`;
 }
 
 function toggleTrafficInstallPanel(forceState) {
