@@ -201,10 +201,18 @@ const apps = [
   },
   {
     id: 'aeo-seo',
-    title: 'Search & AI Visibility',
+    title: 'AEO',
     status: 'Active',
-    description: 'Compare AI Answer Engine (AEO) vs. SEO visibility and run technical SEO audits.',
+    description: 'AI Answer Engine visibility, Share of Voice, citations, and content recommendations.',
     illustration: illustrations.aeoSeo,
+    actionType: 'open'
+  },
+  {
+    id: 'seo-audit',
+    title: 'SEO',
+    status: 'Active',
+    description: 'Technical SEO, SSR readiness, Schema.org matrix, competitor comparison, and live SERP.',
+    illustration: illustrations.seoAudit,
     actionType: 'open'
   },
   {
@@ -1662,34 +1670,62 @@ function switchChannelsHubTab(tab = 'channels') {
   setActiveNavHighlight('side-app-channels');
 }
 
-function switchSearchHubTab(tab = 'aeo-seo') {
-  activeSearchHubTab = tab;
-  hideAllViews();
+let activeAeoTab = 'dashboard';
+let activeSeoTab = 'overview';
 
-  const tabMap = {
-    'aeo-seo': 'search-hub-tab-aeo',
-    'seo-audit': 'search-hub-tab-audit'
-  };
-  Object.entries(tabMap).forEach(([k, btnId]) => {
-    const btn = document.getElementById(btnId);
-    if (!btn) return;
-    const isAct = k === tab;
-    btn.className = isAct
-      ? 'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors bg-white text-slate-900 shadow-xs'
-      : 'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors text-slate-500 hover:text-slate-900';
+function switchAeoTab(tab = 'dashboard') {
+  activeAeoTab = tab;
+  ['dashboard', 'prompts', 'citations', 'recommendations'].forEach(t => {
+    document.getElementById(`aeo-tab-panel-${t}`)?.classList.toggle('hidden', t !== tab);
+    const btn = document.getElementById(`aeo-tab-btn-${t}`);
+    if (btn) {
+      btn.className = t === tab
+        ? 'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors bg-white text-slate-900 shadow-xs'
+        : 'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors text-slate-500 hover:text-slate-900';
+    }
   });
+  if (tab === 'dashboard' && typeof renderAeoDashboard === 'function') renderAeoDashboard();
+  if (tab === 'citations' && typeof renderAeoCitationsTab === 'function') renderAeoCitationsTab();
+  if (tab === 'recommendations' && typeof renderAeoRecommendationsTab === 'function') renderAeoRecommendationsTab();
+}
 
-  const activeSecId = tab === 'seo-audit' ? 'view-seo-audit' : 'view-aeo-seo';
-  const activeSec = document.getElementById(activeSecId);
-  const hubBar = document.getElementById('search-hub-bar');
-  const topBar = activeSec?.querySelector(':scope > .border-b');
-  if (hubBar) {
-    if (topBar) topBar.after(hubBar);
-    hubBar.classList.remove('hidden');
+function switchSeoTab(tab = 'overview') {
+  activeSeoTab = tab;
+  ['overview', 'technical', 'keywords'].forEach(t => {
+    document.getElementById(`seo-tab-panel-${t}`)?.classList.toggle('hidden', t !== tab);
+    const btn = document.getElementById(`seo-tab-btn-${t}`);
+    if (btn) {
+      btn.className = t === tab
+        ? 'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors bg-white text-slate-900 shadow-xs'
+        : 'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors text-slate-500 hover:text-slate-900';
+    }
+  });
+  const snap = typeof getLatestSearchSnapshot === 'function' ? getLatestSearchSnapshot() : null;
+  if (snap && typeof renderSeoAuditResults === 'function') renderSeoAuditResults(snap);
+}
+
+function switchSearchHubTab(tab = 'aeo-seo') {
+  if (tab === 'seo-audit') return openApp('seo-audit');
+  return openApp('aeo-seo');
+}
+
+function openApp(appId) {
+  if (appId === 'channels') return switchChannelsHubTab('channels');
+  if (appId === 'budget') return switchChannelsHubTab('budget');
+  if (appId === 'marketing-reports') return switchChannelsHubTab('reports');
+
+  if (appId === 'aeo-seo') {
+    hideAllViews();
+    document.getElementById('view-aeo-seo')?.classList.remove('hidden');
+    renderAeoSeoView();
+    switchAeoTab(activeAeoTab || 'dashboard');
+    setActiveNavHighlight('side-app-aeo-seo');
+    syncRouteUrl('/aeo');
+    return;
   }
-
-  if (tab === 'seo-audit') {
-    activeSec?.classList.remove('hidden');
+  if (appId === 'seo-audit') {
+    hideAllViews();
+    document.getElementById('view-seo-audit')?.classList.remove('hidden');
     if (typeof prefillAuditCompetitors === 'function') prefillAuditCompetitors();
     const latestSnap = typeof getLatestSearchSnapshot === 'function' ? getLatestSearchSnapshot() : null;
     if (latestSnap && typeof renderSeoAuditResults === 'function') renderSeoAuditResults(latestSnap);
@@ -1697,22 +1733,11 @@ function switchSearchHubTab(tab = 'aeo-seo') {
     if (primDom && (!latestSnap || latestSnap.dateKey !== getTodayDateKey()) && typeof runTechnicalSeoAudit === 'function') {
       runTechnicalSeoAudit({ autoDaily: true });
     }
-    syncRouteUrl('/apps/seo-audit');
-  } else {
-    activeSec?.classList.remove('hidden');
-    renderAeoSeoView();
-    if (typeof renderAeoTrendChart === 'function') renderAeoTrendChart();
-    syncRouteUrl('/aeo-seo');
+    switchSeoTab(activeSeoTab || 'overview');
+    setActiveNavHighlight('side-app-seo-audit');
+    syncRouteUrl('/seo');
+    return;
   }
-  setActiveNavHighlight('side-app-aeo-seo');
-}
-
-function openApp(appId) {
-  if (appId === 'channels') return switchChannelsHubTab('channels');
-  if (appId === 'budget') return switchChannelsHubTab('budget');
-  if (appId === 'marketing-reports') return switchChannelsHubTab('reports');
-  if (appId === 'aeo-seo') return switchSearchHubTab('aeo-seo');
-  if (appId === 'seo-audit') return switchSearchHubTab('seo-audit');
 
   const app = apps.find(a => a.id === appId);
   if (!app) return;
@@ -7206,6 +7231,47 @@ function renderSeoAuditResults(snapshot) {
 
   const palette = ['#0f172a', '#7c3aed', '#10b981', '#0ea5e9', '#f59e0b', '#f43f5e'];
   const domains = snapshot.seo_comparison || [];
+  const primaryDom = domains[0] || null;
+  if (primaryDom && !primaryDom.error) {
+    const pParts = computeDomainReadinessParts(primaryDom);
+    const pOp = primaryDom.onPage || {};
+    const kScore = document.getElementById('seo-kpi-score');
+    const kSsr = document.getElementById('seo-kpi-ssr');
+    const kSsrSub = document.getElementById('seo-kpi-ssr-sub');
+    const kBots = document.getElementById('seo-kpi-bots');
+    const kSm = document.getElementById('seo-kpi-sitemap');
+    if (kScore) kScore.textContent = `${pParts.overall}/100`;
+    if (kSsr) kSsr.textContent = pOp.isLikelyCSR ? 'CSR' : `${(pOp.ssrBodyWords || 0).toLocaleString()}w`;
+    if (kSsrSub) kSsrSub.textContent = `${(pOp.ssrBodyChars || 0).toLocaleString()} chars`;
+    const botsVals = Object.values(primaryDom.aiBots || {});
+    const allowedBots = botsVals.filter(v => v === 'allowed').length;
+    if (kBots) kBots.textContent = botsVals.length > 0 ? `${allowedBots}/${botsVals.length}` : '7/7';
+    if (kSm) kSm.textContent = primaryDom.sitemap?.present ? primaryDom.sitemap.locCount.toLocaleString() : '0';
+  }
+
+  const rankBody = document.getElementById('seo-ranking-tbody');
+  if (rankBody) {
+    const sortedForRank = [...domains].sort((a, b) => computeDomainReadinessParts(b).overall - computeDomainReadinessParts(a).overall);
+    rankBody.innerHTML = sortedForRank.map((d, i) => {
+      const isPrimary = d.domain === domains[0]?.domain;
+      const parts = computeDomainReadinessParts(d);
+      const fav = getLogoUrl(`https://${d.domain}`);
+      return `
+        <tr class="hover:bg-slate-50/70">
+          <td class="py-2.5 pr-2 tabular-nums text-slate-400 font-medium">${i + 1}</td>
+          <td class="py-2.5 px-2">
+            <div class="flex items-center gap-2 min-w-0">
+              ${fav ? `<img src="${fav}" alt="" class="w-4 h-4 rounded-xs object-contain shrink-0" onerror="this.style.display='none'" />` : ''}
+              <span class="font-semibold text-slate-900 truncate">${d.domain}</span>
+              ${isPrimary ? `<span class="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[9px] font-medium shrink-0">You</span>` : ''}
+            </div>
+          </td>
+          <td class="py-2.5 px-2 text-right tabular-nums text-slate-600">${d.onPage?.isLikelyCSR ? 'CSR' : `${(d.onPage?.ssrBodyWords || 0).toLocaleString()}w`}</td>
+          <td class="py-2.5 pl-2 text-right tabular-nums font-bold text-slate-900">${parts.overall}/100</td>
+        </tr>
+      `;
+    }).join('');
+  }
 
   // 1. Competitor Readiness Comparison Line Graph
   const compareSeries = domains.map((d, idx) => {
@@ -7366,38 +7432,298 @@ function renderSeoAuditResults(snapshot) {
   }
 }
 
-function renderAeoTrendChart() {
-  const card = document.getElementById('aeo-trend-card');
-  const legendEl = document.getElementById('aeo-trend-legend');
-  if (!card) return;
-  if (!aeoReportRuns || aeoReportRuns.length === 0) {
-    card.classList.add('hidden');
-    return;
-  }
-  card.classList.remove('hidden');
+let aeoRecommendations = [];
 
-  const palette = ['#7c3aed', '#10b981', '#0ea5e9', '#f59e0b', '#f43f5e'];
+function syncAeoRecommendationsFromData() {
+  const existingTitles = new Set(aeoRecommendations.map(r => r.title));
+  const latestSeo = getLatestSearchSnapshot();
+  (latestSeo?.missing_schemas || []).forEach(m => {
+    const title = `Add ${m.schema} JSON-LD schema`;
+    if (!existingTitles.has(title)) {
+      existingTitles.add(title);
+      aeoRecommendations.push({
+        id: `rec_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+        type: 'TECHNICAL / SCHEMA',
+        title,
+        detail: `Used by ${m.usedBy.join(', ')}`,
+        priority: 'High',
+        status: 'new'
+      });
+    }
+  });
+  (latestSeo?.content_gaps || []).slice(0, 4).forEach(g => {
+    const title = `Create content covering "${g.keyword}"`;
+    if (!existingTitles.has(title)) {
+      existingTitles.add(title);
+      aeoRecommendations.push({
+        id: `rec_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+        type: 'NET NEW CONTENT',
+        title,
+        detail: g.exampleHeading ? `Competitor heading: "${g.exampleHeading}"` : `Found ${g.frequency}× on competitor pages`,
+        priority: g.frequency >= 3 ? 'High' : 'Medium',
+        status: 'new'
+      });
+    }
+  });
+  (aeoSeoEntries || []).filter(e => e.cited === 'Not Cited').slice(0, 4).forEach(e => {
+    const title = `Optimize answer visibility for "${e.query}"`;
+    if (!existingTitles.has(title)) {
+      existingTitles.add(title);
+      aeoRecommendations.push({
+        id: `rec_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+        type: 'AEO CITATION GAP',
+        title,
+        detail: `Currently Not Cited on ${e.engine || 'AI engines'}`,
+        priority: 'High',
+        status: 'new'
+      });
+    }
+  });
+}
+
+function renderAeoDashboard() {
+  const latestRun = aeoReportRuns.length > 0 ? aeoReportRuns[aeoReportRuns.length - 1] : null;
+  const entries = aeoSeoEntries || [];
+  const avgAeo = entries.length > 0 ? entries.reduce((a, e) => a + (e.aeoScore || 0), 0) / entries.length : 0;
+
+  const sovList = latestRun?.share_of_voice || [];
+  const primarySov = sovList.find(s => s.isPrimary) || sovList[0];
+  const visPct = primarySov ? primarySov.shareOfVoicePct : Math.round(avgAeo * 10) / 10;
+
+  const totalMentions = latestRun
+    ? (latestRun.aeo_results || []).filter(r => r.primaryMentioned).length
+    : entries.filter(e => e.cited === 'Cited' || e.cited === 'Mentioned').length;
+
+  const citSum = latestRun?.citations_summary || { own: 0, competitor: 0, third_party: 0 };
+  const totalPagesCited = citSum.own + citSum.competitor + citSum.third_party;
+  const myPagesCited = latestRun ? citSum.own : entries.filter(e => e.cited === 'Cited').length;
+
+  const ranks = (latestRun?.aeo_results || []).map(r => r.primaryRank).filter(Boolean);
+  const avgPos = ranks.length > 0 ? (ranks.reduce((a, b) => a + b, 0) / ranks.length).toFixed(1) : '—';
+
+  const kVis = document.getElementById('aeo-kpi-visibility');
+  const kMen = document.getElementById('aeo-kpi-mentions');
+  const kTot = document.getElementById('aeo-kpi-total-cited');
+  const kMy = document.getElementById('aeo-kpi-my-cited');
+  const kPos = document.getElementById('aeo-kpi-pos');
+  const kHead = document.getElementById('aeo-score-headline');
+  if (kVis) kVis.textContent = `${visPct}%`;
+  if (kMen) kMen.textContent = String(totalMentions);
+  if (kTot) kTot.textContent = String(totalPagesCited);
+  if (kMy) kMy.textContent = String(myPagesCited);
+  if (kPos) kPos.textContent = avgPos === '—' ? '—' : `#${avgPos}`;
+  if (kHead) kHead.textContent = `${visPct}%`;
+
+  const palette = ['#6366f1', '#7c3aed', '#0ea5e9', '#10b981', '#f59e0b', '#f43f5e'];
   const runs = aeoReportRuns.slice(-14);
-  const labels = runs.map(r => (r.dateKey || (r.created_at || '').slice(0, 10)).slice(5));
-  const entityNames = Array.from(new Set(runs.flatMap(r => (r.share_of_voice || []).map(s => s.label))));
-  const series = entityNames.map((lbl, idx) => ({
-    label: lbl,
+  const labels = runs.length > 0
+    ? runs.map(r => (r.dateKey || (r.created_at || '').slice(0, 10)).slice(5))
+    : ['Today'];
+
+  // Primary AI Visibility line graph
+  const primarySeriesValues = runs.length > 0
+    ? runs.map(r => {
+        const p = (r.share_of_voice || []).find(s => s.isPrimary) || r.share_of_voice?.[0];
+        return p ? p.shareOfVoicePct : 0;
+      })
+    : [visPct];
+  drawMultiLineChart('aeoTrendCanvas', labels, [{ label: primarySov?.label || 'Your Brand', color: '#6366f1', values: primarySeriesValues }], { maxVal: 100, suffix: '%' });
+
+  // Build unified ranking list from latestRun + competitorsList
+  const rankingMap = new Map();
+  if (primarySov) {
+    rankingMap.set(primarySov.label.toLowerCase(), {
+      label: primarySov.label,
+      domain: primarySov.domain,
+      isPrimary: true,
+      mentions: primarySov.mentionedCount || totalMentions,
+      sov: primarySov.shareOfVoicePct
+    });
+  } else {
+    rankingMap.set('your brand', {
+      label: (document.getElementById('aeo-live-brand')?.value || '').trim() || 'Your Brand',
+      domain: (document.getElementById('aeo-live-domain')?.value || '').trim(),
+      isPrimary: true,
+      mentions: totalMentions,
+      sov: visPct
+    });
+  }
+  sovList.forEach(s => {
+    const key = s.label.toLowerCase();
+    if (!rankingMap.has(key)) {
+      rankingMap.set(key, { label: s.label, domain: s.domain, isPrimary: Boolean(s.isPrimary), mentions: s.mentionedCount || 0, sov: s.shareOfVoicePct });
+    }
+  });
+  (competitorsList || []).forEach(c => {
+    const dom = getDomainFromUrl(c.website);
+    const key = (dom || c.name || '').toLowerCase();
+    if (key && !rankingMap.has(key) && !rankingMap.has(c.name.toLowerCase())) {
+      rankingMap.set(key, { label: c.name, domain: dom, isPrimary: false, mentions: 0, sov: 0 });
+    }
+  });
+
+  const sortedRanking = Array.from(rankingMap.values()).sort((a, b) => (b.sov - a.sov) || (b.mentions - a.mentions));
+  const rankTbody = document.getElementById('aeo-ranking-tbody');
+  if (rankTbody) {
+    rankTbody.innerHTML = sortedRanking.slice(0, 8).map((r, idx) => {
+      const fav = r.domain ? getLogoUrl(`https://${r.domain}`) : '';
+      return `
+        <tr class="hover:bg-slate-50/70">
+          <td class="py-2.5 pr-2 tabular-nums text-slate-400 font-medium">${idx + 1}</td>
+          <td class="py-2.5 px-2">
+            <div class="flex items-center gap-2 min-w-0">
+              ${fav ? `<img src="${fav}" alt="" class="w-4 h-4 rounded-xs object-contain shrink-0" onerror="this.style.display='none'" />` : ''}
+              <span class="font-semibold text-slate-900 truncate">${r.label}</span>
+              ${r.isPrimary ? `<span class="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[9px] font-medium shrink-0">You</span>` : ''}
+            </div>
+          </td>
+          <td class="py-2.5 px-2 text-right tabular-nums text-slate-600">${r.mentions}</td>
+          <td class="py-2.5 pl-2 text-right tabular-nums font-bold text-slate-900">${r.sov}%</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  // Share of Voice segmented bar + list
+  const sovHead = document.getElementById('aeo-sov-headline');
+  if (sovHead) sovHead.textContent = `${visPct}%`;
+  const sovBarEl = document.getElementById('aeo-sov-bar');
+  const sovListEl = document.getElementById('aeo-sov-list');
+  const totalSovSum = Math.max(1, sortedRanking.reduce((a, r) => a + (r.sov || 0), 0));
+  if (sovBarEl) {
+    const activeSegs = sortedRanking.filter(r => r.sov > 0);
+    sovBarEl.innerHTML = activeSegs.length > 0
+      ? activeSegs.map((r, i) => `<div class="h-full rounded-sm" style="width:${(r.sov / totalSovSum) * 100}%; background:${palette[i % palette.length]}" title="${r.label}: ${r.sov}%"></div>`).join('')
+      : `<div class="h-full w-full bg-slate-200 rounded-sm"></div>`;
+  }
+  if (sovListEl) {
+    sovListEl.innerHTML = sortedRanking.slice(0, 6).map((r, i) => `
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${palette[i % palette.length]}"></span>
+          <span class="font-medium text-slate-800 truncate">${r.label}</span>
+        </div>
+        <span class="tabular-nums font-semibold text-slate-900">${r.sov}%</span>
+      </div>
+    `).join('');
+  }
+
+  // Competitor Visibility multi-line graph
+  const legendEl = document.getElementById('aeo-trend-legend');
+  const compSeries = sortedRanking.slice(0, 6).map((ent, idx) => ({
+    label: ent.label,
     color: palette[idx % palette.length],
-    values: runs.map(r => {
-      const f = (r.share_of_voice || []).find(s => s.label === lbl);
-      return f ? f.shareOfVoicePct : 0;
-    })
+    values: runs.length > 0
+      ? runs.map(r => {
+          const f = (r.share_of_voice || []).find(s => s.label.toLowerCase() === ent.label.toLowerCase());
+          return f ? f.shareOfVoicePct : 0;
+        })
+      : [ent.sov]
   }));
   if (legendEl) {
-    legendEl.innerHTML = series.map(s => `<span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full" style="background:${s.color}"></span>${s.label}</span>`).join('');
+    legendEl.innerHTML = compSeries.map(s => `<span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full" style="background:${s.color}"></span>${s.label}</span>`).join('');
   }
-  drawMultiLineChart('aeoTrendCanvas', labels, series, { maxVal: 100, suffix: '%' });
+  drawMultiLineChart('aeoCompTrendCanvas', labels, compSeries, { maxVal: 100, suffix: '%' });
+}
+
+function renderAeoTrendChart() {
+  renderAeoDashboard();
+}
+
+function renderAeoCitationsTab() {
+  const latestRun = aeoReportRuns.length > 0 ? aeoReportRuns[aeoReportRuns.length - 1] : null;
+  const citSum = latestRun?.citations_summary || { own: 0, competitor: 0, third_party: 0 };
+  const ownEl = document.getElementById('aeo-cit-own');
+  const compEl = document.getElementById('aeo-cit-comp');
+  const thirdEl = document.getElementById('aeo-cit-third');
+  if (ownEl) ownEl.textContent = String(citSum.own);
+  if (compEl) compEl.textContent = String(citSum.competitor);
+  if (thirdEl) thirdEl.textContent = String(citSum.third_party);
+
+  const tbody = document.getElementById('aeo-citations-tbody');
+  if (!tbody) return;
+  const rows = [];
+  (latestRun?.aeo_results || []).forEach(r => {
+    (r.citations || []).forEach(c => {
+      rows.push({ ...c, prompt: r.prompt });
+    });
+  });
+
+  if (rows.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" class="py-8 text-center text-slate-400">Run a Live Gemini Scan to see cited URLs and sources.</td></tr>`;
+    return;
+  }
+
+  const catCls = {
+    own: 'bg-emerald-100 text-emerald-800',
+    competitor: 'bg-amber-100 text-amber-800',
+    third_party: 'bg-slate-100 text-slate-700'
+  };
+  const catLbl = { own: 'Own Domain', competitor: 'Competitor', third_party: 'Third-Party' };
+
+  tbody.innerHTML = rows.map(c => `
+    <tr class="hover:bg-slate-50/70">
+      <td class="py-3 px-4 font-medium text-slate-900 max-w-[260px] truncate">
+        <a href="${c.uri}" target="_blank" rel="noopener noreferrer" class="hover:underline">${c.title || c.uri}</a>
+      </td>
+      <td class="py-3 px-4 text-slate-600">${c.domain}</td>
+      <td class="py-3 px-4"><span class="px-2 py-0.5 rounded-full text-[10px] font-semibold ${catCls[c.category] || catCls.third_party}">${catLbl[c.category] || 'Third-Party'}</span></td>
+      <td class="py-3 px-4 text-slate-500 max-w-[240px] truncate">${c.prompt}</td>
+    </tr>
+  `).join('');
+}
+
+function moveAeoRecStatus(recId, nextStatus) {
+  const item = aeoRecommendations.find(r => r.id === recId);
+  if (!item) return;
+  item.status = nextStatus;
+  renderAeoRecommendationsTab();
+}
+
+function renderAeoRecommendationsTab() {
+  syncAeoRecommendationsFromData();
+  const board = document.getElementById('aeo-recommendations-board');
+  if (!board) return;
+  const cols = [
+    { key: 'new', title: 'New' },
+    { key: 'in_progress', title: 'In Progress' },
+    { key: 'completed', title: 'Completed' }
+  ];
+  board.innerHTML = cols.map(col => {
+    const items = aeoRecommendations.filter(r => r.status === col.key);
+    const cardsHtml = items.length === 0
+      ? `<div class="rounded-xl border border-dashed border-slate-200 bg-white/60 p-6 text-center text-[11px] text-slate-400">No recommendations</div>`
+      : items.map(r => `
+          <div class="rounded-xl border border-slate-200/80 bg-white p-3.5 card-shadow space-y-2">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-[10px] font-semibold tracking-wider text-slate-400">${r.type}</span>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold ${r.priority === 'High' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}">${r.priority}</span>
+            </div>
+            <div class="text-xs font-semibold text-slate-900 leading-snug">${r.title}</div>
+            ${r.detail ? `<div class="text-[11px] text-slate-500">${r.detail}</div>` : ''}
+            <div class="flex items-center justify-end gap-1.5 pt-2 border-t border-slate-100 text-[10px]">
+              ${col.key !== 'in_progress' ? `<button type="button" onclick="moveAeoRecStatus('${r.id}', 'in_progress')" class="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium">Start</button>` : ''}
+              ${col.key !== 'completed' ? `<button type="button" onclick="moveAeoRecStatus('${r.id}', 'completed')" class="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-white font-medium">Complete</button>` : ''}
+            </div>
+          </div>
+        `).join('');
+    return `
+      <div class="rounded-2xl border border-slate-200/80 bg-[#fbfcfd] p-3.5 space-y-3">
+        <div class="flex items-center justify-between px-1">
+          <span class="text-xs font-bold text-slate-900">${col.title}</span>
+          <span class="px-2 py-0.5 rounded-full bg-slate-200/70 text-[10px] font-semibold text-slate-700 tabular-nums">${items.length}</span>
+        </div>
+        <div class="space-y-2.5">${cardsHtml}</div>
+      </div>
+    `;
+  }).join('');
 }
 
 function sendSuggestedPromptsToAeo() {
   const snap = getLatestSearchSnapshot();
   const sugs = snap?.keyword_suggestions || [];
-  switchSearchHubTab('aeo-seo');
+  openApp('aeo-seo');
+  switchAeoTab('prompts');
   toggleLiveAeoPanel(true);
   const pArea = document.getElementById('aeo-live-prompts');
   if (pArea && sugs.length > 0) {
