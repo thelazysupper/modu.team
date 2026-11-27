@@ -82,3 +82,14 @@ body {
   background-color: rgba(226, 232, 240, 0.8);
 }
 
+[data-export-card] [data-export-menu-wrap] {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+[data-export-card]:hover [data-export-menu-wrap],
+[data-export-card]:focus-within [data-export-menu-wrap],
+[data-export-menu-wrap].is-open {
+  opacity: 1;
+}
+

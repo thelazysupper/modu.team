@@ -8768,6 +8768,7 @@ function attachExportMenus() {
     if (getComputedStyle(card).position === 'static') {
       card.style.position = 'relative';
     }
+    card.setAttribute('data-export-card', '1');
 
     const wrap = document.createElement('div');
     wrap.setAttribute('data-export-menu-wrap', targetId);
@@ -8777,27 +8778,35 @@ function attachExportMenus() {
         type="button"
         data-export-btn="${targetId}"
         onclick="event.stopPropagation(); toggleExportDropdown('${targetId}')"
-        title="Export options"
+        title="Copy or export"
         class="w-7 h-7 rounded-lg border border-slate-200/80 bg-white/95 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center transition-colors shadow-xs"
       >
-        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-          <circle cx="4" cy="10" r="1.5"/>
-          <circle cx="10" cy="10" r="1.5"/>
-          <circle cx="16" cy="10" r="1.5"/>
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+          <rect x="9" y="9" width="11" height="11" rx="2" />
+          <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
         </svg>
       </button>
       <div
         id="export-dd-${targetId}"
         onclick="event.stopPropagation()"
-        class="hidden absolute right-0 mt-1.5 w-52 rounded-xl border border-slate-200 bg-white shadow-lg py-1.5 z-30 text-xs"
+        class="hidden absolute right-0 mt-1.5 w-56 rounded-xl border border-slate-200 bg-white shadow-lg py-1.5 z-30 text-xs"
       >
         <button type="button" onclick="exportTargetAsPng('${targetId}', true)" class="w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2">
           <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-          <span>Copy as PNG (Transparent)</span>
+          <span>Copy PNG (4x Transparent)</span>
         </button>
         <button type="button" onclick="exportTargetAsPng('${targetId}', false)" class="w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2">
           <span class="w-2 h-2 rounded-full bg-sky-500"></span>
-          <span>Download PNG (Transparent)</span>
+          <span>Download PNG (4x)</span>
+        </button>
+        <div class="my-1 border-t border-slate-100"></div>
+        <button type="button" onclick="exportTargetAsSvg('${targetId}', true)" class="w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+          <span>Copy SVG</span>
+        </button>
+        <button type="button" onclick="exportTargetAsSvg('${targetId}', false)" class="w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-orange-500"></span>
+          <span>Download SVG</span>
         </button>
         <div class="my-1 border-t border-slate-100"></div>
         <button type="button" onclick="openExportPdfModal('${targetId}')" class="w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2">
@@ -8812,6 +8821,7 @@ function attachExportMenus() {
 
 function closeAllExportDropdowns() {
   document.querySelectorAll('[id^="export-dd-"]').forEach(el => el.classList.add('hidden'));
+  document.querySelectorAll('[data-export-menu-wrap].is-open').forEach(el => el.classList.remove('is-open'));
 }
 
 function toggleExportDropdown(targetId) {
@@ -8819,7 +8829,10 @@ function toggleExportDropdown(targetId) {
   if (!dd) return;
   const wasHidden = dd.classList.contains('hidden');
   closeAllExportDropdowns();
-  if (wasHidden) dd.classList.remove('hidden');
+  if (wasHidden) {
+    dd.classList.remove('hidden');
+    dd.closest('[data-export-menu-wrap]')?.classList.add('is-open');
+  }
 }
 
 document.addEventListener('click', () => closeAllExportDropdowns());
@@ -8934,7 +8947,7 @@ async function drawBadgeAt(ctx, badgeEl, x, y, w, h) {
 }
 
 async function renderExportCanvas(entry, { transparent = true, bgColor = '#ffffff' } = {}) {
-  const dpr = 2;
+  const dpr = 4;
   const isDark = !transparent && isDarkHexColor(bgColor);
   const titleColor = isDark ? '#f8fafc' : '#0f172a';
   const mutedColor = isDark ? '#cbd5e1' : '#64748b';
@@ -8948,6 +8961,7 @@ async function renderExportCanvas(entry, { transparent = true, bgColor = '#fffff
     const ch = Math.max(180, Math.round(cardRect.height || 300));
 
     const out = document.createElement('canvas');
+    out._exportDpr = dpr;
     out.width = cw * dpr;
     out.height = ch * dpr;
     const ctx = out.getContext('2d');
@@ -9104,6 +9118,7 @@ async function renderExportCanvas(entry, { transparent = true, bgColor = '#fffff
   const tableH = headH + Math.max(1, rows.length) * rowH;
 
   const out = document.createElement('canvas');
+  out._exportDpr = dpr;
   out.width = (tableW + pad * 2) * dpr;
   out.height = (tableH + pad * 2 + titleH) * dpr;
   const ctx = out.getContext('2d');
@@ -9224,8 +9239,39 @@ async function exportTargetAsPng(targetId, copyToClipboard = true) {
   showExportToast('Downloaded transparent PNG');
 }
 
+async function exportTargetAsSvg(targetId, copyToClipboard = true) {
+  closeAllExportDropdowns();
+  const entry = exportTargetRegistry.get(targetId);
+  if (!entry) return;
+  const canvas = await renderExportCanvas(entry, { transparent: true });
+  const dpr = canvas._exportDpr || 4;
+  const logicalW = Math.round(canvas.width / dpr);
+  const logicalH = Math.round(canvas.height / dpr);
+  const pngDataUrl = canvas.toDataURL('image/png');
+  const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${logicalW}" height="${logicalH}" viewBox="0 0 ${logicalW} ${logicalH}">\n  <image width="${logicalW}" height="${logicalH}" href="${pngDataUrl}" xlink:href="${pngDataUrl}" />\n</svg>`;
+
+  if (copyToClipboard && navigator.clipboard) {
+    try {
+      if (typeof navigator.clipboard.writeText === 'function') {
+        await navigator.clipboard.writeText(svgStr);
+        showExportToast('Copied SVG to clipboard');
+        return;
+      }
+    } catch (e) {}
+  }
+
+  const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${slugifyRouteSegment(entry.title || 'export') || 'export'}.svg`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  showExportToast('Downloaded SVG');
+}
+
 function buildPdfBlobFromCanvas(canvas) {
-  const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.96);
   const base64 = dataUrl.split(',')[1] || '';
   const binStr = atob(base64);
   const imgBytes = new Uint8Array(binStr.length);
@@ -9233,8 +9279,9 @@ function buildPdfBlobFromCanvas(canvas) {
 
   const pxW = canvas.width;
   const pxH = canvas.height;
-  const ptW = Math.round((pxW / 2) * 0.75);
-  const ptH = Math.round((pxH / 2) * 0.75);
+  const dpr = canvas._exportDpr || 2;
+  const ptW = Math.round((pxW / dpr) * 0.75);
+  const ptH = Math.round((pxH / dpr) * 0.75);
 
   const enc = new TextEncoder();
   const parts = [];
