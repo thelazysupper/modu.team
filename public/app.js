@@ -2423,7 +2423,7 @@ function getChartTooltipEl() {
   if (!el) {
     el = document.createElement('div');
     el.id = 'modu-chart-tooltip';
-    el.className = 'fixed z-50 pointer-events-none hidden px-2.5 py-1.5 rounded-lg bg-[#0f172a] text-white text-[11px] shadow-lg border border-slate-700/60 tabular-nums whitespace-nowrap';
+    el.className = 'fixed z-50 pointer-events-none hidden px-3 py-2 rounded-xl bg-white text-slate-900 text-[11px] shadow-lg border border-slate-200/90 tabular-nums whitespace-nowrap';
     document.body.appendChild(el);
   }
   return el;
@@ -2547,7 +2547,7 @@ function drawChannelDonut(canvasId, segments, centerTop, centerSub, unitFormatte
         showChartTooltip(
           e.clientX,
           e.clientY,
-          `<div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full shrink-0" style="background:${s.color}"></span><span class="font-semibold">${s.label}</span><span class="text-slate-300">·</span><span>${meta.unitFormatter(s.value)}</span><span class="text-slate-300">(${s.pct.toFixed(1)}%)</span></div>`
+          `<div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full shrink-0" style="background:${s.color}"></span><span class="font-semibold">${s.label}</span><span class="text-slate-400">·</span><span>${meta.unitFormatter(s.value)}</span><span class="text-slate-400">(${s.pct.toFixed(1)}%)</span></div>`
         );
       } else {
         hideChartTooltip();
@@ -3741,7 +3741,7 @@ function drawBudgetChannelPie(segments) {
       showChartTooltip(
         e.clientX,
         e.clientY,
-        `<div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full" style="background:${hit.color}"></span><span class="font-semibold">${hit.label}</span><span class="text-slate-300">·</span><span>${Math.round(hit.value).toLocaleString()} NOK</span><span class="text-slate-300">(${pct}%)</span></div>`
+        `<div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full" style="background:${hit.color}"></span><span class="font-semibold">${hit.label}</span><span class="text-slate-400">·</span><span>${Math.round(hit.value).toLocaleString()} NOK</span><span class="text-slate-400">(${pct}%)</span></div>`
       );
     });
     canvas.addEventListener('mouseleave', () => {
@@ -3795,7 +3795,7 @@ function renderBudgetSummary(channels, yearObj, monthlyPlanned, monthlyActual, t
     const pctExact = totalPlanned > 0 ? (chSum / totalPlanned) * 100 : 0;
     const color = getChannelColor(ch, idx) || palette[idx % palette.length];
     const safeCh = ch.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-    const tipHtml = `<div class=&quot;flex items-center gap-1.5&quot;><span class=&quot;w-2 h-2 rounded-full&quot; style=&quot;background:${color}&quot;></span><span class=&quot;font-semibold&quot;>${safeCh}</span><span class=&quot;text-slate-300&quot;>·</span><span>${Math.round(chSum).toLocaleString()} NOK</span><span class=&quot;text-slate-300&quot;>(${pctExact.toFixed(1)}%)</span></div>`;
+    const tipHtml = `<div class=&quot;flex items-center gap-1.5&quot;><span class=&quot;w-2 h-2 rounded-full&quot; style=&quot;background:${color}&quot;></span><span class=&quot;font-semibold&quot;>${safeCh}</span><span class=&quot;text-slate-400&quot;>·</span><span>${Math.round(chSum).toLocaleString()} NOK</span><span class=&quot;text-slate-400&quot;>(${pctExact.toFixed(1)}%)</span></div>`;
     return `
       <div class="flex items-center justify-between gap-2 text-xs cursor-pointer rounded-lg px-1.5 py-1 -mx-1.5 hover:bg-slate-50/90 transition-colors" onmousemove="showChartTooltip(event.clientX, event.clientY, '${tipHtml.replace(/'/g, "\\'")}')" onmouseleave="hideChartTooltip()">
         <div class="flex items-center gap-2 min-w-0">
@@ -4293,9 +4293,9 @@ function drawBudgetChart(monthlyPlanned, monthlyActual) {
         e.clientX,
         e.clientY,
         `<div class="space-y-1">
-          <div class="font-semibold text-white">${monthNames[idx]} ${budgetYear}</div>
-          <div class="flex items-center justify-between gap-3"><span class="flex items-center gap-1.5 text-slate-300"><span class="w-2 h-2 rounded-full bg-[#10b981]"></span>Planned</span><span>${Math.round(p).toLocaleString()} NOK (${pShare.toFixed(1)}%)</span></div>
-          <div class="flex items-center justify-between gap-3"><span class="flex items-center gap-1.5 text-slate-300"><span class="w-2 h-2 rounded-full bg-[#7c3aed]"></span>Actual</span><span>${Math.round(a).toLocaleString()} NOK (${aPct.toFixed(1)}%)</span></div>
+          <div class="font-semibold text-slate-900">${monthNames[idx]} ${budgetYear}</div>
+          <div class="flex items-center justify-between gap-3"><span class="flex items-center gap-1.5 text-slate-500"><span class="w-2 h-2 rounded-full bg-[#10b981]"></span>Planned</span><span>${Math.round(p).toLocaleString()} NOK (${pShare.toFixed(1)}%)</span></div>
+          <div class="flex items-center justify-between gap-3"><span class="flex items-center gap-1.5 text-slate-500"><span class="w-2 h-2 rounded-full bg-[#7c3aed]"></span>Actual</span><span>${Math.round(a).toLocaleString()} NOK (${aPct.toFixed(1)}%)</span></div>
         </div>`
       );
     });
@@ -5273,7 +5273,7 @@ function drawIntegrationsPieChart(segments, canvasId = 'integrationsPieChart') {
       if (!hit) return;
       if (meta.hoverIdx !== hit.idx) { meta.hoverIdx = hit.idx; meta.render(hit.idx); }
       const pct = ((hit.value / meta.total) * 100).toFixed(1);
-      showChartTooltip(e.clientX, e.clientY, `<div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full" style="background:${hit.color}"></span><span class="font-semibold">${hit.label}</span><span class="text-slate-300">·</span><span>${hit.value}</span><span class="text-slate-300">(${pct}%)</span></div>`);
+      showChartTooltip(e.clientX, e.clientY, `<div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full" style="background:${hit.color}"></span><span class="font-semibold">${hit.label}</span><span class="text-slate-400">·</span><span>${hit.value}</span><span class="text-slate-400">(${pct}%)</span></div>`);
     });
     canvas.addEventListener('mouseleave', () => {
       const meta = canvas._pieMeta;
@@ -6017,9 +6017,9 @@ function drawLeadsStageChart() {
         e.clientX,
         e.clientY,
         `<div class="space-y-1">
-          <div class="font-semibold text-white">${r.name}</div>
-          <div class="flex items-center justify-between gap-3"><span class="flex items-center gap-1.5 text-slate-300"><span class="w-2 h-2 rounded-full bg-[#7c3aed]"></span>Leads</span><span>${r.count} (${r.countPct.toFixed(1)}%)</span></div>
-          <div class="flex items-center justify-between gap-3"><span class="flex items-center gap-1.5 text-slate-300"><span class="w-2 h-2 rounded-full bg-[#10b981]"></span>Value</span><span>${Math.round(r.value).toLocaleString()} NOK (${r.valuePct.toFixed(1)}%)</span></div>
+          <div class="font-semibold text-slate-900">${r.name}</div>
+          <div class="flex items-center justify-between gap-3"><span class="flex items-center gap-1.5 text-slate-500"><span class="w-2 h-2 rounded-full bg-[#7c3aed]"></span>Leads</span><span>${r.count} (${r.countPct.toFixed(1)}%)</span></div>
+          <div class="flex items-center justify-between gap-3"><span class="flex items-center gap-1.5 text-slate-500"><span class="w-2 h-2 rounded-full bg-[#10b981]"></span>Value</span><span>${Math.round(r.value).toLocaleString()} NOK (${r.valuePct.toFixed(1)}%)</span></div>
         </div>`
       );
     });
@@ -6503,9 +6503,9 @@ function drawCompetitorsChart(rows) {
         e.clientX,
         e.clientY,
         `<div class="space-y-1">
-          <div class="font-semibold text-white">${r.name}</div>
-          <div class="flex items-center justify-between gap-3"><span class="flex items-center gap-1.5 text-slate-300"><span class="w-2 h-2 rounded-full bg-[#7c3aed]"></span>Strength</span><span>${r.score}/10 (${r.strengthPct.toFixed(0)}%)</span></div>
-          <div class="flex items-center justify-between gap-3"><span class="flex items-center gap-1.5 text-slate-300"><span class="w-2 h-2 rounded-full bg-[#10b981]"></span>Channel Overlap</span><span>${r.channels.length}/${r.totalChannels} (${r.overlapPct.toFixed(1)}%)</span></div>
+          <div class="font-semibold text-slate-900">${r.name}</div>
+          <div class="flex items-center justify-between gap-3"><span class="flex items-center gap-1.5 text-slate-500"><span class="w-2 h-2 rounded-full bg-[#7c3aed]"></span>Strength</span><span>${r.score}/10 (${r.strengthPct.toFixed(0)}%)</span></div>
+          <div class="flex items-center justify-between gap-3"><span class="flex items-center gap-1.5 text-slate-500"><span class="w-2 h-2 rounded-full bg-[#10b981]"></span>Channel Overlap</span><span>${r.channels.length}/${r.totalChannels} (${r.overlapPct.toFixed(1)}%)</span></div>
         </div>`
       );
     });
@@ -6832,9 +6832,9 @@ function drawAeoSeoChart(rows) {
         e.clientX,
         e.clientY,
         `<div class="space-y-1">
-          <div class="font-semibold text-white">${r.query}</div>
-          <div class="flex items-center justify-between gap-3"><span class="flex items-center gap-1.5 text-slate-300"><span class="w-2 h-2 rounded-full bg-[#7c3aed]"></span>AEO (${r.engine})</span><span>${r.aeoScore}% (${r.cited})</span></div>
-          <div class="flex items-center justify-between gap-3"><span class="flex items-center gap-1.5 text-slate-300"><span class="w-2 h-2 rounded-full bg-[#10b981]"></span>SEO</span><span>${r.seoScore}%${r.seoPos > 0 ? ` (#${r.seoPos})` : ''}</span></div>
+          <div class="font-semibold text-slate-900">${r.query}</div>
+          <div class="flex items-center justify-between gap-3"><span class="flex items-center gap-1.5 text-slate-500"><span class="w-2 h-2 rounded-full bg-[#7c3aed]"></span>AEO (${r.engine})</span><span>${r.aeoScore}% (${r.cited})</span></div>
+          <div class="flex items-center justify-between gap-3"><span class="flex items-center gap-1.5 text-slate-500"><span class="w-2 h-2 rounded-full bg-[#10b981]"></span>SEO</span><span>${r.seoScore}%${r.seoPos > 0 ? ` (#${r.seoPos})` : ''}</span></div>
         </div>`
       );
     });
@@ -7102,7 +7102,7 @@ function drawMultiLineChart(canvasId, labels, seriesList, opts = {}) {
         meta.hoverIdx = idx;
         canvas._renderLines?.(idx);
       }
-      let html = `<div class="font-semibold text-white mb-1">${meta.labels[idx]}</div>`;
+      let html = `<div class="font-semibold text-slate-900 mb-1">${meta.labels[idx]}</div>`;
       meta.seriesList.forEach(s => {
         const v = s.values?.[idx] ?? 0;
         html += `<div class="flex items-center justify-between gap-4"><span style="color:${s.color}">${s.label}</span><span class="tabular-nums font-medium">${Math.round(v)}${meta.suffix}</span></div>`;
@@ -8198,7 +8198,7 @@ function drawTrafficChannelTrendChart(canvasId, labels, seriesList) {
         meta.hoverIdx = idx;
         canvas._renderTrafficTrend?.(idx);
       }
-      let html = `<div class="font-semibold text-white mb-1">${meta.labels[idx]}</div>`;
+      let html = `<div class="font-semibold text-slate-900 mb-1">${meta.labels[idx]}</div>`;
       meta.visibleSeries.forEach(s => {
         const v = s.values?.[idx] ?? 0;
         html += `<div class="flex items-center justify-between gap-4"><span style="color:${s.color}">${s.label}</span><span class="tabular-nums font-medium">${formatTrafficCompact(v)}</span></div>`;
@@ -8734,7 +8734,7 @@ function drawReportsBarChart(canvasId, mode, seriesA, seriesB = null, chartHeigh
         const gDef = getGoalDef(meta.mode);
         return gDef ? formatGoalValue(gDef, v) : String(Math.round(v));
       };
-      let html = `<div class="font-semibold text-white mb-1">${meta.labels[idx]}</div>`;
+      let html = `<div class="font-semibold text-slate-900 mb-1">${meta.labels[idx]}</div>`;
       html += `<div class="flex items-center justify-between gap-4"><span style="color:${meta.colorA}">${meta.seriesALabel}</span><span class="tabular-nums font-medium">${fmtVal(vA)}</span></div>`;
       if (meta.seriesB) {
         html += `<div class="flex items-center justify-between gap-4"><span style="color:${meta.colorB}">${meta.seriesBLabel}</span><span class="tabular-nums font-medium">${fmtVal(vB)}</span></div>`;
