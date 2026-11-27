@@ -7442,6 +7442,434 @@ function acceptCsvImport() {
   document.getElementById('csv-import-modal')?.classList.add('hidden');
 }
 
+const exportTargetRegistry = new Map();
+let exportTargetCounter = 1;
+let activePdfExportTargetId = null;
+let exportPdfBgMode = 'white';
+let exportPdfCustomColor = '#0f172a';
+let exportToastTimer = null;
+
+function showExportToast(msg) {
+  const el = document.getElementById('export-toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  clearTimeout(exportToastTimer);
+  exportToastTimer = setTimeout(() => el.classList.add('hidden'), 2600);
+}
+
+function isDarkHexColor(hex) {
+  const clean = String(hex || '#ffffff').replace('#', '');
+  if (clean.length !== 6 && clean.length !== 3) return false;
+  const full = clean.length === 3 ? clean.split('').map(c => c + c).join('') : clean;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum < 0.5;
+}
+
+function getExportTargetTitle(cardEl, kind) {
+  const h = cardEl?.querySelector('h2, h3, h4');
+  const t = (h?.textContent || '').trim();
+  if (t) return t;
+  return kind === 'chart' ? 'Chart Export' : 'Table Export';
+}
+
+function attachExportMenus() {
+  const main = document.getElementById('app-main');
+  if (!main) return;
+
+  const candidates = [];
+  main.querySelectorAll('canvas').forEach(cv => {
+    if (cv.closest('#csv-import-modal')) return;
+    const card = cv.closest('.rounded-2xl, .rounded-xl') || cv.parentElement;
+    if (card) candidates.push({ card, el: cv, kind: 'chart' });
+  });
+  main.querySelectorAll('table').forEach(tbl => {
+    if (tbl.closest('#csv-import-modal')) return;
+    const card = tbl.closest('.rounded-2xl, .rounded-xl') || tbl.parentElement;
+    if (card) candidates.push({ card, el: tbl, kind: 'table' });
+  });
+
+  const seenCards = new Set();
+  candidates.forEach(({ card, el, kind }) => {
+    if (!card || seenCards.has(card)) return;
+    seenCards.add(card);
+    if (card.querySelector('[data-export-menu-wrap]')) return;
+
+    const targetId = `exp_${exportTargetCounter++}`;
+    const title = getExportTargetTitle(card, kind);
+    exportTargetRegistry.set(targetId, { card, el, kind, title });
+
+    if (getComputedStyle(card).position === 'static') {
+      card.style.position = 'relative';
+    }
+
+    const wrap = document.createElement('div');
+    wrap.setAttribute('data-export-menu-wrap', targetId);
+    wrap.className = 'absolute top-3.5 right-3.5 z-20';
+    wrap.innerHTML = `
+      <button
+        type="button"
+        data-export-btn="${targetId}"
+        onclick="event.stopPropagation(); toggleExportDropdown('${targetId}')"
+        title="Export options"
+        class="w-7 h-7 rounded-lg border border-slate-200/80 bg-white/95 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center transition-colors shadow-xs"
+      >
+        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+          <circle cx="4" cy="10" r="1.5"/>
+          <circle cx="10" cy="10" r="1.5"/>
+          <circle cx="16" cy="10" r="1.5"/>
+        </svg>
+      </button>
+      <div
+        id="export-dd-${targetId}"
+        onclick="event.stopPropagation()"
+        class="hidden absolute right-0 mt-1.5 w-52 rounded-xl border border-slate-200 bg-white shadow-lg py-1.5 z-30 text-xs"
+      >
+        <button type="button" onclick="exportTargetAsPng('${targetId}', true)" class="w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span>Copy as PNG (Transparent)</span>
+        </button>
+        <button type="button" onclick="exportTargetAsPng('${targetId}', false)" class="w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-sky-500"></span>
+          <span>Download PNG (Transparent)</span>
+        </button>
+        <div class="my-1 border-t border-slate-100"></div>
+        <button type="button" onclick="openExportPdfModal('${targetId}')" class="w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-violet-500"></span>
+          <span>Export as PDF...</span>
+        </button>
+      </div>
+    `;
+    card.appendChild(wrap);
+  });
+}
+
+function closeAllExportDropdowns() {
+  document.querySelectorAll('[id^="export-dd-"]').forEach(el => el.classList.add('hidden'));
+}
+
+function toggleExportDropdown(targetId) {
+  const dd = document.getElementById(`export-dd-${targetId}`);
+  if (!dd) return;
+  const wasHidden = dd.classList.contains('hidden');
+  closeAllExportDropdowns();
+  if (wasHidden) dd.classList.remove('hidden');
+}
+
+document.addEventListener('click', () => closeAllExportDropdowns());
+
+function extractTableCellText(td) {
+  const input = td.querySelector('input');
+  if (input) {
+    const val = (input.value || '').trim();
+    const siblingSpan = td.querySelector('span');
+    return siblingSpan && siblingSpan.textContent.trim() === '%' && val ? `${val}%` : (val || '0');
+  }
+  return (td.innerText || td.textContent || '').replace(/\s+/g, ' ').trim();
+}
+
+function renderExportCanvas(entry, { transparent = true, bgColor = '#ffffff' } = {}) {
+  const dpr = 2;
+  const isDark = !transparent && isDarkHexColor(bgColor);
+  const titleColor = isDark ? '#f8fafc' : '#0f172a';
+  const mutedColor = isDark ? '#cbd5e1' : '#64748b';
+  const borderColor = isDark ? 'rgba(255,255,255,0.16)' : '#e2e8f0';
+  const headerBg = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(248,250,252,0.85)';
+
+  if (entry.kind === 'chart') {
+    const srcCanvas = entry.el;
+    const rect = srcCanvas.getBoundingClientRect();
+    const cw = Math.max(180, Math.round(rect.width || srcCanvas.width || 400));
+    const ch = Math.max(120, Math.round(rect.height || srcCanvas.height || 220));
+    const pad = 28;
+    const titleH = entry.title ? 34 : 0;
+
+    const out = document.createElement('canvas');
+    out.width = (cw + pad * 2) * dpr;
+    out.height = (ch + pad * 2 + titleH) * dpr;
+    const ctx = out.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    if (!transparent) {
+      ctx.fillStyle = bgColor;
+      ctx.fillRect(0, 0, cw + pad * 2, ch + pad * 2 + titleH);
+    }
+    if (entry.title) {
+      ctx.fillStyle = titleColor;
+      ctx.font = '600 15px Inter, system-ui, sans-serif';
+      ctx.textBaseline = 'top';
+      ctx.fillText(entry.title, pad, pad);
+    }
+    ctx.drawImage(srcCanvas, pad, pad + titleH, cw, ch);
+    return out;
+  }
+
+  // Table renderer
+  const tbl = entry.el;
+  const headCells = Array.from(tbl.querySelectorAll('thead th')).map(th => (th.innerText || th.textContent || '').trim());
+  const bodyRows = Array.from(tbl.querySelectorAll('tbody tr')).map(tr =>
+    Array.from(tr.querySelectorAll('td')).map(td => extractTableCellText(td))
+  );
+
+  // Drop trailing empty action column if present
+  const keepCols = headCells.map((h, i) => {
+    const allEmpty = h === '' && bodyRows.every(r => !r[i] || r[i] === '•••');
+    return !allEmpty;
+  });
+  const headers = headCells.filter((_, i) => keepCols[i]);
+  const rows = bodyRows.map(r => r.filter((_, i) => keepCols[i]));
+
+  const tmp = document.createElement('canvas').getContext('2d');
+  tmp.font = '500 12px Inter, system-ui, sans-serif';
+  const colWidths = headers.map((h, colIdx) => {
+    let maxW = tmp.measureText(h).width;
+    rows.forEach(r => {
+      const w = tmp.measureText(r[colIdx] || '').width;
+      if (w > maxW) maxW = w;
+    });
+    return Math.min(260, Math.max(68, Math.ceil(maxW) + 28));
+  });
+
+  const pad = 28;
+  const titleH = entry.title ? 34 : 0;
+  const rowH = 34;
+  const headH = 36;
+  const tableW = Math.max(360, colWidths.reduce((a, b) => a + b, 0));
+  const tableH = headH + Math.max(1, rows.length) * rowH;
+
+  const out = document.createElement('canvas');
+  out.width = (tableW + pad * 2) * dpr;
+  out.height = (tableH + pad * 2 + titleH) * dpr;
+  const ctx = out.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  if (!transparent) {
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, tableW + pad * 2, tableH + pad * 2 + titleH);
+  }
+
+  if (entry.title) {
+    ctx.fillStyle = titleColor;
+    ctx.font = '600 15px Inter, system-ui, sans-serif';
+    ctx.textBaseline = 'top';
+    ctx.fillText(entry.title, pad, pad);
+  }
+
+  const startY = pad + titleH;
+  if (!transparent) {
+    ctx.fillStyle = headerBg;
+    ctx.fillRect(pad, startY, tableW, headH);
+  }
+  ctx.strokeStyle = borderColor;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(pad, startY + headH);
+  ctx.lineTo(pad + tableW, startY + headH);
+  ctx.stroke();
+
+  ctx.font = '600 11px Inter, system-ui, sans-serif';
+  ctx.fillStyle = mutedColor;
+  ctx.textBaseline = 'middle';
+  let curX = pad;
+  headers.forEach((h, i) => {
+    ctx.fillText(h, curX + 12, startY + headH / 2);
+    curX += colWidths[i];
+  });
+
+  ctx.font = '500 12px Inter, system-ui, sans-serif';
+  rows.forEach((r, rIdx) => {
+    const y = startY + headH + rIdx * rowH;
+    let cx = pad;
+    r.forEach((cell, cIdx) => {
+      ctx.fillStyle = cIdx === 0 ? titleColor : mutedColor;
+      ctx.fillText(cell || '—', cx + 12, y + rowH / 2, colWidths[cIdx] - 20);
+      cx += colWidths[cIdx];
+    });
+    if (rIdx < rows.length - 1) {
+      ctx.strokeStyle = borderColor;
+      ctx.beginPath();
+      ctx.moveTo(pad, y + rowH);
+      ctx.lineTo(pad + tableW, y + rowH);
+      ctx.stroke();
+    }
+  });
+
+  return out;
+}
+
+async function exportTargetAsPng(targetId, copyToClipboard = true) {
+  closeAllExportDropdowns();
+  const entry = exportTargetRegistry.get(targetId);
+  if (!entry) return;
+  const canvas = renderExportCanvas(entry, { transparent: true });
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+  if (!blob) return;
+
+  if (copyToClipboard && navigator.clipboard && typeof ClipboardItem !== 'undefined') {
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      showExportToast('Copied transparent PNG to clipboard');
+      return;
+    } catch (e) {
+      // Fallback to download if clipboard permission denied
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${slugifyRouteSegment(entry.title || 'export') || 'export'}.png`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  showExportToast('Downloaded transparent PNG');
+}
+
+function buildPdfBlobFromCanvas(canvas) {
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+  const base64 = dataUrl.split(',')[1] || '';
+  const binStr = atob(base64);
+  const imgBytes = new Uint8Array(binStr.length);
+  for (let i = 0; i < binStr.length; i++) imgBytes[i] = binStr.charCodeAt(i);
+
+  const pxW = canvas.width;
+  const pxH = canvas.height;
+  const ptW = Math.round((pxW / 2) * 0.75);
+  const ptH = Math.round((pxH / 2) * 0.75);
+
+  const enc = new TextEncoder();
+  const parts = [];
+  const offsets = [0];
+  let byteLen = 0;
+  const pushStr = s => {
+    const b = enc.encode(s);
+    parts.push(b);
+    byteLen += b.length;
+  };
+  const pushBytes = b => {
+    parts.push(b);
+    byteLen += b.length;
+  };
+
+  pushStr('%PDF-1.4\n%\xFF\xFF\xFF\xFF\n');
+
+  offsets.push(byteLen);
+  pushStr('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+
+  offsets.push(byteLen);
+  pushStr('2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n');
+
+  offsets.push(byteLen);
+  pushStr(`3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${ptW} ${ptH}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>\nendobj\n`);
+
+  offsets.push(byteLen);
+  pushStr(`4 0 obj\n<< /Type /XObject /Subtype /Image /Width ${pxW} /Height ${pxH} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${imgBytes.length} >>\nstream\n`);
+  pushBytes(imgBytes);
+  pushStr('\nendstream\nendobj\n');
+
+  const content = `q\n${ptW} 0 0 ${ptH} 0 0 cm\n/Im0 Do\nQ\n`;
+  offsets.push(byteLen);
+  pushStr(`5 0 obj\n<< /Length ${content.length} >>\nstream\n${content}endstream\nendobj\n`);
+
+  const xrefStart = byteLen;
+  pushStr(`xref\n0 6\n0000000000 65535 f \n`);
+  for (let i = 1; i <= 5; i++) {
+    pushStr(`${String(offsets[i]).padStart(10, '0')} 00000 n \n`);
+  }
+  pushStr(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`);
+
+  return new Blob(parts, { type: 'application/pdf' });
+}
+
+function openExportPdfModal(targetId) {
+  closeAllExportDropdowns();
+  const entry = exportTargetRegistry.get(targetId);
+  if (!entry) return;
+  activePdfExportTargetId = targetId;
+  const lbl = document.getElementById('export-pdf-target-label');
+  if (lbl) lbl.textContent = entry.title;
+  setExportPdfBgMode(exportPdfBgMode);
+  document.getElementById('export-pdf-modal')?.classList.remove('hidden');
+}
+
+function closeExportPdfModal() {
+  document.getElementById('export-pdf-modal')?.classList.add('hidden');
+}
+
+function setExportPdfBgMode(mode) {
+  exportPdfBgMode = mode === 'custom' ? 'custom' : 'white';
+  const whiteBtn = document.getElementById('export-pdf-mode-white');
+  const customBtn = document.getElementById('export-pdf-mode-custom');
+  const customControls = document.getElementById('export-pdf-custom-controls');
+  if (whiteBtn && customBtn) {
+    whiteBtn.className = exportPdfBgMode === 'white'
+      ? 'flex items-center gap-2.5 p-3 rounded-xl border-2 border-[#0f172a] bg-white text-left transition-colors'
+      : 'flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 bg-[#fbfcfd] text-left transition-colors';
+    customBtn.className = exportPdfBgMode === 'custom'
+      ? 'flex items-center gap-2.5 p-3 rounded-xl border-2 border-[#0f172a] bg-white text-left transition-colors'
+      : 'flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 bg-[#fbfcfd] text-left transition-colors';
+  }
+  if (customControls) {
+    if (exportPdfBgMode === 'custom') customControls.classList.remove('hidden');
+    else customControls.classList.add('hidden');
+  }
+}
+
+function syncExportPdfCustomColor(val) {
+  const s = String(val || '').trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(s)) {
+    exportPdfCustomColor = s;
+    const picker = document.getElementById('export-pdf-color-picker');
+    const hex = document.getElementById('export-pdf-color-hex');
+    const swatch = document.getElementById('export-pdf-custom-swatch');
+    if (picker) picker.value = s;
+    if (hex) hex.value = s;
+    if (swatch) swatch.style.background = s;
+  }
+}
+
+async function copyCurrentExportWithBg() {
+  const entry = exportTargetRegistry.get(activePdfExportTargetId);
+  if (!entry) return;
+  const bg = exportPdfBgMode === 'custom' ? exportPdfCustomColor : '#ffffff';
+  const canvas = renderExportCanvas(entry, { transparent: false, bgColor: bg });
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+  if (!blob) return;
+  if (navigator.clipboard && typeof ClipboardItem !== 'undefined') {
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      closeExportPdfModal();
+      showExportToast(`Copied slide image (${bg}) to clipboard`);
+      return;
+    } catch (e) {}
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${slugifyRouteSegment(entry.title || 'export') || 'export'}.png`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  closeExportPdfModal();
+  showExportToast('Downloaded slide image');
+}
+
+function downloadCurrentExportPdf() {
+  const entry = exportTargetRegistry.get(activePdfExportTargetId);
+  if (!entry) return;
+  const bg = exportPdfBgMode === 'custom' ? exportPdfCustomColor : '#ffffff';
+  const canvas = renderExportCanvas(entry, { transparent: false, bgColor: bg });
+  const pdfBlob = buildPdfBlobFromCanvas(canvas);
+  const url = URL.createObjectURL(pdfBlob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${slugifyRouteSegment(entry.title || 'export') || 'export'}.pdf`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  closeExportPdfModal();
+  showExportToast(`Exported PDF (${bg} background)`);
+}
+
 window.addEventListener('DOMContentLoaded', () => {
   const savedYear = readSavedWorkspaceYear();
   if (savedYear) syncAllYearSelects(savedYear);
@@ -7453,4 +7881,14 @@ window.addEventListener('DOMContentLoaded', () => {
   syncAuthState();
   navigateToRoute(getCurrentRoutePath(), { push: false });
   initWorkspacePersistence();
+  attachExportMenus();
+
+  const mainEl = document.getElementById('app-main');
+  if (mainEl && typeof MutationObserver !== 'undefined') {
+    let obsTimer = null;
+    new MutationObserver(() => {
+      clearTimeout(obsTimer);
+      obsTimer = setTimeout(attachExportMenus, 80);
+    }).observe(mainEl, { childList: true, subtree: true });
+  }
 });

@@ -2614,6 +2614,88 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
     </div>
   </div>
 
+  <div id="export-pdf-modal" onclick="if(event.target===this) closeExportPdfModal()" class="hidden fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-[2px] flex items-center justify-center p-4">
+    <div class="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden animate-fade">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200/80 bg-[#fbfcfd]">
+        <div>
+          <h3 class="text-sm font-bold text-slate-900">Export as PDF</h3>
+          <p id="export-pdf-target-label" class="text-[11px] text-slate-500 mt-0.5"></p>
+        </div>
+        <button type="button" onclick="closeExportPdfModal()" class="text-xs text-slate-400 hover:text-slate-700 p-1">✕</button>
+      </div>
+
+      <div class="p-5 space-y-4">
+        <div class="space-y-2">
+          <label class="block text-[11px] font-semibold text-slate-700">PDF Background Color</label>
+          <div class="grid grid-cols-2 gap-2.5">
+            <button
+              type="button"
+              id="export-pdf-mode-white"
+              onclick="setExportPdfBgMode('white')"
+              class="flex items-center gap-2.5 p-3 rounded-xl border-2 border-[#0f172a] bg-white text-left transition-colors"
+            >
+              <span class="w-5 h-5 rounded-md border border-slate-300 bg-white shrink-0"></span>
+              <div>
+                <div class="text-xs font-semibold text-slate-900">White</div>
+                <div class="text-[10px] text-slate-500">#FFFFFF</div>
+              </div>
+            </button>
+            <button
+              type="button"
+              id="export-pdf-mode-custom"
+              onclick="setExportPdfBgMode('custom')"
+              class="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 bg-[#fbfcfd] text-left transition-colors"
+            >
+              <span id="export-pdf-custom-swatch" class="w-5 h-5 rounded-md border border-slate-300 bg-[#0f172a] shrink-0"></span>
+              <div>
+                <div class="text-xs font-semibold text-slate-900">Custom Color</div>
+                <div class="text-[10px] text-slate-500">Pick any shade</div>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <div id="export-pdf-custom-controls" class="hidden rounded-xl border border-slate-200/80 bg-[#fbfcfd] p-3.5 space-y-2.5">
+          <div class="flex items-center gap-2.5">
+            <input
+              id="export-pdf-color-picker"
+              type="color"
+              value="#0f172a"
+              oninput="syncExportPdfCustomColor(this.value)"
+              class="w-9 h-9 rounded-lg border border-slate-200 bg-white p-0.5 cursor-pointer shrink-0"
+            />
+            <input
+              id="export-pdf-color-hex"
+              type="text"
+              value="#0f172a"
+              placeholder="#0f172a"
+              oninput="syncExportPdfCustomColor(this.value)"
+              class="flex-1 h-9 px-3 text-xs font-mono bg-white border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-slate-400"
+            />
+          </div>
+          <div class="flex flex-wrap items-center gap-1.5">
+            <span class="text-[10px] text-slate-500 mr-1">Presets:</span>
+            <button type="button" onclick="syncExportPdfCustomColor('#f8fafc')" class="w-5 h-5 rounded border border-slate-300 bg-[#f8fafc]" title="Slate 50"></button>
+            <button type="button" onclick="syncExportPdfCustomColor('#0f172a')" class="w-5 h-5 rounded border border-slate-300 bg-[#0f172a]" title="Slate 900"></button>
+            <button type="button" onclick="syncExportPdfCustomColor('#1e1b4b')" class="w-5 h-5 rounded border border-slate-300 bg-[#1e1b4b]" title="Indigo Dark"></button>
+            <button type="button" onclick="syncExportPdfCustomColor('#eff6ff')" class="w-5 h-5 rounded border border-slate-300 bg-[#eff6ff]" title="Soft Blue"></button>
+            <button type="button" onclick="syncExportPdfCustomColor('#ecfdf5')" class="w-5 h-5 rounded border border-slate-300 bg-[#ecfdf5]" title="Soft Emerald"></button>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center justify-between gap-2 px-5 py-4 border-t border-slate-200/80 bg-[#fbfcfd]">
+        <button type="button" onclick="closeExportPdfModal()" class="h-8 px-3.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700">Cancel</button>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="copyCurrentExportWithBg()" class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700">Copy Image</button>
+          <button type="button" onclick="downloadCurrentExportPdf()" class="h-8 px-4 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium">Download PDF</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="export-toast" class="hidden fixed bottom-5 right-5 z-[60] px-4 py-2.5 rounded-xl bg-[#0f172a] text-white text-xs font-medium shadow-lg"></div>
+
   <script is:inline set:html={appJs}></script>
 </body>
 </html>
