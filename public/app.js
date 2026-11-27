@@ -1317,6 +1317,7 @@ function renderHomeView() {
         })).filter(s => s.value > 0);
         totalLbl = `${segments.reduce((a, s) => a + s.value, 0)} leads`;
       }
+      segments.sort((a, b) => (b.value || 0) - (a.value || 0));
       const segSum = segments.reduce((a, s) => a + s.value, 0);
       const legendHtml = segments.length === 0
         ? `<p class="text-xs text-slate-400">No data yet for ${budgetYear}.</p>`
@@ -1351,13 +1352,15 @@ function renderHomeView() {
       `;
       postRenderTasks.push(() => drawIntegrationsPieChart(segments, canvasId));
     } else if (w.type === 'channels-table') {
-      const rowsHtml = channelsList.map((ch, i) => {
+      const chRows = channelsList.map(ch => {
         const bRow = yearObj[ch.name];
         const bNok = bRow ? bRow.planned.reduce((a, b) => a + b, 0) : 0;
         const sNok = bRow ? bRow.actual.reduce((a, b) => a + b, 0) : 0;
         const pct = bNok > 0 ? ((sNok / bNok) * 100).toFixed(1) : '0.0';
         const lCount = leadEntries.filter(l => l.channel === ch.name).length;
-        return `
+        return { ch, bNok, sNok, pct, lCount };
+      }).sort((a, b) => (b.bNok - a.bNok) || (b.sNok - a.sNok) || (b.lCount - a.lCount));
+      const rowsHtml = chRows.map(({ ch, bNok, sNok, pct, lCount }) => `
           <tr class="hover:bg-slate-50/70">
             <td class="py-2.5 px-4 font-semibold text-slate-900"><div class="flex items-center gap-2">${renderChannelIconHtml(ch.name, 'w-5 h-5', ch.color)}<span>${ch.name}</span></div></td>
             <td class="py-2.5 px-4 text-right tabular-nums text-slate-800">${bNok > 0 ? `${Math.round(bNok).toLocaleString()} NOK` : '—'}</td>
@@ -1365,8 +1368,7 @@ function renderHomeView() {
             <td class="py-2.5 px-4 text-right tabular-nums text-slate-600">${bNok > 0 ? `${pct}%` : '—'}</td>
             <td class="py-2.5 px-4 text-right tabular-nums font-medium text-slate-900">${lCount}</td>
           </tr>
-        `;
-      }).join('');
+        `).join('');
       bodyHtml = `
         <div class="p-5 pb-3 border-b border-slate-200/70 flex items-center justify-between">
           <div><h3 class="text-sm font-semibold text-slate-900">${def.title} (${budgetYear})</h3><p class="text-[11px] text-slate-500">${def.desc}</p></div>
@@ -1380,16 +1382,19 @@ function renderHomeView() {
       `;
     } else if (w.type === 'budget-planned-table' || w.type === 'budget-actual-table') {
       const isActual = w.type === 'budget-actual-table';
-      const rowsHtml = chNames.map(ch => {
+      const sortedBudgetRows = chNames.map(ch => {
         const row = yearObj[ch];
         const planned = row.planned.reduce((a, b) => a + b, 0);
         const actual = row.actual.reduce((a, b) => a + b, 0);
+        return { ch, planned, actual, val: isActual ? actual : planned };
+      }).sort((a, b) => b.val - a.val || b.planned - a.planned);
+      const rowsHtml = sortedBudgetRows.map(({ ch, planned, actual, val }) => {
         const denom = isActual ? Math.max(1, planned) : Math.max(1, annualBudget);
-        const pct = ((isActual ? actual : planned) / denom * 100).toFixed(1);
+        const pct = (val / denom * 100).toFixed(1);
         return `
           <tr class="hover:bg-slate-50/70">
             <td class="py-2.5 px-4 font-semibold text-slate-900"><div class="flex items-center gap-2">${renderChannelIconHtml(ch, 'w-5 h-5')}<span>${ch}</span></div></td>
-            <td class="py-2.5 px-4 text-right tabular-nums text-slate-800">${Math.round(isActual ? actual : planned).toLocaleString()} NOK</td>
+            <td class="py-2.5 px-4 text-right tabular-nums text-slate-800">${Math.round(val).toLocaleString()} NOK</td>
             <td class="py-2.5 px-4 text-right tabular-nums text-slate-600">${pct}%</td>
           </tr>
         `;
@@ -1404,8 +1409,11 @@ function renderHomeView() {
         </div>
       `;
     } else if (w.type === 'integrations-table') {
-      const rowsHtml = integrationsList.map(it => {
+      const sortedIntegrations = integrationsList.map(it => {
         const cnt = leadEntries.filter(l => String(l.erp || '').toLowerCase() === it.name.toLowerCase() || String(l.integration || '').toLowerCase() === it.name.toLowerCase()).length;
+        return { it, cnt };
+      }).sort((a, b) => b.cnt - a.cnt);
+      const rowsHtml = sortedIntegrations.map(({ it, cnt }) => {
         return `<tr class="hover:bg-slate-50/70"><td class="py-2.5 px-4 font-semibold text-slate-900">${it.name}</td><td class="py-2.5 px-4 text-slate-600">${it.type}</td><td class="py-2.5 px-4 text-right tabular-nums font-medium text-slate-900">${cnt}</td></tr>`;
       }).join('');
       bodyHtml = `
@@ -2705,7 +2713,7 @@ function renderChannelsView() {
     const spendNok = budgetRow ? budgetRow.actual.reduce((a, b) => a + b, 0) : 0;
     const leadCount = leadEntries.filter(l => l.channel === ch.name).length;
     return { ...ch, color: ch.color || CHANNEL_PALETTE[idx % CHANNEL_PALETTE.length], budgetNok, spendNok, leadCount };
-  });
+  }).sort((a, b) => (b.budgetNok - a.budgetNok) || (b.spendNok - a.spendNok) || (b.leadCount - a.leadCount));
 
   const totalChannelBudget = rows.reduce((a, r) => a + r.budgetNok, 0);
   const totalLeads = rows.reduce((a, r) => a + r.leadCount, 0);
@@ -2716,7 +2724,7 @@ function renderChannelsView() {
   const leadsLbl = document.getElementById('channels-leads-total-label');
   if (leadsLbl) leadsLbl.textContent = `${totalLeads} lead${totalLeads === 1 ? '' : 's'}`;
 
-  const budgetSegments = rows.filter(r => r.budgetNok > 0).map(r => ({ label: r.name, value: r.budgetNok, color: r.color }));
+  const budgetSegments = rows.filter(r => r.budgetNok > 0).sort((a, b) => b.budgetNok - a.budgetNok).map(r => ({ label: r.name, value: r.budgetNok, color: r.color }));
   drawChannelDonut(
     'channelShareChart',
     budgetSegments,
@@ -2752,7 +2760,7 @@ function renderChannelsView() {
     }
   }
 
-  const leadSegments = rows.filter(r => r.leadCount > 0).map(r => ({ label: r.name, value: r.leadCount, color: r.color }));
+  const leadSegments = rows.filter(r => r.leadCount > 0).sort((a, b) => b.leadCount - a.leadCount).map(r => ({ label: r.name, value: r.leadCount, color: r.color }));
   drawChannelDonut(
     'channelLeadShareChart',
     leadSegments,
@@ -3674,8 +3682,11 @@ function renderBudgetAllocated(channels, yearObj) {
   const capSum = caps.reduce((a, b) => a + b, 0);
   const totalAllPlanned = channels.reduce((sum, ch) => sum + yearObj[ch].planned.reduce((a, b) => a + b, 0), 0);
   const denomTotal = budgetTotalByYear[budgetYear] || capSum || totalAllPlanned || 1;
+  const sortedAllocatedChannels = [...channels].sort((a, b) =>
+    yearObj[b].planned.reduce((x, y) => x + y, 0) - yearObj[a].planned.reduce((x, y) => x + y, 0)
+  );
 
-  tbody.innerHTML = channels.map(ch => {
+  tbody.innerHTML = sortedAllocatedChannels.map(ch => {
     const row = yearObj[ch];
     const rowPlanned = row.planned.reduce((a, b) => a + b, 0);
     const pctOfTotal = denomTotal > 0 ? ((rowPlanned / denomTotal) * 100).toFixed(1) : '0.0';
@@ -3785,7 +3796,11 @@ function renderBudgetActual(channels, yearObj) {
   emptyEl.classList.add('hidden');
   wrapEl.classList.remove('hidden');
 
-  tbody.innerHTML = channels.map(ch => {
+  const sortedActualChannels = [...channels].sort((a, b) =>
+    yearObj[b].actual.reduce((x, y) => x + y, 0) - yearObj[a].actual.reduce((x, y) => x + y, 0)
+  );
+
+  tbody.innerHTML = sortedActualChannels.map(ch => {
     const row = yearObj[ch];
     const rowActual = row.actual.reduce((a, b) => a + b, 0);
     const escCh = ch.replace(/'/g, "\\'");
@@ -3826,7 +3841,14 @@ function renderBudgetVariance(channels, yearObj) {
   emptyEl.classList.add('hidden');
   wrapEl.classList.remove('hidden');
 
-  tbody.innerHTML = channels.map(ch => {
+  const sortedVarChannels = [...channels].sort((a, b) => {
+    const aAct = yearObj[a].actual.reduce((x, y) => x + y, 0);
+    const bAct = yearObj[b].actual.reduce((x, y) => x + y, 0);
+    if (bAct !== aAct) return bAct - aAct;
+    return yearObj[b].planned.reduce((x, y) => x + y, 0) - yearObj[a].planned.reduce((x, y) => x + y, 0);
+  });
+
+  tbody.innerHTML = sortedVarChannels.map(ch => {
     const row = yearObj[ch];
     const p = row.planned.reduce((a, b) => a + b, 0);
     const a = row.actual.reduce((a, b) => a + b, 0);
@@ -4498,7 +4520,12 @@ function renderContactsView() {
       }
     }
 
-    gridEl.innerHTML = contactGroups.map(g => {
+    const sortedContactGroups = [...contactGroups].sort((a, b) => {
+      const aTotal = a.partners.reduce((acc, p) => acc + p.contacts.length, 0);
+      const bTotal = b.partners.reduce((acc, p) => acc + p.contacts.length, 0);
+      return (b.partners.length - a.partners.length) || (bTotal - aTotal);
+    });
+    gridEl.innerHTML = sortedContactGroups.map(g => {
       const totalPeople = g.partners.reduce((acc, p) => acc + p.contacts.length, 0);
       return `
         <div onclick="selectContactGroup(${g.id})" class="group rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow cursor-pointer flex flex-col justify-between space-y-4 transition-all">
@@ -4566,7 +4593,8 @@ function renderContactsView() {
     }
   }
 
-  listP.innerHTML = grp.partners.map(p => {
+  const sortedPartners = [...grp.partners].sort((a, b) => (b.contacts.length - a.contacts.length) || (b.countries.length - a.countries.length));
+  listP.innerHTML = sortedPartners.map(p => {
     const firstCountrySite = p.countries.map(c => p.countryWebsites?.[c]).find(Boolean) || '';
     const partnerSite = p.website || firstCountrySite;
     const partnerLogoHtml = renderLogoBadgeHtml(partnerSite, p.name, 'w-10 h-10');
@@ -5046,12 +5074,16 @@ function renderIntegrationsView() {
   emptyEl.classList.add('hidden');
   tableWrap.classList.remove('hidden');
 
-  tbody.innerHTML = integrationsList.map(item => {
-    const color = INTEGRATION_TYPE_COLORS[item.type] || '#0ea5e9';
+  const sortedIntegrationsForTable = integrationsList.map(item => {
     const leadsCount = (leadEntries || []).filter(l =>
       String(l.erp || '').toLowerCase() === item.name.toLowerCase() ||
       String(l.integration || '').toLowerCase() === item.name.toLowerCase()
     ).length;
+    return { item, leadsCount };
+  }).sort((a, b) => b.leadsCount - a.leadsCount);
+
+  tbody.innerHTML = sortedIntegrationsForTable.map(({ item, leadsCount }) => {
+    const color = INTEGRATION_TYPE_COLORS[item.type] || '#0ea5e9';
     return `
       <tr class="group hover:bg-slate-50/80 transition-colors">
         <td class="py-3 px-4 font-semibold text-slate-900">${item.name}</td>
@@ -5611,7 +5643,7 @@ function renderLeadsView() {
       stageVal,
       color: shadeHex[idx % shadeHex.length]
     };
-  }).filter(seg => seg.value > 0);
+  }).filter(seg => seg.value > 0).sort((a, b) => (b.value - a.value) || (b.stageVal - a.stageVal));
 
   drawIntegrationsPieChart(pieSegments, 'leadsPipelinePieChart');
 
@@ -5620,10 +5652,13 @@ function renderLeadsView() {
     if (totalDeals === 0) {
       pieLegendEl.innerHTML = `<p class="text-xs text-slate-400">Add leads to the Kanban board above to see pipeline distribution.</p>`;
     } else {
-      pieLegendEl.innerHTML = leadStages.map((s, idx) => {
+      const sortedLegendStages = leadStages.map((s, idx) => {
         const stageLeads = leadEntries.filter(l => l.stageId === s.id);
         const count = stageLeads.length;
         const stageVal = stageLeads.reduce((acc, l) => acc + (l.value || 0), 0);
+        return { s, idx, count, stageVal };
+      }).sort((a, b) => (b.count - a.count) || (b.stageVal - a.stageVal));
+      pieLegendEl.innerHTML = sortedLegendStages.map(({ s, idx, count, stageVal }) => {
         const pct = totalDeals > 0 ? ((count / totalDeals) * 100).toFixed(1) : '0.0';
         const color = shadeHex[idx % shadeHex.length];
         return `
@@ -5643,7 +5678,7 @@ function renderLeadsView() {
   }
 
   boardEl.innerHTML = leadStages.map((stage, sIdx) => {
-    const stageLeads = leadEntries.filter(l => l.stageId === stage.id);
+    const stageLeads = leadEntries.filter(l => l.stageId === stage.id).sort((a, b) => (b.value || 0) - (a.value || 0));
     const stageTotal = stageLeads.reduce((acc, l) => acc + (l.value || 0), 0);
     const stageDot = shades[sIdx % shades.length];
 
@@ -6074,7 +6109,7 @@ function renderCompetitorsView() {
     const strengthPct = (c.score / 10) * 100;
     const overlapPct = (c.channels.length / totalChannels) * 100;
     return { ...c, strengthPct, overlapPct, totalChannels: getChannelNames().length };
-  });
+  }).sort((a, b) => (b.score - a.score) || (b.overlapPct - a.overlapPct));
 
   drawCompetitorsChart(rows);
 
@@ -6396,19 +6431,23 @@ function drawAeoSeoChart(rows) {
 }
 
 function renderAeoSeoView() {
-  drawAeoSeoChart(aeoSeoEntries);
+  const sortedAeoSeo = [...aeoSeoEntries].sort((a, b) =>
+    (Math.max(b.aeoScore || 0, b.seoScore || 0) - Math.max(a.aeoScore || 0, a.seoScore || 0)) ||
+    (((b.aeoScore || 0) + (b.seoScore || 0)) - ((a.aeoScore || 0) + (a.seoScore || 0)))
+  );
+  drawAeoSeoChart(sortedAeoSeo);
 
-  const count = aeoSeoEntries.length;
+  const count = sortedAeoSeo.length;
   document.getElementById('as-sum-count').textContent = String(count);
-  const citedCount = aeoSeoEntries.filter(e => e.cited === 'Cited').length;
+  const citedCount = sortedAeoSeo.filter(e => e.cited === 'Cited').length;
   document.getElementById('as-sum-cited').textContent = `${citedCount} cited in AI`;
 
-  const avgAeo = count > 0 ? aeoSeoEntries.reduce((a, e) => a + e.aeoScore, 0) / count : 0;
-  const avgSeo = count > 0 ? aeoSeoEntries.reduce((a, e) => a + e.seoScore, 0) / count : 0;
+  const avgAeo = count > 0 ? sortedAeoSeo.reduce((a, e) => a + e.aeoScore, 0) / count : 0;
+  const avgSeo = count > 0 ? sortedAeoSeo.reduce((a, e) => a + e.seoScore, 0) / count : 0;
   document.getElementById('as-sum-aeo').textContent = `${avgAeo.toFixed(1)}%`;
   document.getElementById('as-sum-seo').textContent = `${avgSeo.toFixed(1)}%`;
 
-  const ranked = aeoSeoEntries.filter(e => e.seoPos > 0);
+  const ranked = sortedAeoSeo.filter(e => e.seoPos > 0);
   const avgRank = ranked.length > 0 ? ranked.reduce((a, e) => a + e.seoPos, 0) / ranked.length : 0;
   document.getElementById('as-sum-rank').textContent = avgRank > 0 ? `Avg. rank: #${avgRank.toFixed(1)}` : 'Avg. rank: —';
 
@@ -6428,7 +6467,7 @@ function renderAeoSeoView() {
   emptyEl.classList.add('hidden');
   tableWrap.classList.remove('hidden');
 
-  tbody.innerHTML = aeoSeoEntries.map(e => {
+  tbody.innerHTML = sortedAeoSeo.map(e => {
     const rowGap = e.aeoScore - e.seoScore;
     const statusCls = e.cited === 'Cited'
       ? 'bg-[#d1fae5] text-[#047857]'
@@ -7157,19 +7196,35 @@ function renderMarketingReportsView() {
   } else {
     const isSingleMonth = reportsViewMode === 'month_channels';
     const mIdx = isSingleMonth ? reportsSelectedMonth : null;
-    labels = ds.allChannelNames.length > 0 ? ds.allChannelNames : ['No Channels'];
+    const rawChannels = ds.allChannelNames.length > 0 ? ds.allChannelNames : [];
+    const items = rawChannels.map(ch => {
+      if (compareActive) {
+        const a = getChannelMetricValue(ds, ch, reportsMetric, mIdx);
+        const b = getChannelMetricValue(cmpDs, ch, reportsMetric, mIdx);
+        return { ch, a, b, score: Math.max(a, b) };
+      } else if (reportsMetric === 'cost') {
+        const a = ds.byChannel[ch] ? (mIdx !== null ? ds.byChannel[ch].planned[mIdx] : ds.byChannel[ch].planned.reduce((x, y) => x + y, 0)) : 0;
+        const b = ds.byChannel[ch] ? (mIdx !== null ? ds.byChannel[ch].actual[mIdx] : ds.byChannel[ch].actual.reduce((x, y) => x + y, 0)) : 0;
+        return { ch, a, b, score: Math.max(b, a) };
+      } else {
+        const a = getChannelMetricValue(ds, ch, reportsMetric, mIdx);
+        return { ch, a, b: null, score: a };
+      }
+    }).sort((x, y) => y.score - x.score);
+
+    labels = items.length > 0 ? items.map(i => i.ch) : ['No Channels'];
     if (compareActive) {
-      seriesA = labels.map(ch => getChannelMetricValue(ds, ch, reportsMetric, mIdx));
-      seriesB = labels.map(ch => getChannelMetricValue(cmpDs, ch, reportsMetric, mIdx));
+      seriesA = items.length > 0 ? items.map(i => i.a) : [0];
+      seriesB = items.length > 0 ? items.map(i => i.b) : [0];
       chartOpts = { labels, seriesALabel: `${reportsYear}`, seriesBLabel: `${reportsCompareYear}`, colorA: primaryColor, colorB: '#94a3b8' };
       if (subtitleEl) subtitleEl.textContent = `${isSingleMonth ? monthNames[mIdx] + ' ' : 'Full-year '}${metricLabel} by channel (${reportsYear} vs ${reportsCompareYear})`;
     } else if (reportsMetric === 'cost') {
-      seriesA = labels.map(ch => ds.byChannel[ch] ? (mIdx !== null ? ds.byChannel[ch].planned[mIdx] : ds.byChannel[ch].planned.reduce((a, b) => a + b, 0)) : 0);
-      seriesB = labels.map(ch => ds.byChannel[ch] ? (mIdx !== null ? ds.byChannel[ch].actual[mIdx] : ds.byChannel[ch].actual.reduce((a, b) => a + b, 0)) : 0);
+      seriesA = items.length > 0 ? items.map(i => i.a) : [0];
+      seriesB = items.length > 0 ? items.map(i => i.b) : [0];
       chartOpts = { labels, seriesALabel: 'Planned', seriesBLabel: 'Actual', colorA: '#10b981', colorB: '#7c3aed' };
       if (subtitleEl) subtitleEl.textContent = `${isSingleMonth ? monthNames[mIdx] + ' ' : 'Full-year '}planned vs. actual spend by channel`;
     } else {
-      seriesA = labels.map(ch => getChannelMetricValue(ds, ch, reportsMetric, mIdx));
+      seriesA = items.length > 0 ? items.map(i => i.a) : [0];
       chartOpts = { labels, seriesALabel: metricLabel, colorA: primaryColor };
       if (subtitleEl) subtitleEl.textContent = `${isSingleMonth ? monthNames[mIdx] + ' ' : 'Full-year '}${metricLabel} by channel`;
     }
@@ -7197,7 +7252,16 @@ function renderMarketingReportsView() {
   }
 
   const shareDenom = Math.max(1, totalPlanned);
-  cardsContainer.innerHTML = allChannelNames.map((name, idx) => {
+  const sortedReportChannels = [...allChannelNames].sort((a, b) => {
+    const aRow = yearObj[a], bRow = yearObj[b];
+    const aAct = aRow ? aRow.actual.reduce((x, y) => x + y, 0) : 0;
+    const bAct = bRow ? bRow.actual.reduce((x, y) => x + y, 0) : 0;
+    if (bAct !== aAct) return bAct - aAct;
+    const aPlan = aRow ? aRow.planned.reduce((x, y) => x + y, 0) : 0;
+    const bPlan = bRow ? bRow.planned.reduce((x, y) => x + y, 0) : 0;
+    return bPlan - aPlan;
+  });
+  cardsContainer.innerHTML = sortedReportChannels.map((name, idx) => {
     const chObj = channelsList.find(c => c.name.toLowerCase() === name.toLowerCase());
     const color = getChannelColor(name, idx);
     const typeLabel = chObj?.type || 'Channel';
