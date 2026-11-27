@@ -1386,11 +1386,11 @@ function renderHomeView() {
       bodyHtml = `
         <div class="p-5 grid grid-cols-2 sm:grid-cols-4 gap-3.5">
           <div onclick="openApp('budget')" class="cursor-pointer rounded-xl border border-slate-200/80 bg-[#fbfcfd] p-3.5 hover:border-slate-300 transition-colors">
-            <div class="text-[11px] text-slate-500">Total Budget (${budgetYear})</div>
+            <div class="text-[11px] text-slate-500">Total Budget</div>
             <div class="text-lg font-bold text-slate-900 tabular-nums mt-1">${Math.round(annualBudget).toLocaleString()} NOK</div>
           </div>
           <div onclick="openApp('budget')" class="cursor-pointer rounded-xl border border-slate-200/80 bg-[#fbfcfd] p-3.5 hover:border-slate-300 transition-colors">
-            <div class="text-[11px] text-slate-500">Actual Spend (${budgetYear})</div>
+            <div class="text-[11px] text-slate-500">Actual Spend</div>
             <div class="text-lg font-bold text-slate-900 tabular-nums mt-1">${Math.round(totalActual).toLocaleString()} NOK</div>
           </div>
           <div onclick="openApp('leads')" class="cursor-pointer rounded-xl border border-slate-200/80 bg-[#fbfcfd] p-3.5 hover:border-slate-300 transition-colors">
@@ -1407,10 +1407,7 @@ function renderHomeView() {
       bodyHtml = `
         <div class="p-5 space-y-3">
           <div class="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-200/70">
-            <div>
-              <h3 class="text-sm font-semibold text-slate-900">${def.title} (${budgetYear})</h3>
-              <p class="text-[11px] text-slate-500">${def.desc}</p>
-            </div>
+            <h3 class="text-sm font-semibold text-slate-900">${def.title}</h3>
             <div class="flex items-center gap-3 text-[11px] text-slate-500 pr-8">
               <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-[#cbd5e1]"></span>Planned</span>
               <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-[#0f172a]"></span>Actual</span>
@@ -1468,7 +1465,7 @@ function renderHomeView() {
       segments.sort((a, b) => (b.value || 0) - (a.value || 0));
       const segSum = segments.reduce((a, s) => a + s.value, 0);
       const legendHtml = segments.length === 0
-        ? `<p class="text-xs text-slate-400">No data yet for ${budgetYear}.</p>`
+        ? `<p class="text-xs text-slate-400">No data yet.</p>`
         : segments.slice(0, 6).map(s => {
             const pct = segSum > 0 ? ((s.value / segSum) * 100).toFixed(1) : '0.0';
             return `
@@ -1484,10 +1481,7 @@ function renderHomeView() {
       bodyHtml = `
         <div class="p-5 space-y-4">
           <div class="flex items-center justify-between gap-2 pb-3 border-b border-slate-200/70">
-            <div>
-              <h3 class="text-sm font-semibold text-slate-900">${def.title}</h3>
-              <p class="text-[11px] text-slate-500">${def.desc}</p>
-            </div>
+            <h3 class="text-sm font-semibold text-slate-900">${def.title}</h3>
             <span class="text-[11px] tabular-nums text-slate-400 pr-8">${totalLbl}</span>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
@@ -1522,7 +1516,7 @@ function renderHomeView() {
         `).join('');
       bodyHtml = `
         <div class="p-5 pb-3 border-b border-slate-200/70 flex items-center justify-between">
-          <div><h3 class="text-sm font-semibold text-slate-900">${def.title} (${budgetYear})</h3><p class="text-[11px] text-slate-500">${def.desc}</p></div>
+          <h3 class="text-sm font-semibold text-slate-900">${def.title}</h3>
         </div>
         <div class="overflow-x-auto">
           <table class="w-full text-left border-collapse text-xs">
@@ -1551,7 +1545,7 @@ function renderHomeView() {
         `;
       }).join('');
       bodyHtml = `
-        <div class="p-5 pb-3 border-b border-slate-200/70"><h3 class="text-sm font-semibold text-slate-900">${def.title} (${budgetYear})</h3></div>
+        <div class="p-5 pb-3 border-b border-slate-200/70"><h3 class="text-sm font-semibold text-slate-900">${def.title}</h3></div>
         <div class="overflow-x-auto">
           <table class="w-full text-left border-collapse text-xs">
             <thead><tr class="border-b border-slate-200/80 bg-[#fbfcfd] text-slate-500"><th class="py-2.5 px-4 font-medium">Channel</th><th class="py-2.5 px-4 font-medium text-right">${isActual ? 'Actual Spend' : 'Planned'}</th><th class="py-2.5 px-4 font-medium text-right">${isActual ? '% of Budget' : '% of Total'}</th></tr></thead>
@@ -2949,7 +2943,7 @@ function renderChannelsView() {
     'channelShareChart',
     budgetSegments,
     totalChannelBudget > 0 ? `${Math.round(totalChannelBudget).toLocaleString()}` : '0 NOK',
-    totalChannelBudget > 0 ? `NOK (${budgetYear})` : 'No budget',
+    totalChannelBudget > 0 ? 'NOK' : 'No budget',
     v => `${Math.round(v).toLocaleString()} NOK`
   );
 
@@ -7484,7 +7478,7 @@ function renderMarketingReportsView() {
   const kPipeSub = document.getElementById('mr-kpi-pipeline-sub');
 
   if (kPlan) kPlan.textContent = `${Math.round(ds.totalPlanned).toLocaleString()} NOK`;
-  if (kPlanSub) kPlanSub.textContent = `Year ${reportsYear} · ${ds.allChannelNames.length} channels`;
+  if (kPlanSub) kPlanSub.textContent = `${ds.allChannelNames.length} channel${ds.allChannelNames.length === 1 ? '' : 's'}`;
   if (kAct) kAct.textContent = `${Math.round(ds.totalActual).toLocaleString()} NOK`;
   if (kActSub) kActSub.textContent = `${utilPct}% of planned budget`;
   if (kLeads) kLeads.textContent = String(ds.totalLeads);
@@ -7493,7 +7487,8 @@ function renderMarketingReportsView() {
   if (kPipe) kPipe.textContent = `${Math.round(ds.totalPipeline).toLocaleString()} NOK`;
   if (kPipeSub) kPipeSub.textContent = `${integrationsList.length} integration${integrationsList.length === 1 ? '' : 's'} active${roasRatio > 0 ? ` · ROAS: ${roasRatio.toFixed(2)}x` : ''}`;
 
-  document.getElementById('mr-chart-year').textContent = compareActive ? `${reportsYear} vs ${reportsCompareYear}` : reportsYear;
+  const chartYearEl = document.getElementById('mr-chart-year');
+  if (chartYearEl) chartYearEl.textContent = compareActive ? `${reportsYear} vs ${reportsCompareYear}` : reportsYear;
   const subtitleEl = document.getElementById('mr-chart-subtitle');
   const legendEl = document.getElementById('mr-chart-legend');
 
@@ -7517,16 +7512,16 @@ function renderMarketingReportsView() {
       seriesA = getMetricSeries12(ds, reportsMetric);
       seriesB = getMetricSeries12(cmpDs, reportsMetric);
       chartOpts = { labels, seriesALabel: `${reportsYear} ${metricLabel}`, seriesBLabel: `${reportsCompareYear} ${metricLabel}`, colorA: primaryColor, colorB: '#94a3b8' };
-      if (subtitleEl) subtitleEl.textContent = `Monthly ${metricLabel} comparison (${reportsYear} vs ${reportsCompareYear})`;
+      if (subtitleEl) subtitleEl.textContent = `${metricLabel} · ${reportsYear} vs ${reportsCompareYear}`;
     } else if (reportsMetric === 'cost') {
       seriesA = ds.monthlyPlanned;
       seriesB = ds.monthlyActual;
       chartOpts = { labels, seriesALabel: 'Planned', seriesBLabel: 'Actual', colorA: '#10b981', colorB: '#7c3aed' };
-      if (subtitleEl) subtitleEl.textContent = 'Monthly planned budget vs. actual spend across all channels';
+      if (subtitleEl) subtitleEl.textContent = 'Planned vs. actual spend';
     } else {
       seriesA = getMetricSeries12(ds, reportsMetric);
       chartOpts = { labels, seriesALabel: metricLabel, colorA: primaryColor };
-      if (subtitleEl) subtitleEl.textContent = `Monthly ${metricLabel} across all channels`;
+      if (subtitleEl) subtitleEl.textContent = `Monthly ${metricLabel}`;
     }
   } else if (reportsViewMode === 'quarterly') {
     labels = ['Q1', 'Q2', 'Q3', 'Q4'];
@@ -7556,12 +7551,12 @@ function renderMarketingReportsView() {
       seriesA = toQMetric(ds, reportsMetric);
       seriesB = toQMetric(cmpDs, reportsMetric);
       chartOpts = { labels, seriesALabel: `${reportsYear} ${metricLabel}`, seriesBLabel: `${reportsCompareYear} ${metricLabel}`, colorA: primaryColor, colorB: '#94a3b8' };
-      if (subtitleEl) subtitleEl.textContent = `Quarterly ${metricLabel} (${reportsYear} vs ${reportsCompareYear})`;
+      if (subtitleEl) subtitleEl.textContent = `Quarterly ${metricLabel} · ${reportsYear} vs ${reportsCompareYear}`;
     } else if (reportsMetric === 'cost') {
       seriesA = toQ(ds.monthlyPlanned);
       seriesB = toQ(ds.monthlyActual);
       chartOpts = { labels, seriesALabel: 'Planned', seriesBLabel: 'Actual', colorA: '#10b981', colorB: '#7c3aed' };
-      if (subtitleEl) subtitleEl.textContent = 'Quarterly planned budget vs. actual spend';
+      if (subtitleEl) subtitleEl.textContent = 'Quarterly planned vs. actual';
     } else {
       seriesA = toQMetric(ds, reportsMetric);
       chartOpts = { labels, seriesALabel: metricLabel, colorA: primaryColor };
@@ -7591,16 +7586,16 @@ function renderMarketingReportsView() {
       seriesA = items.length > 0 ? items.map(i => i.a) : [0];
       seriesB = items.length > 0 ? items.map(i => i.b) : [0];
       chartOpts = { labels, seriesALabel: `${reportsYear}`, seriesBLabel: `${reportsCompareYear}`, colorA: primaryColor, colorB: '#94a3b8' };
-      if (subtitleEl) subtitleEl.textContent = `${isSingleMonth ? monthNames[mIdx] + ' ' : 'Full-year '}${metricLabel} by channel (${reportsYear} vs ${reportsCompareYear})`;
+      if (subtitleEl) subtitleEl.textContent = `${isSingleMonth ? monthNames[mIdx] + ' · ' : ''}${metricLabel} by channel (${reportsYear} vs ${reportsCompareYear})`;
     } else if (reportsMetric === 'cost') {
       seriesA = items.length > 0 ? items.map(i => i.a) : [0];
       seriesB = items.length > 0 ? items.map(i => i.b) : [0];
       chartOpts = { labels, seriesALabel: 'Planned', seriesBLabel: 'Actual', colorA: '#10b981', colorB: '#7c3aed' };
-      if (subtitleEl) subtitleEl.textContent = `${isSingleMonth ? monthNames[mIdx] + ' ' : 'Full-year '}planned vs. actual spend by channel`;
+      if (subtitleEl) subtitleEl.textContent = `${isSingleMonth ? monthNames[mIdx] + ' · ' : ''}Planned vs. actual by channel`;
     } else {
       seriesA = items.length > 0 ? items.map(i => i.a) : [0];
       chartOpts = { labels, seriesALabel: metricLabel, colorA: primaryColor };
-      if (subtitleEl) subtitleEl.textContent = `${isSingleMonth ? monthNames[mIdx] + ' ' : 'Full-year '}${metricLabel} by channel`;
+      if (subtitleEl) subtitleEl.textContent = `${isSingleMonth ? monthNames[mIdx] + ' · ' : ''}${metricLabel} by channel`;
     }
   }
 
