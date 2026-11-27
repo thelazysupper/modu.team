@@ -5215,7 +5215,8 @@ function saveLead() {
     channel,
     stageId,
     value,
-    notes: existingLead?.notes || ''
+    notes: existingLead?.notes || '',
+    createdAt: existingLead?.createdAt || new Date().toISOString()
   };
 
   if (editId) {
@@ -6526,9 +6527,33 @@ function handleReportsYearChange() {
   if (sel) requestYearChange(sel.value, sel);
 }
 
+let reportsViewMode = 'monthly';
+let reportsSelectedMonth = new Date().getMonth();
+let reportsCompareYear = '';
+
 function handleReportsMetricChange() {
   const sel = document.getElementById('mr-chart-metric');
   if (sel) reportsMetric = sel.value || 'cost';
+  renderMarketingReportsView();
+}
+
+function handleReportsViewModeChange() {
+  const sel = document.getElementById('mr-view-mode');
+  if (sel) reportsViewMode = sel.value || 'monthly';
+  const mSel = document.getElementById('mr-month-select');
+  if (mSel) mSel.classList.toggle('hidden', reportsViewMode !== 'month_channels');
+  renderMarketingReportsView();
+}
+
+function handleReportsMonthChange() {
+  const sel = document.getElementById('mr-month-select');
+  if (sel) reportsSelectedMonth = parseInt(sel.value, 10) || 0;
+  renderMarketingReportsView();
+}
+
+function handleReportsCompareYearChange() {
+  const sel = document.getElementById('mr-compare-year');
+  if (sel) reportsCompareYear = sel.value || '';
   renderMarketingReportsView();
 }
 
@@ -6578,28 +6603,37 @@ function updateReportChannelValue(channelName, monthIdx, field, rawVal) {
   if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
 }
 
-function drawReportsBarChart(canvasId, mode, seriesA, seriesB = null, chartHeight = 220) {
+function drawReportsBarChart(canvasId, mode, seriesA, seriesB = null, chartHeight = 220, opts = {}) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
-  canvas._barMeta = { mode, seriesA, seriesB, chartHeight, hoverIdx: -1 };
+  const labels = Array.isArray(opts.labels) && opts.labels.length > 0 ? opts.labels : monthNames;
+  const n = Math.max(1, labels.length);
+  const colorA = opts.colorA || (mode === 'cost' ? '#10b981' : (getGoalDef(mode)?.color || '#0ea5e9'));
+  const colorB = opts.colorB || (mode === 'cost' ? '#7c3aed' : '#94a3b8');
+  const seriesALabel = opts.seriesALabel || (mode === 'cost' ? 'Planned' : (getGoalDef(mode)?.label || mode));
+  const seriesBLabel = opts.seriesBLabel || (mode === 'cost' ? 'Actual' : 'Compare');
+  canvas._barMeta = { mode, seriesA, seriesB, chartHeight, labels, colorA, colorB, seriesALabel, seriesBLabel, hoverIdx: -1 };
 
-  const goalDef = mode === 'cost' ? null : getGoalDef(mode);
+  const isCurrencyMode = mode === 'cost' || mode === 'pipeline' || mode === 'cpl';
+  const goalDef = (mode === 'cost' || mode === 'pipeline' || mode === 'cpl') ? null : getGoalDef(mode);
 
   const renderBars = (hoverIdx = -1) => {
     const ctx = canvas.getContext('2d');
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
-    const width = rect.width || 680;
+    const width = Math.max(320, Math.floor(rect.width || 680));
     const height = chartHeight;
     canvas.width = width * dpr;
     canvas.height = height * dpr;
+    canvas.style.width = '100%';
+    canvas.style.height = height + 'px';
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, width, height);
 
     const allVals = seriesB ? [...seriesA, ...seriesB] : [...seriesA];
     const minPeak = goalDef ? (goalDef.format === 'pct' || goalDef.format === 'dec' ? 5 : 10) : 100;
     const maxVal = Math.max(minPeak, ...allVals) * 1.15;
-    const padL = 48, padR = 14, padT = 14, padB = 30;
+    const padL = 52, padR = 14, padT = 14, padB = 30;
     const plotW = width - padL - padR;
     const plotH = height - padT - padB;
     const uiFont = '-apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif';
@@ -6629,15 +6663,14 @@ function drawReportsBarChart(canvasId, mode, seriesA, seriesB = null, chartHeigh
     });
     ctx.setLineDash([]);
 
-    const groupW = plotW / 12;
+    const groupW = plotW / n;
     const isDual = Boolean(seriesB);
     const barW = isDual
-      ? Math.min(13, Math.max(5, (groupW - 12) / 2))
-      : Math.min(20, Math.max(8, groupW - 16));
-    const pillR = barW / 2;
-    const singleColor = goalDef ? goalDef.color : '#0ea5e9';
+      ? Math.min(18, Math.max(5, (groupW - 12) / 2))
+      : Math.min(28, Math.max(8, groupW - 16));
+    const pillR = Math.min(6, barW / 2);
 
-    monthNames.forEach((mLbl, idx) => {
+    labels.forEach((mLbl, idx) => {
       const colX = padL + idx * groupW;
       const centerX = colX + groupW / 2;
       const isHovered = idx === hoverIdx;
@@ -6645,30 +6678,30 @@ function drawReportsBarChart(canvasId, mode, seriesA, seriesB = null, chartHeigh
       if (isHovered) {
         ctx.fillStyle = 'rgba(241, 245, 249, 0.9)';
         ctx.beginPath();
-        ctx.roundRect(colX + 2, padT, groupW - 4, plotH + 4, 6);
+        ctx.roundRect(colX + 2, padT, Math.max(4, groupW - 4), plotH + 4, 6);
         ctx.fill();
       }
 
       ctx.globalAlpha = hoverIdx !== -1 && !isHovered ? 0.55 : 1;
       if (isDual) {
-        const pH = (seriesA[idx] / maxVal) * plotH;
-        const aH = (seriesB[idx] / maxVal) * plotH;
+        const pH = ((seriesA[idx] || 0) / maxVal) * plotH;
+        const aH = ((seriesB[idx] || 0) / maxVal) * plotH;
         if (pH > 0) {
-          ctx.fillStyle = '#10b981';
+          ctx.fillStyle = colorA;
           ctx.beginPath();
           ctx.roundRect(centerX - barW - 1.5, padT + plotH - pH, barW, pH, [pillR, pillR, pillR, pillR]);
           ctx.fill();
         }
         if (aH > 0) {
-          ctx.fillStyle = '#7c3aed';
+          ctx.fillStyle = colorB;
           ctx.beginPath();
           ctx.roundRect(centerX + 1.5, padT + plotH - aH, barW, aH, [pillR, pillR, pillR, pillR]);
           ctx.fill();
         }
       } else {
-        const h = (seriesA[idx] / maxVal) * plotH;
+        const h = ((seriesA[idx] || 0) / maxVal) * plotH;
         if (h > 0) {
-          ctx.fillStyle = singleColor;
+          ctx.fillStyle = colorA;
           ctx.beginPath();
           ctx.roundRect(centerX - barW / 2, padT + plotH - h, barW, h, [pillR, pillR, pillR, pillR]);
           ctx.fill();
@@ -6679,7 +6712,8 @@ function drawReportsBarChart(canvasId, mode, seriesA, seriesB = null, chartHeigh
       ctx.fillStyle = isHovered ? '#0f172a' : '#64748b';
       ctx.font = `${isHovered ? '600' : '400'} 10px ${uiFont}`;
       ctx.textAlign = 'center';
-      ctx.fillText(mLbl, centerX, height - 8);
+      const shortLbl = String(mLbl).length > 12 ? String(mLbl).slice(0, 11) + '…' : String(mLbl);
+      ctx.fillText(shortLbl, centerX, height - 8);
       ctx.textAlign = 'left';
     });
   };
@@ -6690,12 +6724,13 @@ function drawReportsBarChart(canvasId, mode, seriesA, seriesB = null, chartHeigh
     canvas._hasHoverListeners = true;
     canvas.addEventListener('mousemove', e => {
       const meta = canvas._barMeta;
-      if (!meta || !meta.plotW) return;
+      if (!meta || !meta.plotW || !meta.labels?.length) return;
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left;
-      const groupW = meta.plotW / 12;
+      const count = meta.labels.length;
+      const groupW = meta.plotW / count;
       const idx = Math.floor((x - meta.padL) / groupW);
-      if (idx < 0 || idx > 11) {
+      if (idx < 0 || idx >= count) {
         if (meta.hoverIdx !== -1) {
           meta.hoverIdx = -1;
           renderBars(-1);
@@ -6709,14 +6744,15 @@ function drawReportsBarChart(canvasId, mode, seriesA, seriesB = null, chartHeigh
       }
       const vA = meta.seriesA[idx] || 0;
       const vB = meta.seriesB ? (meta.seriesB[idx] || 0) : 0;
-      let html = `<div class="font-semibold text-white mb-1">${monthNames[idx]} ${reportsYear}</div>`;
-      if (meta.mode === 'cost') {
-        const utilPct = vA > 0 ? ((vB / vA) * 100).toFixed(1) : '0.0';
-        html += `<div class="flex items-center justify-between gap-4"><span class="text-emerald-300">Planned</span><span class="tabular-nums font-medium">${Math.round(vA).toLocaleString()} NOK</span></div>
-                 <div class="flex items-center justify-between gap-4"><span class="text-violet-300">Actual</span><span class="tabular-nums font-medium">${Math.round(vB).toLocaleString()} NOK (${utilPct}%)</span></div>`;
-      } else {
+      const fmtVal = v => {
+        if (meta.mode === 'cost' || meta.mode === 'pipeline' || meta.mode === 'cpl') return `${Math.round(v).toLocaleString()} NOK`;
         const gDef = getGoalDef(meta.mode);
-        html += `<div class="flex items-center justify-between gap-4"><span style="color:${gDef.color}">${gDef.label}</span><span class="tabular-nums font-medium">${formatGoalValue(gDef, vA)}</span></div>`;
+        return gDef ? formatGoalValue(gDef, v) : String(Math.round(v));
+      };
+      let html = `<div class="font-semibold text-white mb-1">${meta.labels[idx]}</div>`;
+      html += `<div class="flex items-center justify-between gap-4"><span style="color:${meta.colorA}">${meta.seriesALabel}</span><span class="tabular-nums font-medium">${fmtVal(vA)}</span></div>`;
+      if (meta.seriesB) {
+        html += `<div class="flex items-center justify-between gap-4"><span style="color:${meta.colorB}">${meta.seriesBLabel}</span><span class="tabular-nums font-medium">${fmtVal(vB)}</span></div>`;
       }
       showChartTooltip(e.clientX, e.clientY, html);
     });
@@ -6856,15 +6892,170 @@ function renderReportChannelDetail() {
   tbody.innerHTML = rowsHtml + totalRowHtml;
 }
 
+function computeReportsYearDataset(yr) {
+  const yearObj = budgetData[yr] || {};
+  const metricsYearObj = reportsMetricsByYear[yr] || {};
+  const knownNames = getChannelNames();
+  const budgetNames = Object.keys(yearObj);
+  const allChannelNames = [...knownNames];
+  budgetNames.forEach(name => {
+    if (!allChannelNames.some(n => n.toLowerCase() === name.toLowerCase())) {
+      allChannelNames.push(name);
+    }
+  });
+
+  const monthlyPlanned = Array(12).fill(0);
+  const monthlyActual = Array(12).fill(0);
+  const monthlyPipeline = Array(12).fill(0);
+  const monthlyMetricSum = {};
+  const monthlyMetricCount = {};
+  CHANNEL_GOAL_DEFS.forEach(g => {
+    monthlyMetricSum[g.key] = Array(12).fill(0);
+    monthlyMetricCount[g.key] = Array(12).fill(0);
+  });
+
+  const byChannel = {};
+  let totalPlanned = 0;
+  let totalActual = 0;
+
+  allChannelNames.forEach(name => {
+    const row = yearObj[name];
+    const mRow = metricsYearObj[name];
+    const chPlannedArr = Array(12).fill(0);
+    const chActualArr = Array(12).fill(0);
+    const chLeadsArr = Array(12).fill(0);
+    const chPipelineArr = Array(12).fill(0);
+
+    if (row) {
+      for (let m = 0; m < 12; m++) {
+        const p = row.planned[m] || 0;
+        const a = row.actual[m] || 0;
+        chPlannedArr[m] = p;
+        chActualArr[m] = a;
+        monthlyPlanned[m] += p;
+        monthlyActual[m] += a;
+        totalPlanned += p;
+        totalActual += a;
+      }
+    }
+    if (mRow) {
+      CHANNEL_GOAL_DEFS.forEach(g => {
+        const arr = mRow[g.key];
+        if (!Array.isArray(arr)) return;
+        for (let m = 0; m < 12; m++) {
+          const val = arr[m] || 0;
+          monthlyMetricSum[g.key][m] += val;
+          if (val > 0) monthlyMetricCount[g.key][m] += 1;
+          if (g.key === 'leads') chLeadsArr[m] += val;
+        }
+      });
+    }
+    byChannel[name] = { planned: chPlannedArr, actual: chActualArr, leads: chLeadsArr, pipeline: chPipelineArr, mRow };
+  });
+
+  let connectedLeadCount = 0;
+  let connectedPipelineVal = 0;
+  const leadsByChannelCount = {};
+  const pipelineByChannelVal = {};
+
+  (leadEntries || []).forEach(l => {
+    const d = l.createdAt ? new Date(l.createdAt) : null;
+    const hasValidDate = d && !isNaN(d.getTime());
+    const matchesYear = hasValidDate ? String(d.getFullYear()) === String(yr) : String(yr) === String(budgetYear);
+    if (!matchesYear) return;
+
+    const mIdx = hasValidDate ? d.getMonth() : new Date().getMonth();
+    const chName = l.channel || '';
+    const val = l.value || 0;
+    connectedLeadCount += 1;
+    connectedPipelineVal += val;
+    monthlyMetricSum.leads[mIdx] += 1;
+    monthlyPipeline[mIdx] += val;
+
+    if (chName) {
+      leadsByChannelCount[chName] = (leadsByChannelCount[chName] || 0) + 1;
+      pipelineByChannelVal[chName] = (pipelineByChannelVal[chName] || 0) + val;
+      if (byChannel[chName]) {
+        byChannel[chName].leads[mIdx] += 1;
+        byChannel[chName].pipeline[mIdx] += val;
+      }
+    }
+  });
+
+  const totalLeadsSum = Math.max(
+    connectedLeadCount,
+    monthlyMetricSum.leads.reduce((a, b) => a + b, 0)
+  );
+
+  return {
+    allChannelNames,
+    yearObj,
+    metricsYearObj,
+    monthlyPlanned,
+    monthlyActual,
+    monthlyPipeline,
+    monthlyMetricSum,
+    monthlyMetricCount,
+    byChannel,
+    totalPlanned,
+    totalActual,
+    totalLeads: totalLeadsSum,
+    totalPipeline: connectedPipelineVal,
+    leadsByChannelCount,
+    pipelineByChannelVal
+  };
+}
+
+function getMetricSeries12(ds, metric) {
+  if (metric === 'cost') return ds.monthlyActual;
+  if (metric === 'pipeline') return ds.monthlyPipeline;
+  if (metric === 'cpl') {
+    return ds.monthlyActual.map((act, m) => {
+      const lds = ds.monthlyMetricSum.leads[m] || 0;
+      return lds > 0 ? act / lds : 0;
+    });
+  }
+  const gd = getGoalDef(metric);
+  if (gd.agg === 'avg') {
+    return ds.monthlyMetricSum[gd.key].map((sum, m) => (ds.monthlyMetricCount[gd.key][m] > 0 ? sum / ds.monthlyMetricCount[gd.key][m] : 0));
+  }
+  return ds.monthlyMetricSum[gd.key] || Array(12).fill(0);
+}
+
+function getChannelMetricValue(ds, chName, metric, monthIdx = null) {
+  const chData = ds.byChannel[chName];
+  if (!chData) return 0;
+  const pick = arr => (monthIdx !== null ? (arr[monthIdx] || 0) : arr.reduce((a, b) => a + b, 0));
+  if (metric === 'cost') return pick(chData.actual);
+  if (metric === 'pipeline') return pick(chData.pipeline);
+  if (metric === 'leads') return pick(chData.leads);
+  if (metric === 'cpl') {
+    const act = pick(chData.actual);
+    const lds = pick(chData.leads);
+    return lds > 0 ? act / lds : 0;
+  }
+  const gd = getGoalDef(metric);
+  const arr = (chData.mRow && chData.mRow[gd.key]) || Array(12).fill(0);
+  if (monthIdx !== null) return arr[monthIdx] || 0;
+  return aggregateChannelGoalValue(chName, chData.mRow, gd.key);
+}
+
 function renderMarketingReportsView() {
   const sel = document.getElementById('reports-year-select');
   if (sel && sel.value !== reportsYear) {
     reportsYear = sel.value || budgetYear || '2026';
   }
   const metricSel = document.getElementById('mr-chart-metric');
-  if (metricSel && metricSel.value !== reportsMetric) {
-    metricSel.value = reportsMetric;
+  if (metricSel && metricSel.value !== reportsMetric) metricSel.value = reportsMetric;
+  const viewSel = document.getElementById('mr-view-mode');
+  if (viewSel && viewSel.value !== reportsViewMode) viewSel.value = reportsViewMode;
+  const mSel = document.getElementById('mr-month-select');
+  if (mSel) {
+    mSel.value = String(reportsSelectedMonth);
+    mSel.classList.toggle('hidden', reportsViewMode !== 'month_channels');
   }
+  const cmpSel = document.getElementById('mr-compare-year');
+  if (cmpSel && cmpSel.value !== reportsCompareYear) cmpSel.value = reportsCompareYear;
 
   const overviewEl = document.getElementById('mr-overview');
   const detailEl = document.getElementById('mr-channel-detail');
@@ -6881,93 +7072,120 @@ function renderMarketingReportsView() {
   document.getElementById('mr-crumb-channel')?.classList.add('hidden');
   document.getElementById('mr-back-btn')?.classList.add('hidden');
 
-  const yearObj = budgetData[reportsYear] || {};
-  const metricsYearObj = reportsMetricsByYear[reportsYear] || {};
-  const knownNames = getChannelNames();
-  const budgetNames = Object.keys(yearObj);
-  const allChannelNames = [...knownNames];
-  budgetNames.forEach(name => {
-    if (!allChannelNames.some(n => n.toLowerCase() === name.toLowerCase())) {
-      allChannelNames.push(name);
-    }
-  });
+  const ds = computeReportsYearDataset(reportsYear);
+  const compareActive = Boolean(reportsCompareYear && reportsCompareYear !== reportsYear);
+  const cmpDs = compareActive ? computeReportsYearDataset(reportsCompareYear) : null;
 
-  const monthlyPlanned = Array(12).fill(0);
-  const monthlyActual = Array(12).fill(0);
-  const monthlyMetricSum = {};
-  const monthlyMetricCount = {};
-  CHANNEL_GOAL_DEFS.forEach(g => {
-    monthlyMetricSum[g.key] = Array(12).fill(0);
-    monthlyMetricCount[g.key] = Array(12).fill(0);
-  });
+  // Update connected KPI strip
+  const utilPct = ds.totalPlanned > 0 ? ((ds.totalActual / ds.totalPlanned) * 100).toFixed(1) : '0.0';
+  const cpl = ds.totalLeads > 0 ? Math.round(ds.totalActual / ds.totalLeads) : 0;
+  const kPlan = document.getElementById('mr-kpi-planned');
+  const kPlanSub = document.getElementById('mr-kpi-planned-sub');
+  const kAct = document.getElementById('mr-kpi-actual');
+  const kActSub = document.getElementById('mr-kpi-actual-sub');
+  const kLeads = document.getElementById('mr-kpi-leads');
+  const kLeadsSub = document.getElementById('mr-kpi-leads-sub');
+  const kPipe = document.getElementById('mr-kpi-pipeline');
+  const kPipeSub = document.getElementById('mr-kpi-pipeline-sub');
 
-  let totalPlanned = 0;
-  let totalActual = 0;
+  if (kPlan) kPlan.textContent = `${Math.round(ds.totalPlanned).toLocaleString()} NOK`;
+  if (kPlanSub) kPlanSub.textContent = `Year ${reportsYear} · ${ds.allChannelNames.length} channels`;
+  if (kAct) kAct.textContent = `${Math.round(ds.totalActual).toLocaleString()} NOK`;
+  if (kActSub) kActSub.textContent = `${utilPct}% of planned budget`;
+  if (kLeads) kLeads.textContent = String(ds.totalLeads);
+  if (kLeadsSub) kLeadsSub.textContent = ds.totalLeads > 0 && ds.totalActual > 0 ? `CPL: ${cpl.toLocaleString()} NOK` : `Connected with Leads`;
+  if (kPipe) kPipe.textContent = `${Math.round(ds.totalPipeline).toLocaleString()} NOK`;
+  if (kPipeSub) kPipeSub.textContent = `${integrationsList.length} integration${integrationsList.length === 1 ? '' : 's'} active`;
 
-  allChannelNames.forEach(name => {
-    const row = yearObj[name];
-    if (row) {
-      for (let m = 0; m < 12; m++) {
-        const p = row.planned[m] || 0;
-        const a = row.actual[m] || 0;
-        monthlyPlanned[m] += p;
-        monthlyActual[m] += a;
-        totalPlanned += p;
-        totalActual += a;
-      }
-    }
-    const mRow = metricsYearObj[name];
-    if (mRow) {
-      CHANNEL_GOAL_DEFS.forEach(g => {
-        const arr = mRow[g.key];
-        if (!Array.isArray(arr)) return;
-        for (let m = 0; m < 12; m++) {
-          const val = arr[m] || 0;
-          monthlyMetricSum[g.key][m] += val;
-          if (val > 0) monthlyMetricCount[g.key][m] += 1;
-        }
-      });
-    }
-  });
-
-  (leadEntries || []).forEach(l => {
-    const d = l.createdAt ? new Date(l.createdAt) : null;
-    if (d && !isNaN(d.getTime())) {
-      if (String(d.getFullYear()) === reportsYear) {
-        monthlyMetricSum.leads[d.getMonth()] += 1;
-      }
-    }
-  });
-
-  document.getElementById('mr-chart-year').textContent = reportsYear;
+  document.getElementById('mr-chart-year').textContent = compareActive ? `${reportsYear} vs ${reportsCompareYear}` : reportsYear;
   const subtitleEl = document.getElementById('mr-chart-subtitle');
   const legendEl = document.getElementById('mr-chart-legend');
-  let hasChartData = false;
 
-  if (reportsMetric === 'cost') {
-    if (subtitleEl) subtitleEl.textContent = 'Monthly planned budget vs. actual spend across all channels';
-    if (legendEl) {
-      legendEl.innerHTML = `
-        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#10b981] inline-block"></span><span>Planned</span></span>
-        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#7c3aed] inline-block"></span><span>Actual</span></span>
-      `;
+  const metricLabelMap = {
+    cost: 'Cost (NOK)',
+    pipeline: 'Pipeline Value (NOK)',
+    cpl: 'CPL (NOK / Lead)'
+  };
+  const metricLabel = metricLabelMap[reportsMetric] || getGoalDef(reportsMetric)?.label || reportsMetric;
+  const gd = (reportsMetric === 'cost' || reportsMetric === 'pipeline' || reportsMetric === 'cpl') ? null : getGoalDef(reportsMetric);
+  const primaryColor = gd ? gd.color : (reportsMetric === 'pipeline' ? '#10b981' : '#7c3aed');
+
+  let labels = monthNames;
+  let seriesA = [];
+  let seriesB = null;
+  let chartOpts = { labels };
+
+  if (reportsViewMode === 'monthly') {
+    labels = monthNames;
+    if (compareActive) {
+      seriesA = getMetricSeries12(ds, reportsMetric);
+      seriesB = getMetricSeries12(cmpDs, reportsMetric);
+      chartOpts = { labels, seriesALabel: `${reportsYear} ${metricLabel}`, seriesBLabel: `${reportsCompareYear} ${metricLabel}`, colorA: primaryColor, colorB: '#94a3b8' };
+      if (subtitleEl) subtitleEl.textContent = `Monthly ${metricLabel} comparison (${reportsYear} vs ${reportsCompareYear})`;
+    } else if (reportsMetric === 'cost') {
+      seriesA = ds.monthlyPlanned;
+      seriesB = ds.monthlyActual;
+      chartOpts = { labels, seriesALabel: 'Planned', seriesBLabel: 'Actual', colorA: '#10b981', colorB: '#7c3aed' };
+      if (subtitleEl) subtitleEl.textContent = 'Monthly planned budget vs. actual spend across all channels';
+    } else {
+      seriesA = getMetricSeries12(ds, reportsMetric);
+      chartOpts = { labels, seriesALabel: metricLabel, colorA: primaryColor };
+      if (subtitleEl) subtitleEl.textContent = `Monthly ${metricLabel} across all channels`;
     }
-    hasChartData = totalPlanned > 0 || totalActual > 0;
-    drawReportsBarChart('marketingReportsChart', 'cost', monthlyPlanned, monthlyActual, 220);
+  } else if (reportsViewMode === 'quarterly') {
+    labels = ['Q1', 'Q2', 'Q3', 'Q4'];
+    const toQ = arr12 => [0, 1, 2, 3].map(q => {
+      const slice = arr12.slice(q * 3, q * 3 + 3);
+      return gd?.agg === 'avg' ? (slice.filter(v => v > 0).reduce((a, b) => a + b, 0) / Math.max(1, slice.filter(v => v > 0).length)) : slice.reduce((a, b) => a + b, 0);
+    });
+    if (compareActive) {
+      seriesA = toQ(getMetricSeries12(ds, reportsMetric));
+      seriesB = toQ(getMetricSeries12(cmpDs, reportsMetric));
+      chartOpts = { labels, seriesALabel: `${reportsYear} ${metricLabel}`, seriesBLabel: `${reportsCompareYear} ${metricLabel}`, colorA: primaryColor, colorB: '#94a3b8' };
+      if (subtitleEl) subtitleEl.textContent = `Quarterly ${metricLabel} (${reportsYear} vs ${reportsCompareYear})`;
+    } else if (reportsMetric === 'cost') {
+      seriesA = toQ(ds.monthlyPlanned);
+      seriesB = toQ(ds.monthlyActual);
+      chartOpts = { labels, seriesALabel: 'Planned', seriesBLabel: 'Actual', colorA: '#10b981', colorB: '#7c3aed' };
+      if (subtitleEl) subtitleEl.textContent = 'Quarterly planned budget vs. actual spend';
+    } else {
+      seriesA = toQ(getMetricSeries12(ds, reportsMetric));
+      chartOpts = { labels, seriesALabel: metricLabel, colorA: primaryColor };
+      if (subtitleEl) subtitleEl.textContent = `Quarterly ${metricLabel}`;
+    }
   } else {
-    const gd = getGoalDef(reportsMetric);
-    const series = gd.agg === 'avg'
-      ? monthlyMetricSum[gd.key].map((sum, m) => (monthlyMetricCount[gd.key][m] > 0 ? sum / monthlyMetricCount[gd.key][m] : 0))
-      : monthlyMetricSum[gd.key];
-    if (subtitleEl) subtitleEl.textContent = `Monthly ${gd.label} across channels`;
-    if (legendEl) {
-      legendEl.innerHTML = `<span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full inline-block" style="background:${gd.color}"></span><span>${gd.label}</span></span>`;
+    const isSingleMonth = reportsViewMode === 'month_channels';
+    const mIdx = isSingleMonth ? reportsSelectedMonth : null;
+    labels = ds.allChannelNames.length > 0 ? ds.allChannelNames : ['No Channels'];
+    if (compareActive) {
+      seriesA = labels.map(ch => getChannelMetricValue(ds, ch, reportsMetric, mIdx));
+      seriesB = labels.map(ch => getChannelMetricValue(cmpDs, ch, reportsMetric, mIdx));
+      chartOpts = { labels, seriesALabel: `${reportsYear}`, seriesBLabel: `${reportsCompareYear}`, colorA: primaryColor, colorB: '#94a3b8' };
+      if (subtitleEl) subtitleEl.textContent = `${isSingleMonth ? monthNames[mIdx] + ' ' : 'Full-year '}${metricLabel} by channel (${reportsYear} vs ${reportsCompareYear})`;
+    } else if (reportsMetric === 'cost') {
+      seriesA = labels.map(ch => ds.byChannel[ch] ? (mIdx !== null ? ds.byChannel[ch].planned[mIdx] : ds.byChannel[ch].planned.reduce((a, b) => a + b, 0)) : 0);
+      seriesB = labels.map(ch => ds.byChannel[ch] ? (mIdx !== null ? ds.byChannel[ch].actual[mIdx] : ds.byChannel[ch].actual.reduce((a, b) => a + b, 0)) : 0);
+      chartOpts = { labels, seriesALabel: 'Planned', seriesBLabel: 'Actual', colorA: '#10b981', colorB: '#7c3aed' };
+      if (subtitleEl) subtitleEl.textContent = `${isSingleMonth ? monthNames[mIdx] + ' ' : 'Full-year '}planned vs. actual spend by channel`;
+    } else {
+      seriesA = labels.map(ch => getChannelMetricValue(ds, ch, reportsMetric, mIdx));
+      chartOpts = { labels, seriesALabel: metricLabel, colorA: primaryColor };
+      if (subtitleEl) subtitleEl.textContent = `${isSingleMonth ? monthNames[mIdx] + ' ' : 'Full-year '}${metricLabel} by channel`;
     }
-    hasChartData = series.some(v => v > 0);
-    drawReportsBarChart('marketingReportsChart', gd.key, series, null, 220);
   }
 
+  if (legendEl) {
+    legendEl.innerHTML = seriesB
+      ? `<span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full inline-block" style="background:${chartOpts.colorA}"></span><span>${chartOpts.seriesALabel}</span></span>
+         <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full inline-block" style="background:${chartOpts.colorB}"></span><span>${chartOpts.seriesBLabel}</span></span>`
+      : `<span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full inline-block" style="background:${chartOpts.colorA}"></span><span>${chartOpts.seriesALabel}</span></span>`;
+  }
+
+  const hasChartData = seriesA.some(v => v > 0) || (seriesB ? seriesB.some(v => v > 0) : false);
+  drawReportsBarChart('marketingReportsChart', reportsMetric, seriesA, seriesB, 220, chartOpts);
   document.getElementById('mr-chart-empty-note')?.classList.toggle('hidden', hasChartData);
+
+  const { allChannelNames, yearObj, metricsYearObj, totalPlanned } = ds;
 
   const cardsContainer = document.getElementById('marketing-reports-channel-cards');
   if (!cardsContainer) return;
