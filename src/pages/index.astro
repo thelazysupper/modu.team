@@ -1941,34 +1941,95 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
               <span>Apps</span>
             </button>
             <span class="text-slate-300">/</span>
-            <span class="font-semibold text-slate-900">SEO Audit</span>
+            <span class="font-semibold text-slate-900">SEO &amp; AI Readiness Audit</span>
           </div>
+
+          <button type="button" onclick="runTechnicalSeoAudit()" id="audit-run-btn" class="h-8 px-3.5 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium flex items-center gap-1.5 transition-colors">
+            <span>Run Live Audit</span>
+          </button>
         </div>
+
         <div class="space-y-1">
-          <h2 class="text-xl font-bold tracking-tight text-slate-900">Technical &amp; On-Page SEO Audit</h2>
-          <p class="text-xs text-slate-500">Audit crawlability, Core Web Vitals, metadata, and structured data alongside your AEO &amp; SEO query rankings.</p>
+          <h2 class="text-xl font-bold tracking-tight text-slate-900">Technical SEO &amp; AI Readiness</h2>
+          <p class="text-xs text-slate-500">Server-side crawl of HTML, SSR vs. CSR, robots.txt AI bots, llms.txt, Schema.org JSON-LD, PageSpeed, Google Suggest &amp; SERP.</p>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div class="rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-1">
-            <div class="text-[11px] text-slate-500">Tracked Queries</div>
-            <div id="audit-sum-queries" class="text-2xl font-bold text-slate-900 tabular-nums">0</div>
-            <div class="text-[11px] text-slate-400">Synced from AEO &amp; SEO Comparison</div>
+
+        <!-- AUDIT INPUT BAR -->
+        <div class="rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-3">
+          <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+            <div class="md:col-span-4">
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Primary Domain</label>
+              <input id="audit-primary-domain" type="text" placeholder="e.g. bxsoftware.no" class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+            </div>
+            <div class="md:col-span-4">
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Competitor Domains (comma-separated)</label>
+              <input id="audit-competitor-domains" type="text" placeholder="e.g. comp1.no, comp2.com" class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+            </div>
+            <div class="md:col-span-4">
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Keyword (Suggest + Live SERP)</label>
+              <input id="audit-keyword" type="text" placeholder="e.g. lagersystem" class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
+            </div>
           </div>
-          <div class="rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-1">
-            <div class="text-[11px] text-slate-500">Avg. SEO Visibility</div>
-            <div id="audit-sum-seo" class="text-2xl font-bold text-emerald-600 tabular-nums">0%</div>
-            <div class="text-[11px] text-slate-400">Traditional search ranking score</div>
-          </div>
-          <div class="rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-1">
-            <div class="text-[11px] text-slate-500">AI Citations</div>
-            <div id="audit-sum-cited" class="text-2xl font-bold text-[#7c3aed] tabular-nums">0</div>
-            <div class="text-[11px] text-slate-400">Queries cited in AI answer engines</div>
+          <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
+            <label class="inline-flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+              <input id="audit-include-psi" type="checkbox" class="rounded border-slate-300" />
+              <span>Include PageSpeed Insights (Core Web Vitals &amp; Lighthouse SEO score)</span>
+            </label>
+            <span id="audit-status-text" class="text-[11px] text-slate-500"></span>
           </div>
         </div>
-        <div class="rounded-2xl border border-dashed border-slate-200 bg-[#fbfcfd] p-8 text-center space-y-2">
-          <div class="text-sm font-semibold text-slate-900">On-Page &amp; Schema Checklist</div>
-          <p class="text-xs text-slate-500 max-w-md mx-auto">Use AEO &amp; SEO Comparison to track query-level visibility, then prioritize pages ranking below #5 or uncited in AI engines.</p>
-          <button type="button" onclick="switchSearchHubTab('aeo-seo')" class="mt-2 h-8 px-3.5 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium">Open Query Comparison →</button>
+
+        <div id="audit-results-container" class="hidden space-y-6">
+          <!-- DOMAIN COMPARISON TABLE -->
+          <div class="rounded-2xl border border-slate-200/80 bg-white overflow-hidden card-shadow">
+            <div class="px-5 py-3.5 border-b border-slate-200/70 flex items-center justify-between">
+              <h3 class="text-sm font-semibold text-slate-900">On-Page, SSR &amp; AI Crawler Readiness</h3>
+              <span id="audit-snapshot-time" class="text-[11px] text-slate-400 tabular-nums"></span>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr class="border-b border-slate-200/80 bg-[#fbfcfd] text-slate-500">
+                    <th class="py-3 px-4 font-medium">Domain</th>
+                    <th class="py-3 px-4 font-medium">Title / Meta</th>
+                    <th class="py-3 px-4 font-medium">SSR Check</th>
+                    <th class="py-3 px-4 font-medium">llms.txt</th>
+                    <th class="py-3 px-4 font-medium">Sitemap</th>
+                    <th class="py-3 px-4 font-medium">AI Bots (robots.txt)</th>
+                    <th class="py-3 px-4 font-medium">PageSpeed / Wayback</th>
+                  </tr>
+                </thead>
+                <tbody id="audit-domains-tbody" class="divide-y divide-slate-200/70"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- SCHEMAS + CONTENT GAPS -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <div class="rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-3">
+              <h3 class="text-sm font-semibold text-slate-900">Schema.org (JSON-LD) &amp; Missing Types</h3>
+              <div id="audit-schemas-body" class="space-y-2.5 text-xs"></div>
+            </div>
+            <div class="rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-3">
+              <h3 class="text-sm font-semibold text-slate-900">Competitor Content Gaps (H2/H3)</h3>
+              <div id="audit-gaps-body" class="space-y-2 text-xs"></div>
+            </div>
+          </div>
+
+          <!-- GOOGLE SUGGEST + DUCKDUCKGO SERP -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <div class="rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-3">
+              <div class="flex items-center justify-between gap-2">
+                <h3 class="text-sm font-semibold text-slate-900">Google Autocomplete Prompts</h3>
+                <button type="button" onclick="sendSuggestedPromptsToAeo()" class="h-7 px-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-[11px] font-medium text-slate-800">Send to AEO Scan →</button>
+              </div>
+              <div id="audit-suggest-body" class="flex flex-wrap gap-1.5 text-xs"></div>
+            </div>
+            <div class="rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-3">
+              <h3 class="text-sm font-semibold text-slate-900">Organic Top 10 (DuckDuckGo)</h3>
+              <div id="audit-serp-body" class="space-y-2 text-xs max-h-72 overflow-y-auto"></div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -1987,6 +2048,13 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
 
           <div class="flex flex-wrap items-center gap-2">
             <button
+              type="button"
+              onclick="toggleLiveAeoPanel()"
+              class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-xs font-medium transition-colors"
+            >
+              Live Gemini AEO Scan
+            </button>
+            <button
               onclick="toggleAeoSeoForm(true)"
               class="h-8 px-3.5 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium flex items-center gap-1.5 transition-colors"
             >
@@ -2000,6 +2068,44 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
           <p class="text-xs text-slate-500">
             Compare visibility across AI Answer Engines (AEO) and traditional Search rankings (SEO) per query.
           </p>
+        </div>
+
+        <!-- LIVE GEMINI AEO SCAN PANEL -->
+        <div id="live-aeo-panel" class="hidden rounded-2xl border border-slate-200/80 bg-[#fbfcfd] p-5 space-y-4 animate-fade">
+          <div class="flex items-center justify-between gap-2 pb-2 border-b border-slate-200/70">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-900">Live Gemini AEO + Google Search Grounding</h3>
+              <p class="text-[11px] text-slate-500">Measures real AI citations, brand mention position (#1, #2...), Share of Voice (%), and search queries used.</p>
+            </div>
+            <button type="button" onclick="toggleLiveAeoPanel(false)" class="text-xs text-slate-400 hover:text-slate-700">✕</button>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Primary Domain</label>
+              <input id="aeo-live-domain" type="text" placeholder="bxsoftware.no" class="w-full h-8 px-2.5 text-xs bg-white border border-slate-200 rounded-lg" />
+            </div>
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Brand Name</label>
+              <input id="aeo-live-brand" type="text" placeholder="BX Software" class="w-full h-8 px-2.5 text-xs bg-white border border-slate-200 rounded-lg" />
+            </div>
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Competitors (comma-sep)</label>
+              <input id="aeo-live-competitors" type="text" placeholder="comp1.no, comp2.com" class="w-full h-8 px-2.5 text-xs bg-white border border-slate-200 rounded-lg" />
+            </div>
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-1">Gemini API Key (optional if env set)</label>
+              <input id="aeo-live-apikey" type="password" placeholder="AIza..." class="w-full h-8 px-2.5 text-xs bg-white border border-slate-200 rounded-lg" />
+            </div>
+          </div>
+          <div>
+            <label class="block text-[11px] font-medium text-slate-600 mb-1">Prompts (one per line)</label>
+            <textarea id="aeo-live-prompts" rows="3" placeholder="Hva er beste lagersystem i Norge?&#10;Hvordan velge WMS for nettbutikk?" class="w-full p-2.5 text-xs bg-white border border-slate-200 rounded-lg"></textarea>
+          </div>
+          <div class="flex items-center justify-between gap-3">
+            <span id="aeo-live-status" class="text-[11px] text-slate-500"></span>
+            <button type="button" id="aeo-live-run-btn" onclick="runLiveAeoScan()" class="h-8 px-4 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium">Run Live AEO Scan</button>
+          </div>
+          <div id="aeo-live-results" class="hidden space-y-3 pt-2 border-t border-slate-200/70"></div>
         </div>
 
         <!-- CHART ON TOP -->

@@ -1690,15 +1690,9 @@ function switchSearchHubTab(tab = 'aeo-seo') {
 
   if (tab === 'seo-audit') {
     activeSec?.classList.remove('hidden');
-    const qEl = document.getElementById('audit-sum-queries');
-    const sEl = document.getElementById('audit-sum-seo');
-    const cEl = document.getElementById('audit-sum-cited');
-    if (qEl) qEl.textContent = String(aeoSeoEntries.length);
-    if (sEl) {
-      const avgSeo = aeoSeoEntries.length > 0 ? aeoSeoEntries.reduce((a, e) => a + (e.seoScore || 0), 0) / aeoSeoEntries.length : 0;
-      sEl.textContent = `${avgSeo.toFixed(1)}%`;
-    }
-    if (cEl) cEl.textContent = String(aeoSeoEntries.filter(e => e.cited === 'Cited').length);
+    if (typeof prefillAuditCompetitors === 'function') prefillAuditCompetitors();
+    const latestSnap = typeof getLatestSearchSnapshot === 'function' ? getLatestSearchSnapshot() : null;
+    if (latestSnap && typeof renderSeoAuditResults === 'function') renderSeoAuditResults(latestSnap);
     syncRouteUrl('/apps/seo-audit');
   } else {
     activeSec?.classList.remove('hidden');
@@ -6854,6 +6848,333 @@ function renderAeoSeoView() {
       </tr>
     `;
   }).join('');
+}
+
+let searchReportRuns = [];
+
+function getLatestSearchSnapshot() {
+  return searchReportRuns.length > 0 ? searchReportRuns[searchReportRuns.length - 1] : null;
+}
+
+function prefillAuditCompetitors() {
+  const compEl = document.getElementById('audit-competitor-domains');
+  if (compEl && !compEl.value.trim() && Array.isArray(competitorsList) && competitorsList.length > 0) {
+    const domains = competitorsList.map(c => getDomainFromUrl(c.website)).filter(Boolean);
+    if (domains.length > 0) compEl.value = domains.slice(0, 4).join(', ');
+  }
+}
+
+async function runTechnicalSeoAudit() {
+  const primaryEl = document.getElementById('audit-primary-domain');
+  const compEl = document.getElementById('audit-competitor-domains');
+  const kwEl = document.getElementById('audit-keyword');
+  const psiEl = document.getElementById('audit-include-psi');
+  const statusEl = document.getElementById('audit-status-text');
+  const btn = document.getElementById('audit-run-btn');
+
+  const primaryDomain = (primaryEl?.value || '').trim();
+  if (!primaryDomain) {
+    primaryEl?.focus();
+    if (statusEl) statusEl.textContent = 'Enter a primary domain first.';
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Auditing...';
+  }
+  if (statusEl) statusEl.textContent = 'Fetching HTML, robots.txt, llms.txt, sitemap.xml & schemas...';
+
+  try {
+    const resp = await fetch('/api/seo-audit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        primaryDomain,
+        competitorDomains: (compEl?.value || '').split(',').map(s => s.trim()).filter(Boolean),
+        keyword: (kwEl?.value || '').trim(),
+        runPageSpeed: Boolean(psiEl?.checked)
+      })
+    });
+    const data = await resp.json();
+    if (!resp.ok || !data.ok) {
+      if (statusEl) statusEl.textContent = data.error || 'Audit failed';
+      return;
+    }
+
+    const snapshot = {
+      created_at: data.created_at,
+      primaryDomain,
+      seo_comparison: data.seo_comparison || [],
+      missing_schemas: data.missing_schemas || [],
+      content_gaps: data.content_gaps || [],
+      keyword_suggestions: data.keyword_suggestions || [],
+      serp_results: data.serp_results || []
+    };
+    searchReportRuns.push(snapshot);
+    if (searchReportRuns.length > 10) searchReportRuns = searchReportRuns.slice(-10);
+
+    renderSeoAuditResults(snapshot);
+    if (statusEl) statusEl.textContent = `Completed (${snapshot.seo_comparison.length} domain${snapshot.seo_comparison.length === 1 ? '' : 's'})`;
+  } catch (err) {
+    if (statusEl) statusEl.textContent = err?.message || 'Network error';
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<span>Run Live Audit</span>';
+    }
+  }
+}
+
+function renderSeoAuditResults(snapshot) {
+  const wrap = document.getElementById('audit-results-container');
+  if (!wrap || !snapshot) return;
+  wrap.classList.remove('hidden');
+
+  const timeEl = document.getElementById('audit-snapshot-time');
+  if (timeEl && snapshot.created_at) {
+    timeEl.textContent = `Snapshot: ${new Date(snapshot.created_at).toLocaleString()}`;
+  }
+
+  const tbody = document.getElementById('audit-domains-tbody');
+  if (tbody) {
+    tbody.innerHTML = (snapshot.seo_comparison || []).map((d, idx) => {
+      if (d.error) {
+        return `<tr><td class="py-3 px-4 font-semibold text-slate-900">${d.domain}</td><td colspan="6" class="py-3 px-4 text-rose-600">${d.error}</td></tr>`;
+      }
+      const op = d.onPage || {};
+      const titleOk = op.titleLength >= 20 && op.titleLength <= 65;
+      const descOk = op.descriptionLength >= 50 && op.descriptionLength <= 165;
+      const ssrBadge = op.isLikelyCSR
+        ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-700">CSR (&lt;300 chars)</span>`
+        : `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700">SSR (${op.ssrBodyChars.toLocaleString()} chars)</span>`;
+
+      const llmsBadge = d.llmsTxt?.present
+        ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700">llms.txt ✓</span>`
+        : `<span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-500">Missing</span>`;
+      const llmsFull = d.llmsFullTxt?.present ? `<div class="text-[10px] text-emerald-600 mt-0.5">llms-full.txt ✓</div>` : '';
+
+      const bots = d.aiBots || {};
+      const blocked = Object.entries(bots).filter(([, st]) => st === 'disallowed').map(([b]) => b);
+      const botsHtml = blocked.length === 0
+        ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700">All 7 AI bots allowed</span>`
+        : `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-700">Blocked: ${blocked.join(', ')}</span>`;
+
+      const psiHtml = d.pageSpeed
+        ? `<div class="tabular-nums font-medium text-slate-800">SEO ${d.pageSpeed.seoScore ?? '—'} · Perf ${d.pageSpeed.perfScore ?? '—'}</div><div class="text-[10px] text-slate-400">LCP ${d.pageSpeed.lcp || '—'} · CLS ${d.pageSpeed.cls || '—'}</div>`
+        : `<div class="text-[10px] text-slate-400">${d.wayback?.available ? `Wayback: ${d.wayback.timestamp.slice(0, 8)}` : 'No PSI / Wayback'}</div>`;
+
+      return `
+        <tr class="hover:bg-slate-50/70 align-top">
+          <td class="py-3 px-4">
+            <div class="font-semibold text-slate-900">${d.domain}${idx === 0 ? ' <span class="ml-1 px-1.5 py-0.5 rounded bg-slate-900 text-white text-[9px]">Primary</span>' : ''}</div>
+            <div class="text-[10px] text-slate-400 mt-0.5">HTTP ${op.status || '—'} · ${op.missingAltImages || 0}/${op.totalImages || 0} missing alt</div>
+          </td>
+          <td class="py-3 px-4 max-w-[220px]">
+            <div class="font-medium text-slate-800 truncate" title="${(op.title || '').replace(/"/g, '&quot;')}">${op.title || '—'}</div>
+            <div class="text-[10px] ${titleOk ? 'text-emerald-600' : 'text-amber-600'}">Title: ${op.titleLength || 0} chars · Meta: ${op.descriptionLength || 0} chars</div>
+          </td>
+          <td class="py-3 px-4">${ssrBadge}<div class="text-[10px] text-slate-400 mt-0.5">${op.ssrBodyWords || 0} words</div></td>
+          <td class="py-3 px-4">${llmsBadge}${llmsFull}</td>
+          <td class="py-3 px-4 tabular-nums text-slate-700">${d.sitemap?.present ? `${d.sitemap.locCount.toLocaleString()} URLs` : 'Missing'}</td>
+          <td class="py-3 px-4">${botsHtml}</td>
+          <td class="py-3 px-4">${psiHtml}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  const schemasEl = document.getElementById('audit-schemas-body');
+  if (schemasEl) {
+    const missing = snapshot.missing_schemas || [];
+    const domainSchemas = (snapshot.seo_comparison || []).map(d => `
+      <div class="flex items-start justify-between gap-2 py-1.5 border-b border-slate-100 last:border-0">
+        <span class="font-medium text-slate-800">${d.domain}</span>
+        <div class="flex flex-wrap gap-1 justify-end">
+          ${(d.onPage?.schemas || []).length > 0
+            ? d.onPage.schemas.map(s => `<span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px]">${s}</span>`).join('')
+            : `<span class="text-slate-400">None</span>`}
+        </div>
+      </div>
+    `).join('');
+    const missingHtml = missing.length > 0
+      ? `<div class="p-2.5 rounded-xl bg-amber-50 border border-amber-200/70 text-amber-900">
+           <div class="font-semibold text-[11px] mb-1">Missing on primary domain (used by competitors):</div>
+           <div class="flex flex-wrap gap-1">${missing.map(m => `<span class="px-2 py-0.5 rounded bg-white border border-amber-200 text-[10px] font-medium">${m.schema} (${m.usedBy.join(', ')})</span>`).join('')}</div>
+         </div>`
+      : `<div class="text-[11px] text-emerald-700">No missing Schema.org types vs. audited competitors.</div>`;
+    schemasEl.innerHTML = missingHtml + domainSchemas;
+  }
+
+  const gapsEl = document.getElementById('audit-gaps-body');
+  if (gapsEl) {
+    const gaps = snapshot.content_gaps || [];
+    gapsEl.innerHTML = gaps.length > 0
+      ? gaps.slice(0, 10).map(g => `
+          <div class="flex items-center justify-between gap-2 py-1 border-b border-slate-100 last:border-0">
+            <div class="min-w-0">
+              <span class="font-semibold text-slate-800">${g.keyword}</span>
+              ${g.exampleHeading ? `<span class="text-[10px] text-slate-400 ml-1.5 truncate">e.g. "${g.exampleHeading}"</span>` : ''}
+            </div>
+            <span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] tabular-nums shrink-0">${g.frequency}×</span>
+          </div>
+        `).join('')
+      : `<p class="text-slate-400">Add competitor domains to calculate H2/H3 content gaps.</p>`;
+  }
+
+  const sugEl = document.getElementById('audit-suggest-body');
+  if (sugEl) {
+    const sugs = snapshot.keyword_suggestions || [];
+    sugEl.innerHTML = sugs.length > 0
+      ? sugs.map(s => `<span class="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200/70 text-[11px]">${s}</span>`).join('')
+      : `<p class="text-slate-400">Enter a keyword above to fetch Google Autocomplete prompts.</p>`;
+  }
+
+  const serpEl = document.getElementById('audit-serp-body');
+  if (serpEl) {
+    const serp = snapshot.serp_results || [];
+    serpEl.innerHTML = serp.length > 0
+      ? serp.map(r => `
+          <div class="p-2 rounded-lg border border-slate-100 hover:bg-slate-50">
+            <div class="flex items-center justify-between gap-2">
+              <a href="${r.url}" target="_blank" rel="noopener noreferrer" class="font-semibold text-slate-900 hover:underline truncate">#${r.rank} ${r.title}</a>
+              <span class="text-[10px] text-slate-400 shrink-0">${r.domain}</span>
+            </div>
+            ${r.snippet ? `<p class="text-[11px] text-slate-500 mt-0.5 line-clamp-2">${r.snippet}</p>` : ''}
+          </div>
+        `).join('')
+      : `<p class="text-slate-400">Enter a keyword above to fetch DuckDuckGo Top 10 organic results.</p>`;
+  }
+}
+
+function sendSuggestedPromptsToAeo() {
+  const snap = getLatestSearchSnapshot();
+  const sugs = snap?.keyword_suggestions || [];
+  switchSearchHubTab('aeo-seo');
+  toggleLiveAeoPanel(true);
+  const pArea = document.getElementById('aeo-live-prompts');
+  if (pArea && sugs.length > 0) {
+    pArea.value = sugs.slice(0, 6).join('\n');
+  }
+  const domEl = document.getElementById('aeo-live-domain');
+  if (domEl && snap?.primaryDomain && !domEl.value.trim()) {
+    domEl.value = snap.primaryDomain;
+  }
+}
+
+function toggleLiveAeoPanel(force = null) {
+  const panel = document.getElementById('live-aeo-panel');
+  if (!panel) return;
+  const show = force === null ? panel.classList.contains('hidden') : Boolean(force);
+  panel.classList.toggle('hidden', !show);
+  if (show) {
+    const savedKey = localStorage.getItem('modu_gemini_key') || '';
+    const keyInput = document.getElementById('aeo-live-apikey');
+    if (keyInput && savedKey && !keyInput.value) keyInput.value = savedKey;
+    const compEl = document.getElementById('aeo-live-competitors');
+    if (compEl && !compEl.value.trim() && Array.isArray(competitorsList) && competitorsList.length > 0) {
+      const domains = competitorsList.map(c => getDomainFromUrl(c.website)).filter(Boolean);
+      if (domains.length > 0) compEl.value = domains.slice(0, 4).join(', ');
+    }
+  }
+}
+
+async function runLiveAeoScan() {
+  const primaryDomain = (document.getElementById('aeo-live-domain')?.value || '').trim();
+  const brandName = (document.getElementById('aeo-live-brand')?.value || '').trim();
+  const competitorDomains = (document.getElementById('aeo-live-competitors')?.value || '').split(',').map(s => s.trim()).filter(Boolean);
+  const geminiApiKey = (document.getElementById('aeo-live-apikey')?.value || '').trim();
+  const prompts = (document.getElementById('aeo-live-prompts')?.value || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  const statusEl = document.getElementById('aeo-live-status');
+  const btn = document.getElementById('aeo-live-run-btn');
+  const resEl = document.getElementById('aeo-live-results');
+
+  if (geminiApiKey) localStorage.setItem('modu_gemini_key', geminiApiKey);
+  if (prompts.length === 0) {
+    if (statusEl) statusEl.textContent = 'Add at least one prompt.';
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Scanning Gemini...';
+  }
+  if (statusEl) statusEl.textContent = `Running ${prompts.length} prompt(s) with Google Search Grounding...`;
+
+  try {
+    const resp = await fetch('/api/aeo-check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ primaryDomain, brandName, competitorDomains, prompts, geminiApiKey })
+    });
+    const data = await resp.json();
+    if (!resp.ok || !data.ok) {
+      if (statusEl) statusEl.textContent = data.error || 'AEO scan failed';
+      return;
+    }
+
+    // Update aeoSeoEntries with live Gemini scores
+    (data.aeo_results || []).forEach(r => {
+      const existing = aeoSeoEntries.find(e => e.query.toLowerCase() === r.prompt.toLowerCase());
+      const citedLabel = r.primaryCited ? 'Cited' : r.primaryMentioned ? 'Mentioned' : 'Not Cited';
+      if (existing) {
+        existing.aeoScore = r.visibilityScore;
+        existing.engine = 'Gemini';
+        existing.cited = citedLabel;
+      } else {
+        aeoSeoEntries.push({
+          id: Date.now() + Math.floor(Math.random() * 1000),
+          query: r.prompt,
+          intent: 'Commercial',
+          aeoScore: r.visibilityScore,
+          seoScore: 0,
+          seoPos: 0,
+          engine: 'Gemini',
+          cited: citedLabel
+        });
+      }
+    });
+
+    renderAeoSeoView();
+    if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+
+    if (resEl) {
+      resEl.classList.remove('hidden');
+      const sovHtml = (data.share_of_voice || []).map(s => `
+        <span class="px-2.5 py-1 rounded-full text-[11px] font-medium ${s.isPrimary ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 text-slate-700'}">
+          ${s.label}: <strong class="tabular-nums">${s.shareOfVoicePct}%</strong> SoV
+        </span>
+      `).join('');
+      const cit = data.citations_summary || { own: 0, competitor: 0, third_party: 0 };
+      resEl.innerHTML = `
+        <div class="flex flex-wrap items-center gap-2">${sovHtml}</div>
+        <div class="text-[11px] text-slate-600">
+          Citations: <strong>${cit.own}</strong> Own · <strong>${cit.competitor}</strong> Competitor · <strong>${cit.third_party}</strong> Third-party
+        </div>
+        <div class="space-y-2">
+          ${(data.aeo_results || []).map(r => `
+            <div class="p-3 rounded-xl bg-white border border-slate-200/80 text-xs space-y-1">
+              <div class="flex items-center justify-between gap-2">
+                <span class="font-semibold text-slate-900">${r.prompt}</span>
+                <span class="tabular-nums font-semibold ${r.primaryCited ? 'text-emerald-600' : r.primaryMentioned ? 'text-amber-600' : 'text-slate-400'}">
+                  ${r.primaryRank ? `#${r.primaryRank} Mention` : 'Not mentioned'} · ${r.citations.length} sources
+                </span>
+              </div>
+              ${r.webSearchQueries?.length ? `<div class="text-[10px] text-slate-400">Gemini Search Queries: ${r.webSearchQueries.join(' · ')}</div>` : ''}
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+    if (statusEl) statusEl.textContent = `Completed (${data.aeo_results.length} prompts)`;
+  } catch (err) {
+    if (statusEl) statusEl.textContent = err?.message || 'Network error';
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Run Live AEO Scan';
+    }
+  }
 }
 
 let reportsYear = '2026';
