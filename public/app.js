@@ -3079,13 +3079,72 @@ function renderBudgetAllocated(channels, yearObj) {
         <td class="py-3 px-4 font-semibold text-slate-900 whitespace-nowrap sticky left-0 bg-white">${ch}</td>
         ${monthCells}
         <td class="py-3 px-3 text-right font-semibold tabular-nums text-slate-900 whitespace-nowrap">${Math.round(rowPlanned).toLocaleString()} NOK</td>
-        <td class="py-3 px-3 text-right tabular-nums text-slate-500 whitespace-nowrap">${pctOfTotal}%</td>
+        <td class="py-2.5 px-3 text-right tabular-nums whitespace-nowrap">
+          <div class="inline-flex items-center justify-end gap-1">
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="0.1"
+              value="${pctOfTotal}"
+              onchange="updateBudgetChannelTotalPct('${escCh}', this.value)"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"
+              class="w-14 text-right bg-transparent hover:bg-slate-50 focus:bg-white border border-transparent focus:border-slate-300 rounded px-1 py-0.5 text-xs font-medium text-slate-700 focus:outline-none tabular-nums"
+            />
+            <span class="text-[11px] text-slate-400">%</span>
+          </div>
+        </td>
         <td class="py-3 px-3 text-right">
           ${renderActionMenuHtml('', `deleteBudgetChannel('${escCh}')`)}
         </td>
       </tr>
     `;
   }).join('');
+}
+
+function updateBudgetChannelTotalPct(channel, pctVal) {
+  const pct = parseFloat(pctVal);
+  if (!budgetData[budgetYear] || !budgetData[budgetYear][channel]) return;
+  if (isNaN(pct) || pct < 0) {
+    renderBudgetView();
+    return;
+  }
+  const caps = ensureMonthlyCaps(budgetYear);
+  const capSum = caps.reduce((a, b) => a + b, 0);
+  const totalAllPlanned = Object.keys(budgetData[budgetYear]).reduce(
+    (sum, ch) => sum + budgetData[budgetYear][ch].planned.reduce((a, b) => a + b, 0),
+    0
+  );
+  const annualBase = budgetTotalByYear[budgetYear] || capSum || totalAllPlanned || 0;
+  if (annualBase <= 0) {
+    renderBudgetView();
+    return;
+  }
+
+  const targetChannelTotal = Math.round(((pct / 100) * annualBase) * 100) / 100;
+  const row = budgetData[budgetYear][channel];
+  const currentRowSum = row.planned.reduce((a, b) => a + b, 0);
+
+  if (currentRowSum > 0) {
+    const ratio = targetChannelTotal / currentRowSum;
+    for (let m = 0; m < 12; m++) {
+      row.planned[m] = Math.round((row.planned[m] * ratio) * 100) / 100;
+    }
+  } else if (capSum > 0) {
+    for (let m = 0; m < 12; m++) {
+      row.planned[m] = Math.round(((caps[m] / capSum) * targetChannelTotal) * 100) / 100;
+    }
+  } else {
+    const perMonth = Math.round((targetChannelTotal / 12) * 100) / 100;
+    for (let m = 0; m < 12; m++) {
+      row.planned[m] = perMonth;
+    }
+  }
+
+  syncAnnualBudgetWithChannels(budgetYear);
+  renderBudgetView();
+  syncBudgetDependents();
+  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
 }
 
 function renderBudgetActual(channels, yearObj) {
