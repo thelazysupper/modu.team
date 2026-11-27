@@ -1693,10 +1693,15 @@ function switchSearchHubTab(tab = 'aeo-seo') {
     if (typeof prefillAuditCompetitors === 'function') prefillAuditCompetitors();
     const latestSnap = typeof getLatestSearchSnapshot === 'function' ? getLatestSearchSnapshot() : null;
     if (latestSnap && typeof renderSeoAuditResults === 'function') renderSeoAuditResults(latestSnap);
+    const primDom = (document.getElementById('audit-primary-domain')?.value || '').trim();
+    if (primDom && (!latestSnap || latestSnap.dateKey !== getTodayDateKey()) && typeof runTechnicalSeoAudit === 'function') {
+      runTechnicalSeoAudit({ autoDaily: true });
+    }
     syncRouteUrl('/apps/seo-audit');
   } else {
     activeSec?.classList.remove('hidden');
     renderAeoSeoView();
+    if (typeof renderAeoTrendChart === 'function') renderAeoTrendChart();
     syncRouteUrl('/aeo-seo');
   }
   setActiveNavHighlight('side-app-aeo-seo');
@@ -6850,21 +6855,258 @@ function renderAeoSeoView() {
   }).join('');
 }
 
-let searchReportRuns = [];
+const SEARCH_RUNS_STORAGE_KEY = 'modu_search_report_runs_v1';
+const AEO_RUNS_STORAGE_KEY = 'modu_aeo_report_runs_v1';
+
+function loadStoredRuns(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveStoredRuns(key, arr) {
+  try {
+    localStorage.setItem(key, JSON.stringify((arr || []).slice(-30)));
+  } catch {}
+}
+
+let searchReportRuns = loadStoredRuns(SEARCH_RUNS_STORAGE_KEY);
+let aeoReportRuns = loadStoredRuns(AEO_RUNS_STORAGE_KEY);
+
+function getTodayDateKey() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 function getLatestSearchSnapshot() {
   return searchReportRuns.length > 0 ? searchReportRuns[searchReportRuns.length - 1] : null;
+}
+
+function computeDomainReadinessParts(d) {
+  if (!d || d.error) return { titleMeta: 0, ssr: 0, bots: 0, llms: 0, schemas: 0, overall: 0 };
+  const op = d.onPage || {};
+  const titleMeta = (op.titleLength >= 20 && op.titleLength <= 65 ? 50 : op.titleLength > 0 ? 25 : 0) +
+                    (op.descriptionLength >= 50 && op.descriptionLength <= 165 ? 50 : op.descriptionLength > 0 ? 25 : 0);
+  const ssr = op.isLikelyCSR ? 20 : op.ssrBodyChars >= 1000 ? 100 : op.ssrBodyChars >= 300 ? 75 : 0;
+  const botsObj = d.aiBots || {};
+  const botEntries = Object.values(botsObj);
+  const allowedCnt = botEntries.filter(v => v === 'allowed').length;
+  const bots = botEntries.length > 0 ? Math.round((allowedCnt / botEntries.length) * 100) : 100;
+  const llms = d.llmsTxt?.present ? (d.llmsFullTxt?.present ? 100 : 75) : 0;
+  const schemaCnt = (op.schemas || []).length;
+  const schemas = Math.min(100, schemaCnt * 35);
+  const overall = Math.round(titleMeta * 0.2 + ssr * 0.25 + bots * 0.25 + llms * 0.15 + schemas * 0.15);
+  return { titleMeta, ssr, bots, llms, schemas, overall };
+}
+
+function drawMultiLineChart(canvasId, labels, seriesList, opts = {}) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const maxVal = opts.maxVal || 100;
+  const suffix = opts.suffix !== undefined ? opts.suffix : '%';
+  canvas._lineMeta = { labels, seriesList, maxVal, suffix, hoverIdx: -1 };
+
+  const renderLines = (hoverIdx = -1) => {
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    const width = Math.max(300, Math.floor(rect.width || 520));
+    const height = Number(canvas.getAttribute('height')) || 210;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    canvas.style.width = '100%';
+    canvas.style.height = height + 'px';
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, width, height);
+
+    const padL = 36, padR = 16, padT = 16, padB = 28;
+    const plotW = width - padL - padR;
+    const plotH = height - padT - padB;
+    const uiFont = '-apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif';
+    canvas._lineMeta.padL = padL;
+    canvas._lineMeta.plotW = plotW;
+
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = `10px ${uiFont}`;
+    [0, 0.5, 1].forEach(frac => {
+      const y = padT + plotH - frac * plotH;
+      ctx.beginPath();
+      ctx.moveTo(padL, y);
+      ctx.lineTo(width - padR, y);
+      ctx.stroke();
+      ctx.fillText(`${Math.round(maxVal * frac)}${suffix}`, 4, y + 3);
+    });
+    ctx.setLineDash([]);
+
+    const n = Math.max(1, labels.length);
+    const getX = i => (n === 1 ? padL + plotW / 2 : padL + (i / (n - 1)) * plotW);
+    const getY = v => padT + plotH - (Math.min(maxVal, Math.max(0, v)) / maxVal) * plotH;
+
+    if (hoverIdx >= 0 && hoverIdx < n) {
+      const hx = getX(hoverIdx);
+      ctx.strokeStyle = '#cbd5e1';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(hx, padT);
+      ctx.lineTo(hx, padT + plotH);
+      ctx.stroke();
+    }
+
+    seriesList.forEach((s, sIdx) => {
+      const pts = (s.values || []).map((v, i) => ({ x: getX(i), y: getY(v), v }));
+      if (pts.length === 0) return;
+
+      if (sIdx === 0 && pts.length > 1) {
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, padT + plotH);
+        pts.forEach(p => ctx.lineTo(p.x, p.y));
+        ctx.lineTo(pts[pts.length - 1].x, padT + plotH);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.06)';
+        ctx.fill();
+      }
+
+      ctx.strokeStyle = s.color;
+      ctx.lineWidth = sIdx === 0 ? 2.5 : 1.8;
+      ctx.beginPath();
+      pts.forEach((p, i) => {
+        if (i === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+      });
+      ctx.stroke();
+
+      pts.forEach((p, i) => {
+        ctx.fillStyle = i === hoverIdx ? '#ffffff' : s.color;
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, i === hoverIdx ? 4.5 : 3, 0, Math.PI * 2);
+        ctx.fill();
+        if (i === hoverIdx) ctx.stroke();
+      });
+    });
+
+    ctx.fillStyle = '#64748b';
+    ctx.font = `10px ${uiFont}`;
+    ctx.textAlign = 'center';
+    labels.forEach((lbl, i) => {
+      const short = String(lbl).length > 12 ? String(lbl).slice(0, 11) + '…' : String(lbl);
+      ctx.fillText(short, getX(i), height - 8);
+    });
+    ctx.textAlign = 'left';
+  };
+
+  canvas._renderLines = renderLines;
+  renderLines(-1);
+
+  if (!canvas._hasLineHover) {
+    canvas._hasLineHover = true;
+    canvas.addEventListener('mousemove', e => {
+      const meta = canvas._lineMeta;
+      if (!meta || !meta.labels?.length) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const n = meta.labels.length;
+      let idx = 0;
+      if (n > 1) {
+        const rel = Math.max(0, Math.min(1, (x - meta.padL) / Math.max(1, meta.plotW)));
+        idx = Math.round(rel * (n - 1));
+      }
+      if (meta.hoverIdx !== idx) {
+        meta.hoverIdx = idx;
+        canvas._renderLines?.(idx);
+      }
+      let html = `<div class="font-semibold text-white mb-1">${meta.labels[idx]}</div>`;
+      meta.seriesList.forEach(s => {
+        const v = s.values?.[idx] ?? 0;
+        html += `<div class="flex items-center justify-between gap-4"><span style="color:${s.color}">${s.label}</span><span class="tabular-nums font-medium">${Math.round(v)}${meta.suffix}</span></div>`;
+      });
+      showChartTooltip(e.clientX, e.clientY, html);
+    });
+    canvas.addEventListener('mouseleave', () => {
+      if (canvas._lineMeta && canvas._lineMeta.hoverIdx !== -1) {
+        canvas._lineMeta.hoverIdx = -1;
+        canvas._renderLines?.(-1);
+      }
+      hideChartTooltip();
+    });
+  }
+}
+
+function renderAuditCompetitorChips() {
+  const wrap = document.getElementById('audit-competitor-chips');
+  if (!wrap) return;
+  const comps = (competitorsList || [])
+    .map(c => ({ name: c.name, domain: getDomainFromUrl(c.website) }))
+    .filter(c => c.domain);
+
+  if (comps.length === 0) {
+    wrap.innerHTML = `<span class="text-[11px] text-slate-400">Add websites in Competitor Analysis to select them here.</span>`;
+    return;
+  }
+
+  const inputEl = document.getElementById('audit-competitor-domains');
+  const currentSet = new Set((inputEl?.value || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean));
+  wrap.innerHTML = comps.map(c => {
+    const active = currentSet.has(c.domain.toLowerCase());
+    return `<button type="button" onclick="toggleAuditCompetitorChip('${c.domain}')" class="px-2.5 py-0.5 rounded-full text-[11px] font-medium border transition-colors ${active ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'}">${c.name} (${c.domain})</button>`;
+  }).join('') + `<button type="button" onclick="loadAllAuditCompetitors()" class="px-2 py-0.5 rounded-full text-[11px] font-medium text-slate-500 hover:text-slate-900 underline underline-offset-2">Use all</button>`;
+}
+
+function toggleAuditCompetitorChip(domain) {
+  const inputEl = document.getElementById('audit-competitor-domains');
+  if (!inputEl) return;
+  const list = inputEl.value.split(',').map(s => s.trim()).filter(Boolean);
+  const idx = list.findIndex(d => d.toLowerCase() === domain.toLowerCase());
+  if (idx !== -1) list.splice(idx, 1);
+  else list.push(domain);
+  inputEl.value = list.join(', ');
+  renderAuditCompetitorChips();
+}
+
+function loadAllAuditCompetitors() {
+  const inputEl = document.getElementById('audit-competitor-domains');
+  if (!inputEl) return;
+  const domains = (competitorsList || []).map(c => getDomainFromUrl(c.website)).filter(Boolean);
+  inputEl.value = Array.from(new Set(domains)).slice(0, 5).join(', ');
+  renderAuditCompetitorChips();
 }
 
 function prefillAuditCompetitors() {
   const compEl = document.getElementById('audit-competitor-domains');
   if (compEl && !compEl.value.trim() && Array.isArray(competitorsList) && competitorsList.length > 0) {
     const domains = competitorsList.map(c => getDomainFromUrl(c.website)).filter(Boolean);
-    if (domains.length > 0) compEl.value = domains.slice(0, 4).join(', ');
+    if (domains.length > 0) compEl.value = Array.from(new Set(domains)).slice(0, 4).join(', ');
+  }
+  const primEl = document.getElementById('audit-primary-domain');
+  const latest = getLatestSearchSnapshot();
+  if (primEl && !primEl.value.trim() && latest?.primaryDomain) {
+    primEl.value = latest.primaryDomain;
+  }
+  renderAuditCompetitorChips();
+}
+
+function updateAuditDailyBadge(snapshot) {
+  const badge = document.getElementById('audit-daily-badge');
+  if (!badge) return;
+  const today = getTodayDateKey();
+  if (snapshot && snapshot.dateKey === today) {
+    badge.textContent = 'Synced today · 1×/day cache';
+    badge.className = 'px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/80';
+  } else {
+    badge.textContent = 'Auto-sync: 1×/day';
+    badge.className = 'px-2.5 py-1 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200/70';
   }
 }
 
-async function runTechnicalSeoAudit() {
+async function runTechnicalSeoAudit(opts = {}) {
+  const force = Boolean(opts.force);
   const primaryEl = document.getElementById('audit-primary-domain');
   const compEl = document.getElementById('audit-competitor-domains');
   const kwEl = document.getElementById('audit-keyword');
@@ -6874,16 +7116,35 @@ async function runTechnicalSeoAudit() {
 
   const primaryDomain = (primaryEl?.value || '').trim();
   if (!primaryDomain) {
-    primaryEl?.focus();
-    if (statusEl) statusEl.textContent = 'Enter a primary domain first.';
+    if (!opts.autoDaily) primaryEl?.focus();
+    if (statusEl && !opts.autoDaily) statusEl.textContent = 'Enter a primary domain first.';
     return;
+  }
+
+  const competitorDomains = (compEl?.value || '').split(',').map(s => s.trim()).filter(Boolean);
+  const keyword = (kwEl?.value || '').trim();
+  const today = getTodayDateKey();
+
+  // 1x/day cache check
+  if (!force) {
+    const cachedToday = [...searchReportRuns].reverse().find(r =>
+      r.dateKey === today &&
+      String(r.primaryDomain || '').toLowerCase() === primaryDomain.toLowerCase() &&
+      String(r.keyword || '') === keyword
+    );
+    if (cachedToday) {
+      renderSeoAuditResults(cachedToday);
+      updateAuditDailyBadge(cachedToday);
+      if (statusEl) statusEl.textContent = 'Loaded today’s cached audit (fetches 1×/day). Click Force Refresh to re-crawl.';
+      return;
+    }
   }
 
   if (btn) {
     btn.disabled = true;
     btn.textContent = 'Auditing...';
   }
-  if (statusEl) statusEl.textContent = 'Fetching HTML, robots.txt, llms.txt, sitemap.xml & schemas...';
+  if (statusEl) statusEl.textContent = 'Crawling primary domain & competitors...';
 
   try {
     const resp = await fetch('/api/seo-audit', {
@@ -6891,8 +7152,8 @@ async function runTechnicalSeoAudit() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         primaryDomain,
-        competitorDomains: (compEl?.value || '').split(',').map(s => s.trim()).filter(Boolean),
-        keyword: (kwEl?.value || '').trim(),
+        competitorDomains,
+        keyword,
         runPageSpeed: Boolean(psiEl?.checked)
       })
     });
@@ -6903,19 +7164,25 @@ async function runTechnicalSeoAudit() {
     }
 
     const snapshot = {
+      dateKey: today,
       created_at: data.created_at,
       primaryDomain,
+      keyword,
       seo_comparison: data.seo_comparison || [],
       missing_schemas: data.missing_schemas || [],
       content_gaps: data.content_gaps || [],
       keyword_suggestions: data.keyword_suggestions || [],
       serp_results: data.serp_results || []
     };
+
+    // Keep one snapshot per day (replace today's entry for same primaryDomain)
+    searchReportRuns = searchReportRuns.filter(r => !(r.dateKey === today && String(r.primaryDomain || '').toLowerCase() === primaryDomain.toLowerCase()));
     searchReportRuns.push(snapshot);
-    if (searchReportRuns.length > 10) searchReportRuns = searchReportRuns.slice(-10);
+    saveStoredRuns(SEARCH_RUNS_STORAGE_KEY, searchReportRuns);
 
     renderSeoAuditResults(snapshot);
-    if (statusEl) statusEl.textContent = `Completed (${snapshot.seo_comparison.length} domain${snapshot.seo_comparison.length === 1 ? '' : 's'})`;
+    updateAuditDailyBadge(snapshot);
+    if (statusEl) statusEl.textContent = `Synced ${snapshot.seo_comparison.length} domain(s) · cached for today`;
   } catch (err) {
     if (statusEl) statusEl.textContent = err?.message || 'Network error';
   } finally {
@@ -6930,21 +7197,61 @@ function renderSeoAuditResults(snapshot) {
   const wrap = document.getElementById('audit-results-container');
   if (!wrap || !snapshot) return;
   wrap.classList.remove('hidden');
+  updateAuditDailyBadge(snapshot);
 
   const timeEl = document.getElementById('audit-snapshot-time');
   if (timeEl && snapshot.created_at) {
     timeEl.textContent = `Snapshot: ${new Date(snapshot.created_at).toLocaleString()}`;
   }
 
+  const palette = ['#0f172a', '#7c3aed', '#10b981', '#0ea5e9', '#f59e0b', '#f43f5e'];
+  const domains = snapshot.seo_comparison || [];
+
+  // 1. Competitor Readiness Comparison Line Graph
+  const compareSeries = domains.map((d, idx) => {
+    const p = computeDomainReadinessParts(d);
+    return {
+      label: d.domain,
+      color: palette[idx % palette.length],
+      values: [p.titleMeta, p.ssr, p.bots, p.llms, p.schemas, p.overall]
+    };
+  });
+  const cmpLegendEl = document.getElementById('audit-compare-legend');
+  if (cmpLegendEl) {
+    cmpLegendEl.innerHTML = compareSeries.map(s => `<span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full" style="background:${s.color}"></span>${s.label}</span>`).join('');
+  }
+  drawMultiLineChart('auditCompareCanvas', ['Title/Meta', 'SSR', 'AI Bots', 'llms.txt', 'Schemas', 'Overall'], compareSeries, { maxVal: 100, suffix: '' });
+
+  // 2. Daily Trend Line Graph across searchReportRuns
+  const domainNames = domains.map(d => d.domain);
+  const runsForTrend = searchReportRuns.slice(-14);
+  const trendLabels = runsForTrend.map(r => (r.dateKey || (r.created_at || '').slice(0, 10)).slice(5));
+  const trendSeries = domainNames.map((dom, idx) => ({
+    label: dom,
+    color: palette[idx % palette.length],
+    values: runsForTrend.map(r => {
+      const found = (r.seo_comparison || []).find(x => x.domain === dom);
+      return found ? computeDomainReadinessParts(found).overall : 0;
+    })
+  }));
+  const trLegendEl = document.getElementById('audit-trend-legend');
+  if (trLegendEl) {
+    trLegendEl.innerHTML = trendSeries.map(s => `<span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full" style="background:${s.color}"></span>${s.label}</span>`).join('');
+  }
+  drawMultiLineChart('auditTrendCanvas', trendLabels.length ? trendLabels : ['Today'], trendSeries, { maxVal: 100, suffix: '' });
+
+  // 3. Domain Comparison Table (sorted highest readiness first, keeping Primary highlighted)
   const tbody = document.getElementById('audit-domains-tbody');
   if (tbody) {
-    tbody.innerHTML = (snapshot.seo_comparison || []).map((d, idx) => {
+    const sortedDomains = [...domains].sort((a, b) => computeDomainReadinessParts(b).overall - computeDomainReadinessParts(a).overall);
+    tbody.innerHTML = sortedDomains.map(d => {
       if (d.error) {
-        return `<tr><td class="py-3 px-4 font-semibold text-slate-900">${d.domain}</td><td colspan="6" class="py-3 px-4 text-rose-600">${d.error}</td></tr>`;
+        return `<tr><td class="py-3 px-4 font-semibold text-slate-900">${d.domain}</td><td colspan="7" class="py-3 px-4 text-rose-600">${d.error}</td></tr>`;
       }
+      const isPrimary = d.domain === domains[0]?.domain;
       const op = d.onPage || {};
+      const parts = computeDomainReadinessParts(d);
       const titleOk = op.titleLength >= 20 && op.titleLength <= 65;
-      const descOk = op.descriptionLength >= 50 && op.descriptionLength <= 165;
       const ssrBadge = op.isLikelyCSR
         ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-700">CSR (&lt;300 chars)</span>`
         : `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700">SSR (${op.ssrBodyChars.toLocaleString()} chars)</span>`;
@@ -6967,12 +7274,15 @@ function renderSeoAuditResults(snapshot) {
       return `
         <tr class="hover:bg-slate-50/70 align-top">
           <td class="py-3 px-4">
-            <div class="font-semibold text-slate-900">${d.domain}${idx === 0 ? ' <span class="ml-1 px-1.5 py-0.5 rounded bg-slate-900 text-white text-[9px]">Primary</span>' : ''}</div>
+            <div class="font-semibold text-slate-900">${d.domain}${isPrimary ? ' <span class="ml-1 px-1.5 py-0.5 rounded bg-slate-900 text-white text-[9px]">Primary</span>' : ''}</div>
             <div class="text-[10px] text-slate-400 mt-0.5">HTTP ${op.status || '—'} · ${op.missingAltImages || 0}/${op.totalImages || 0} missing alt</div>
           </td>
-          <td class="py-3 px-4 max-w-[220px]">
+          <td class="py-3 px-4 tabular-nums">
+            <span class="px-2 py-0.5 rounded-full text-[11px] font-bold ${parts.overall >= 75 ? 'bg-emerald-100 text-emerald-800' : parts.overall >= 50 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'}">${parts.overall}/100</span>
+          </td>
+          <td class="py-3 px-4 max-w-[200px]">
             <div class="font-medium text-slate-800 truncate" title="${(op.title || '').replace(/"/g, '&quot;')}">${op.title || '—'}</div>
-            <div class="text-[10px] ${titleOk ? 'text-emerald-600' : 'text-amber-600'}">Title: ${op.titleLength || 0} chars · Meta: ${op.descriptionLength || 0} chars</div>
+            <div class="text-[10px] ${titleOk ? 'text-emerald-600' : 'text-amber-600'}">Title: ${op.titleLength || 0} · Meta: ${op.descriptionLength || 0}</div>
           </td>
           <td class="py-3 px-4">${ssrBadge}<div class="text-[10px] text-slate-400 mt-0.5">${op.ssrBodyWords || 0} words</div></td>
           <td class="py-3 px-4">${llmsBadge}${llmsFull}</td>
@@ -6984,26 +7294,35 @@ function renderSeoAuditResults(snapshot) {
     }).join('');
   }
 
+  // 4. Schema.org Matrix Table + Missing Types
   const schemasEl = document.getElementById('audit-schemas-body');
   if (schemasEl) {
     const missing = snapshot.missing_schemas || [];
-    const domainSchemas = (snapshot.seo_comparison || []).map(d => `
-      <div class="flex items-start justify-between gap-2 py-1.5 border-b border-slate-100 last:border-0">
-        <span class="font-medium text-slate-800">${d.domain}</span>
-        <div class="flex flex-wrap gap-1 justify-end">
-          ${(d.onPage?.schemas || []).length > 0
-            ? d.onPage.schemas.map(s => `<span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px]">${s}</span>`).join('')
-            : `<span class="text-slate-400">None</span>`}
-        </div>
-      </div>
-    `).join('');
+    const allSchemaTypes = Array.from(new Set(domains.flatMap(d => d.onPage?.schemas || [])));
+    const matrixHtml = allSchemaTypes.length > 0
+      ? `<table class="w-full text-left border-collapse text-[11px]">
+           <thead><tr class="border-b border-slate-200 text-slate-500"><th class="py-1.5 pr-3 font-medium">Domain</th>${allSchemaTypes.map(t => `<th class="py-1.5 px-2 font-medium text-center">${t}</th>`).join('')}</tr></thead>
+           <tbody class="divide-y divide-slate-100">
+             ${domains.map(d => `
+               <tr>
+                 <td class="py-2 pr-3 font-semibold text-slate-800 whitespace-nowrap">${d.domain}</td>
+                 ${allSchemaTypes.map(t => {
+                   const has = (d.onPage?.schemas || []).includes(t);
+                   return `<td class="py-2 px-2 text-center">${has ? '<span class="text-emerald-600 font-bold">✓</span>' : '<span class="text-slate-300">—</span>'}</td>`;
+                 }).join('')}
+               </tr>
+             `).join('')}
+           </tbody>
+         </table>`
+      : `<p class="text-slate-400">No JSON-LD schemas detected yet.</p>`;
+
     const missingHtml = missing.length > 0
       ? `<div class="p-2.5 rounded-xl bg-amber-50 border border-amber-200/70 text-amber-900">
            <div class="font-semibold text-[11px] mb-1">Missing on primary domain (used by competitors):</div>
            <div class="flex flex-wrap gap-1">${missing.map(m => `<span class="px-2 py-0.5 rounded bg-white border border-amber-200 text-[10px] font-medium">${m.schema} (${m.usedBy.join(', ')})</span>`).join('')}</div>
          </div>`
       : `<div class="text-[11px] text-emerald-700">No missing Schema.org types vs. audited competitors.</div>`;
-    schemasEl.innerHTML = missingHtml + domainSchemas;
+    schemasEl.innerHTML = missingHtml + matrixHtml;
   }
 
   const gapsEl = document.getElementById('audit-gaps-body');
@@ -7047,6 +7366,34 @@ function renderSeoAuditResults(snapshot) {
   }
 }
 
+function renderAeoTrendChart() {
+  const card = document.getElementById('aeo-trend-card');
+  const legendEl = document.getElementById('aeo-trend-legend');
+  if (!card) return;
+  if (!aeoReportRuns || aeoReportRuns.length === 0) {
+    card.classList.add('hidden');
+    return;
+  }
+  card.classList.remove('hidden');
+
+  const palette = ['#7c3aed', '#10b981', '#0ea5e9', '#f59e0b', '#f43f5e'];
+  const runs = aeoReportRuns.slice(-14);
+  const labels = runs.map(r => (r.dateKey || (r.created_at || '').slice(0, 10)).slice(5));
+  const entityNames = Array.from(new Set(runs.flatMap(r => (r.share_of_voice || []).map(s => s.label))));
+  const series = entityNames.map((lbl, idx) => ({
+    label: lbl,
+    color: palette[idx % palette.length],
+    values: runs.map(r => {
+      const f = (r.share_of_voice || []).find(s => s.label === lbl);
+      return f ? f.shareOfVoicePct : 0;
+    })
+  }));
+  if (legendEl) {
+    legendEl.innerHTML = series.map(s => `<span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full" style="background:${s.color}"></span>${s.label}</span>`).join('');
+  }
+  drawMultiLineChart('aeoTrendCanvas', labels, series, { maxVal: 100, suffix: '%' });
+}
+
 function sendSuggestedPromptsToAeo() {
   const snap = getLatestSearchSnapshot();
   const sugs = snap?.keyword_suggestions || [];
@@ -7074,7 +7421,7 @@ function toggleLiveAeoPanel(force = null) {
     const compEl = document.getElementById('aeo-live-competitors');
     if (compEl && !compEl.value.trim() && Array.isArray(competitorsList) && competitorsList.length > 0) {
       const domains = competitorsList.map(c => getDomainFromUrl(c.website)).filter(Boolean);
-      if (domains.length > 0) compEl.value = domains.slice(0, 4).join(', ');
+      if (domains.length > 0) compEl.value = Array.from(new Set(domains)).slice(0, 4).join(', ');
     }
   }
 }
@@ -7113,7 +7460,18 @@ async function runLiveAeoScan() {
       return;
     }
 
-    // Update aeoSeoEntries with live Gemini scores
+    const today = getTodayDateKey();
+    const runSnap = {
+      dateKey: today,
+      created_at: data.created_at,
+      share_of_voice: data.share_of_voice || [],
+      citations_summary: data.citations_summary || { own: 0, competitor: 0, third_party: 0 },
+      aeo_results: data.aeo_results || []
+    };
+    aeoReportRuns = aeoReportRuns.filter(r => r.dateKey !== today);
+    aeoReportRuns.push(runSnap);
+    saveStoredRuns(AEO_RUNS_STORAGE_KEY, aeoReportRuns);
+
     (data.aeo_results || []).forEach(r => {
       const existing = aeoSeoEntries.find(e => e.query.toLowerCase() === r.prompt.toLowerCase());
       const citedLabel = r.primaryCited ? 'Cited' : r.primaryMentioned ? 'Mentioned' : 'Not Cited';
@@ -7136,6 +7494,7 @@ async function runLiveAeoScan() {
     });
 
     renderAeoSeoView();
+    renderAeoTrendChart();
     if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
 
     if (resEl) {

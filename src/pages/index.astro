@@ -1944,14 +1944,20 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
             <span class="font-semibold text-slate-900">SEO &amp; AI Readiness Audit</span>
           </div>
 
-          <button type="button" onclick="runTechnicalSeoAudit()" id="audit-run-btn" class="h-8 px-3.5 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium flex items-center gap-1.5 transition-colors">
-            <span>Run Live Audit</span>
-          </button>
+          <div class="flex flex-wrap items-center gap-2">
+            <span id="audit-daily-badge" class="px-2.5 py-1 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200/70">Auto-sync: 1×/day</span>
+            <button type="button" onclick="runTechnicalSeoAudit({ force: false })" id="audit-run-btn" class="h-8 px-3.5 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium flex items-center gap-1.5 transition-colors">
+              <span>Run Live Audit</span>
+            </button>
+            <button type="button" onclick="runTechnicalSeoAudit({ force: true })" title="Bypass daily cache and fetch live now" class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium transition-colors">
+              Force Refresh
+            </button>
+          </div>
         </div>
 
         <div class="space-y-1">
           <h2 class="text-xl font-bold tracking-tight text-slate-900">Technical SEO &amp; AI Readiness</h2>
-          <p class="text-xs text-slate-500">Server-side crawl of HTML, SSR vs. CSR, robots.txt AI bots, llms.txt, Schema.org JSON-LD, PageSpeed, Google Suggest &amp; SERP.</p>
+          <p class="text-xs text-slate-500">Server-side crawl synced 1×/day with your Competitor Analysis domains.</p>
         </div>
 
         <!-- AUDIT INPUT BAR -->
@@ -1970,6 +1976,10 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
               <input id="audit-keyword" type="text" placeholder="e.g. lagersystem" class="w-full h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400" />
             </div>
           </div>
+          <div id="audit-competitor-chips-wrap" class="flex flex-wrap items-center gap-1.5 pt-1">
+            <span class="text-[11px] text-slate-400 mr-1">From Competitors:</span>
+            <div id="audit-competitor-chips" class="flex flex-wrap items-center gap-1.5"></div>
+          </div>
           <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
             <label class="inline-flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
               <input id="audit-include-psi" type="checkbox" class="rounded border-slate-300" />
@@ -1980,6 +1990,25 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
         </div>
 
         <div id="audit-results-container" class="hidden space-y-6">
+          <!-- VISUAL COMPARISON & TREND LINE GRAPHS -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <div class="rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-3">
+              <div class="flex items-center justify-between gap-2 pb-2 border-b border-slate-200/70">
+                <h3 class="text-sm font-semibold text-slate-900">Competitor Readiness Comparison</h3>
+                <div id="audit-compare-legend" class="flex flex-wrap items-center gap-2.5 text-[11px] text-slate-600"></div>
+              </div>
+              <canvas id="auditCompareCanvas" height="210" class="w-full"></canvas>
+            </div>
+
+            <div class="rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-3">
+              <div class="flex items-center justify-between gap-2 pb-2 border-b border-slate-200/70">
+                <h3 class="text-sm font-semibold text-slate-900">Daily Readiness Trend</h3>
+                <div id="audit-trend-legend" class="flex flex-wrap items-center gap-2.5 text-[11px] text-slate-600"></div>
+              </div>
+              <canvas id="auditTrendCanvas" height="210" class="w-full"></canvas>
+            </div>
+          </div>
+
           <!-- DOMAIN COMPARISON TABLE -->
           <div class="rounded-2xl border border-slate-200/80 bg-white overflow-hidden card-shadow">
             <div class="px-5 py-3.5 border-b border-slate-200/70 flex items-center justify-between">
@@ -1991,6 +2020,7 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
                 <thead>
                   <tr class="border-b border-slate-200/80 bg-[#fbfcfd] text-slate-500">
                     <th class="py-3 px-4 font-medium">Domain</th>
+                    <th class="py-3 px-4 font-medium">Readiness</th>
                     <th class="py-3 px-4 font-medium">Title / Meta</th>
                     <th class="py-3 px-4 font-medium">SSR Check</th>
                     <th class="py-3 px-4 font-medium">llms.txt</th>
@@ -2004,11 +2034,11 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
             </div>
           </div>
 
-          <!-- SCHEMAS + CONTENT GAPS -->
+          <!-- SCHEMA MATRIX TABLE + CONTENT GAPS -->
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <div class="rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-3">
-              <h3 class="text-sm font-semibold text-slate-900">Schema.org (JSON-LD) &amp; Missing Types</h3>
-              <div id="audit-schemas-body" class="space-y-2.5 text-xs"></div>
+              <h3 class="text-sm font-semibold text-slate-900">Schema.org Matrix &amp; Missing Types</h3>
+              <div id="audit-schemas-body" class="space-y-2.5 text-xs overflow-x-auto"></div>
             </div>
             <div class="rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-3">
               <h3 class="text-sm font-semibold text-slate-900">Competitor Content Gaps (H2/H3)</h3>
@@ -2106,6 +2136,14 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
             <button type="button" id="aeo-live-run-btn" onclick="runLiveAeoScan()" class="h-8 px-4 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium">Run Live AEO Scan</button>
           </div>
           <div id="aeo-live-results" class="hidden space-y-3 pt-2 border-t border-slate-200/70"></div>
+        </div>
+
+        <div id="aeo-trend-card" class="hidden rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200/70">
+            <h3 class="text-sm font-semibold text-slate-900">AEO Share of Voice &amp; Daily Trend</h3>
+            <div id="aeo-trend-legend" class="flex flex-wrap items-center gap-3 text-[11px] text-slate-600"></div>
+          </div>
+          <canvas id="aeoTrendCanvas" height="200" class="w-full"></canvas>
         </div>
 
         <!-- CHART ON TOP -->
