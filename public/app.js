@@ -4143,6 +4143,8 @@ function drawBudgetChart(monthlyPlanned, monthlyActual) {
     const height = 200;
     canvas.width = width * dpr;
     canvas.height = height * dpr;
+    canvas.style.width = '100%';
+    canvas.style.height = height + 'px';
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, width, height);
 
@@ -5868,6 +5870,8 @@ function drawLeadsStageChart() {
     const height = 200;
     canvas.width = width * dpr;
     canvas.height = height * dpr;
+    canvas.style.width = '100%';
+    canvas.style.height = height + 'px';
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, width, height);
 
@@ -6352,6 +6356,8 @@ function drawCompetitorsChart(rows) {
     const height = 200;
     canvas.width = width * dpr;
     canvas.height = height * dpr;
+    canvas.style.width = '100%';
+    canvas.style.height = height + 'px';
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, width, height);
 
@@ -6679,6 +6685,8 @@ function drawAeoSeoChart(rows) {
     const height = 200;
     canvas.width = width * dpr;
     canvas.height = height * dpr;
+    canvas.style.width = '100%';
+    canvas.style.height = height + 'px';
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, width, height);
 
