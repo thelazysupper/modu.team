@@ -5005,45 +5005,68 @@ function drawLeadsStageChart() {
 }
 
 function renderLeadsView() {
-  drawLeadsStageChart();
-
   const emptyEl = document.getElementById('leads-empty-state');
   const boardEl = document.getElementById('leads-kanban-board');
-  const pipeBar = document.getElementById('leads-pipeline-bar');
+  const summaryEl = document.getElementById('leads-pipeline-summary');
   if (leadStages.length === 0) {
     emptyEl.classList.remove('hidden');
     boardEl.classList.add('hidden');
-    pipeBar?.classList.add('hidden');
+    summaryEl?.classList.add('hidden');
     return;
   }
   emptyEl.classList.add('hidden');
   boardEl.classList.remove('hidden');
+  summaryEl?.classList.remove('hidden');
 
   const shades = ['bg-[#7c3aed]', 'bg-[#10b981]', 'bg-[#0ea5e9]', 'bg-[#f59e0b]', 'bg-[#f43f5e]'];
   const shadeHex = ['#7c3aed', '#10b981', '#0ea5e9', '#f59e0b', '#f43f5e'];
-  if (pipeBar) {
-    if (leadEntries.length === 0) {
-      pipeBar.classList.add('hidden');
+
+  const totalDeals = leadEntries.length;
+  const totalAmount = leadEntries.reduce((acc, l) => acc + (l.value || 0), 0);
+  const kpiAmountEl = document.getElementById('leads-kpi-amount');
+  const kpiCountEl = document.getElementById('leads-kpi-count');
+  const kpiCountSubEl = document.getElementById('leads-kpi-count-sub');
+  const pieMetaEl = document.getElementById('leads-pipeline-pie-meta');
+  if (kpiAmountEl) kpiAmountEl.textContent = `${Math.round(totalAmount).toLocaleString()} NOK`;
+  if (kpiCountEl) kpiCountEl.textContent = String(totalDeals);
+  if (kpiCountSubEl) kpiCountSubEl.textContent = `Across ${leadStages.length} stage${leadStages.length === 1 ? '' : 's'}`;
+  if (pieMetaEl) pieMetaEl.textContent = `${totalDeals} deal${totalDeals === 1 ? '' : 's'}`;
+
+  const pieSegments = leadStages.map((s, idx) => {
+    const stageLeads = leadEntries.filter(l => l.stageId === s.id);
+    const stageVal = stageLeads.reduce((acc, l) => acc + (l.value || 0), 0);
+    return {
+      label: s.name,
+      value: stageLeads.length,
+      stageVal,
+      color: shadeHex[idx % shadeHex.length]
+    };
+  }).filter(seg => seg.value > 0);
+
+  drawIntegrationsPieChart(pieSegments, 'leadsPipelinePieChart');
+
+  const pieLegendEl = document.getElementById('leads-pipeline-pie-legend');
+  if (pieLegendEl) {
+    if (totalDeals === 0) {
+      pieLegendEl.innerHTML = `<p class="text-xs text-slate-400">Add leads to the Kanban board above to see pipeline distribution.</p>`;
     } else {
-      pipeBar.classList.remove('hidden');
-      document.getElementById('leads-pipeline-bar-meta').textContent = `${leadEntries.length} leads across ${leadStages.length} stages`;
-      document.getElementById('leads-pipeline-segments').innerHTML = leadStages.map((s, idx) => {
-        const count = leadEntries.filter(l => l.stageId === s.id).length;
-        if (count === 0) return '';
-        const pct = (count / leadEntries.length) * 100;
-        const hex = shadeHex[idx % shadeHex.length];
-        const safeStage = s.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-        const tipHtml = `<div class=&quot;flex items-center gap-1.5&quot;><span class=&quot;w-2 h-2 rounded-full&quot; style=&quot;background:${hex}&quot;></span><span class=&quot;font-semibold&quot;>${safeStage}</span><span class=&quot;text-slate-300&quot;>·</span><span>${count} lead${count === 1 ? '' : 's'}</span><span class=&quot;text-slate-300&quot;>(${pct.toFixed(1)}%)</span></div>`;
-        return `<div class="${shades[idx % shades.length]} h-full transition-all cursor-pointer hover:opacity-85" style="width: ${pct}%" onmousemove="showChartTooltip(event.clientX, event.clientY, '${tipHtml.replace(/'/g, "\\'")}')" onmouseleave="hideChartTooltip()"></div>`;
-      }).join('');
-      document.getElementById('leads-pipeline-legend').innerHTML = leadStages.map((s, idx) => {
-        const count = leadEntries.filter(l => l.stageId === s.id).length;
+      pieLegendEl.innerHTML = leadStages.map((s, idx) => {
+        const stageLeads = leadEntries.filter(l => l.stageId === s.id);
+        const count = stageLeads.length;
+        const stageVal = stageLeads.reduce((acc, l) => acc + (l.value || 0), 0);
+        const pct = totalDeals > 0 ? ((count / totalDeals) * 100).toFixed(1) : '0.0';
+        const color = shadeHex[idx % shadeHex.length];
         return `
-          <span class="inline-flex items-center gap-1.5">
-            <span class="w-2 h-2 rounded-full ${shades[idx % shades.length]}"></span>
-            <span class="text-slate-600">${s.name}</span>
-            <span class="tabular-nums text-slate-400">${count}</span>
-          </span>
+          <div class="flex items-center justify-between gap-2 text-xs">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${color}"></span>
+              <span class="font-medium text-slate-800 truncate">${s.name}</span>
+            </div>
+            <div class="flex items-center gap-2 tabular-nums shrink-0 text-slate-600">
+              ${stageVal > 0 ? `<span class="text-slate-400">${Math.round(stageVal).toLocaleString()} NOK</span>` : ''}
+              <span>${count} <span class="text-slate-400">(${pct}%)</span></span>
+            </div>
+          </div>
         `;
       }).join('');
     }
