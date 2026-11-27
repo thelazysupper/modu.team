@@ -141,6 +141,14 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
             <div class="sidebar-label px-2.5 pb-1.5 text-[11px] font-medium uppercase tracking-wider text-slate-400">
               Menu
             </div>
+            <button onclick="openHome()" id="nav-home" title="Home" class="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 transition-colors">
+              <span class="flex items-center gap-2.5">
+                <svg class="w-4 h-4 text-slate-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+                </svg>
+                <span class="sidebar-label">Home</span>
+              </span>
+            </button>
             <button onclick="openHub()" id="nav-hub" title="Apps" class="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium bg-slate-100 text-slate-900 transition-colors">
               <span class="flex items-center gap-2.5">
                 <svg class="w-4 h-4 text-slate-700 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -192,6 +200,83 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
 
     <!-- MAIN CONTENT -->
     <main id="app-main" class="flex-1 min-w-0 bg-white p-6 lg:p-8 md:ml-60 transition-all duration-200">
+
+      <!-- VIEW 0: CUSTOMIZABLE HOME DASHBOARD -->
+      <section id="view-home" class="hidden max-w-6xl mx-auto space-y-6 animate-fade">
+        <div class="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-200/80">
+          <div>
+            <h1 class="text-xl font-bold tracking-tight text-slate-900">Home</h1>
+            <p class="text-xs text-slate-500 mt-0.5">Customize your workspace dashboard with any charts, tables, and KPIs.</p>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-xs">
+              <span class="text-slate-400">Year:</span>
+              <select id="home-year-select" onchange="requestYearChange(this.value, this)" class="bg-transparent text-slate-900 font-medium text-xs focus:outline-none cursor-pointer">
+                <option value="2025">2025</option>
+                <option value="2026" selected>2026</option>
+                <option value="2027">2027</option>
+              </select>
+            </div>
+
+            <div class="flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-xs">
+              <span class="text-slate-400">Grid:</span>
+              <select id="home-grid-cols" onchange="setHomeGridCols(this.value)" class="bg-transparent text-slate-900 font-medium text-xs focus:outline-none cursor-pointer">
+                <option value="2">2 Columns</option>
+                <option value="3" selected>3 Columns</option>
+              </select>
+            </div>
+
+            <button
+              id="home-reset-btn"
+              type="button"
+              onclick="resetHomeDashboard()"
+              class="hidden h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-xs font-medium transition-colors"
+            >
+              Reset Default
+            </button>
+
+            <button
+              id="home-edit-toggle-btn"
+              type="button"
+              onclick="toggleHomeEditMode()"
+              class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium flex items-center gap-1.5 transition-colors"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+              </svg>
+              <span id="home-edit-toggle-label">Edit Layout</span>
+            </button>
+
+            <button
+              type="button"
+              onclick="toggleHomeWidgetPicker()"
+              class="h-8 px-3.5 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium flex items-center gap-1.5 transition-colors"
+            >
+              <span>+ Add Widget</span>
+            </button>
+          </div>
+        </div>
+
+        <div id="home-widget-picker" class="hidden rounded-2xl border border-slate-200 bg-[#fbfcfd] p-5 space-y-4 animate-fade">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-200/80">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-900">Add Charts, Tables &amp; KPIs</h3>
+              <p class="text-[11px] text-slate-500">Click any widget to add it to your Home grid. You can resize or drag-reorder widgets anytime.</p>
+            </div>
+            <button type="button" onclick="toggleHomeWidgetPicker(false)" class="text-xs text-slate-400 hover:text-slate-700">✕ Close</button>
+          </div>
+          <div id="home-widget-catalog" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+        </div>
+
+        <div id="home-empty-state" class="hidden rounded-2xl border border-dashed border-slate-200 bg-[#fbfcfd] p-12 flex flex-col items-center justify-center text-center min-h-[260px]">
+          <div class="text-sm font-semibold text-slate-900">Your Home dashboard is empty</div>
+          <p class="text-xs text-slate-500 max-w-sm mt-1 mb-4">Add charts, tables, and KPIs from across your workspace to build your custom overview.</p>
+          <button type="button" onclick="toggleHomeWidgetPicker(true)" class="h-8 px-3.5 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium">+ Add Widget</button>
+        </div>
+
+        <div id="home-widgets-grid" class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch"></div>
+      </section>
 
       <!-- VIEW 1: APPS DIRECTORY -->
       <section id="view-hub" class="max-w-6xl mx-auto space-y-6 animate-fade">

@@ -702,7 +702,7 @@ function cycleStatusFilter() {
 function setActiveNavHighlight(activeId) {
   currentNavId = activeId;
   const navAlign = sidebarCollapsed ? 'justify-center px-0' : 'justify-between px-2.5';
-  ['nav-hub', 'nav-wishlist', 'nav-settings'].forEach(id => {
+  ['nav-home', 'nav-hub', 'nav-wishlist', 'nav-settings'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     const isMatch = id === activeId;
@@ -720,7 +720,7 @@ function setActiveNavHighlight(activeId) {
 }
 
 function hideAllViews() {
-  ['view-hub', 'view-app-group', 'view-channels', 'view-budget', 'view-contacts', 'view-leads', 'view-integrations', 'view-competitors', 'view-aeo-seo', 'view-marketing-reports', 'view-app-detail', 'view-wishlist', 'view-generic-section'].forEach(id => {
+  ['view-home', 'view-hub', 'view-app-group', 'view-channels', 'view-budget', 'view-contacts', 'view-leads', 'view-integrations', 'view-competitors', 'view-aeo-seo', 'view-marketing-reports', 'view-app-detail', 'view-wishlist', 'view-generic-section'].forEach(id => {
     document.getElementById(id)?.classList.add('hidden');
   });
 }
@@ -790,7 +790,7 @@ function syncAllYearSelects(yr = budgetYear) {
   const yearStr = String(yr || '2026');
   budgetYear = yearStr;
   reportsYear = yearStr;
-  ['channels-year', 'budget-year-select', 'reports-year-select'].forEach(id => {
+  ['home-year-select', 'channels-year', 'budget-year-select', 'reports-year-select'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = yearStr;
   });
@@ -809,6 +809,7 @@ function applyConfirmedWorkspaceYear(nextYear) {
     const saved = budgetTotalByYear[budgetYear];
     annualInput.value = saved > 0 ? saved : '';
   }
+  if (!document.getElementById('view-home')?.classList.contains('hidden')) renderHomeView();
   if (!document.getElementById('view-channels')?.classList.contains('hidden')) renderChannelsView();
   if (!document.getElementById('view-budget')?.classList.contains('hidden')) renderBudgetView();
   if (!document.getElementById('view-marketing-reports')?.classList.contains('hidden')) renderMarketingReportsView();
@@ -899,6 +900,10 @@ function navigateToRoute(rawPath, { push = false } = {}) {
       openApp(sub);
       return;
     }
+    if (head === 'home') {
+      openHome();
+      return;
+    }
     if (head === 'wishlist' || head === 'settings') {
       openSection(head);
       return;
@@ -919,6 +924,533 @@ window.addEventListener('hashchange', () => {
     navigateToRoute(getCurrentRoutePath(), { push: false });
   }
 });
+
+let homeEditMode = false;
+let homeDraggedWidgetId = null;
+
+function createDefaultHomeDashboardLayout() {
+  return {
+    cols: 3,
+    widgets: [
+      { id: 'hw_kpis', type: 'workspace-kpis', span: 3 },
+      { id: 'hw_pipeline_pie', type: 'leads-pipeline-pie', span: 1 },
+      { id: 'hw_channel_share', type: 'channels-budget-donut', span: 1 },
+      { id: 'hw_budget_pie', type: 'budget-channel-pie', span: 1 },
+      { id: 'hw_channels_tbl', type: 'channels-table', span: 3 }
+    ]
+  };
+}
+
+let homeDashboardLayout = createDefaultHomeDashboardLayout();
+
+const HOME_WIDGET_CATALOG = [
+  { type: 'workspace-kpis', group: 'KPIs', title: 'Workspace KPIs', desc: 'Total budget, actual spend, leads, and pipeline value', defaultSpan: 3 },
+  { type: 'budget-monthly-bar', group: 'Charts', title: 'Budget: Planned vs Actual', desc: 'Monthly planned vs actual spend bar chart', defaultSpan: 2 },
+  { type: 'budget-channel-pie', group: 'Charts', title: 'Budget by Channel', desc: 'Pie breakdown of planned budget by channel', defaultSpan: 1 },
+  { type: 'channels-budget-donut', group: 'Charts', title: 'Channel Share (Budget)', desc: 'Donut chart of budget allocation per channel', defaultSpan: 1 },
+  { type: 'channels-leads-donut', group: 'Charts', title: 'Channel Lead Share', desc: 'Donut chart of inbound leads per channel', defaultSpan: 1 },
+  { type: 'leads-pipeline-pie', group: 'Charts', title: 'Pipeline Distribution', desc: 'Pie chart of deals and NOK value by Kanban stage', defaultSpan: 1 },
+  { type: 'integrations-dist-pie', group: 'Charts', title: 'Integration Distribution', desc: 'Pie chart by ERP, TA, and Other Integration', defaultSpan: 1 },
+  { type: 'integrations-lead-pie', group: 'Charts', title: 'Lead Share per Integration', desc: 'Pie chart of leads connected to each integration', defaultSpan: 1 },
+  { type: 'channels-table', group: 'Tables', title: 'Channels Performance Table', desc: 'Budget, spend, % of budget, and leads per channel', defaultSpan: 3 },
+  { type: 'budget-planned-table', group: 'Tables', title: 'Allocated Budget by Channel', desc: 'Annual planned budget and % of total per channel', defaultSpan: 2 },
+  { type: 'budget-actual-table', group: 'Tables', title: 'Actual Spend by Channel', desc: 'Annual spend and % of budget per channel', defaultSpan: 2 },
+  { type: 'integrations-table', group: 'Tables', title: 'Integrations Table', desc: 'Configured integrations and connected lead counts', defaultSpan: 2 },
+  { type: 'wishlist-table', group: 'Tables', title: 'Wishlist Requests', desc: 'Top requested apps and features sorted by votes', defaultSpan: 2 }
+];
+
+function openHome() {
+  activeGroupViewId = null;
+  hideAllViews();
+  document.getElementById('view-home').classList.remove('hidden');
+  setActiveNavHighlight('nav-home');
+  syncRouteUrl('/home');
+  renderHomeView();
+}
+
+function toggleHomeEditMode(force) {
+  homeEditMode = typeof force === 'boolean' ? force : !homeEditMode;
+  const btn = document.getElementById('home-edit-toggle-btn');
+  const lbl = document.getElementById('home-edit-toggle-label');
+  const resetBtn = document.getElementById('home-reset-btn');
+  if (lbl) lbl.textContent = homeEditMode ? 'Done Editing' : 'Edit Layout';
+  if (btn) {
+    btn.className = homeEditMode
+      ? 'h-8 px-3 rounded-lg bg-slate-900 text-white text-xs font-medium flex items-center gap-1.5 transition-colors'
+      : 'h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium flex items-center gap-1.5 transition-colors';
+  }
+  if (resetBtn) {
+    if (homeEditMode) resetBtn.classList.remove('hidden');
+    else resetBtn.classList.add('hidden');
+  }
+  renderHomeView();
+}
+
+function toggleHomeWidgetPicker(force) {
+  const panel = document.getElementById('home-widget-picker');
+  if (!panel) return;
+  const show = typeof force === 'boolean' ? force : panel.classList.contains('hidden');
+  if (show) {
+    renderHomeWidgetCatalog();
+    panel.classList.remove('hidden');
+  } else {
+    panel.classList.add('hidden');
+  }
+}
+
+function renderHomeWidgetCatalog() {
+  const el = document.getElementById('home-widget-catalog');
+  if (!el) return;
+  const badgeCls = {
+    KPIs: 'bg-[#ede9fe] text-[#6d28d9]',
+    Charts: 'bg-[#eff6ff] text-[#1d4ed8]',
+    Tables: 'bg-[#ecfdf5] text-[#047857]'
+  };
+  el.innerHTML = HOME_WIDGET_CATALOG.map(item => {
+    const isAdded = homeDashboardLayout.widgets.some(w => w.type === item.type);
+    return `
+      <div class="rounded-xl border border-slate-200/80 bg-white p-3.5 flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <div class="flex items-center gap-1.5">
+            <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold ${badgeCls[item.group] || 'bg-slate-100 text-slate-700'}">${item.group}</span>
+            <span class="text-xs font-semibold text-slate-900 truncate">${item.title}</span>
+          </div>
+          <p class="text-[11px] text-slate-500 mt-1">${item.desc}</p>
+        </div>
+        <button
+          type="button"
+          onclick="addHomeWidget('${item.type}')"
+          class="h-7 px-2.5 rounded-lg text-[11px] font-medium shrink-0 transition-colors ${isAdded ? 'border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100' : 'bg-[#0f172a] hover:bg-slate-800 text-white'}"
+        >
+          ${isAdded ? '+ Add Again' : '+ Add'}
+        </button>
+      </div>
+    `;
+  }).join('');
+}
+
+function setHomeGridCols(cols) {
+  homeDashboardLayout.cols = Number(cols) === 2 ? 2 : 3;
+  homeDashboardLayout.widgets.forEach(w => {
+    if (w.span > homeDashboardLayout.cols) w.span = homeDashboardLayout.cols;
+  });
+  renderHomeView();
+  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+}
+
+function addHomeWidget(type) {
+  const def = HOME_WIDGET_CATALOG.find(c => c.type === type);
+  if (!def) return;
+  const span = Math.min(homeDashboardLayout.cols || 3, def.defaultSpan || 1);
+  homeDashboardLayout.widgets.push({
+    id: `hw_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+    type,
+    span
+  });
+  renderHomeWidgetCatalog();
+  renderHomeView();
+  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+}
+
+function removeHomeWidget(widgetId) {
+  homeDashboardLayout.widgets = homeDashboardLayout.widgets.filter(w => w.id !== widgetId);
+  renderHomeWidgetCatalog();
+  renderHomeView();
+  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+}
+
+function setHomeWidgetSpan(widgetId, span) {
+  const w = homeDashboardLayout.widgets.find(x => x.id === widgetId);
+  if (!w) return;
+  w.span = Math.min(homeDashboardLayout.cols || 3, Math.max(1, Number(span) || 1));
+  renderHomeView();
+  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+}
+
+function moveHomeWidget(widgetId, dir) {
+  const idx = homeDashboardLayout.widgets.findIndex(w => w.id === widgetId);
+  if (idx === -1) return;
+  const targetIdx = idx + dir;
+  if (targetIdx < 0 || targetIdx >= homeDashboardLayout.widgets.length) return;
+  const arr = homeDashboardLayout.widgets;
+  [arr[idx], arr[targetIdx]] = [arr[targetIdx], arr[idx]];
+  renderHomeView();
+  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+}
+
+function onHomeWidgetDragStart(e, widgetId) {
+  homeDraggedWidgetId = widgetId;
+  if (e?.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+}
+
+function onHomeWidgetDrop(e, targetWidgetId) {
+  e?.preventDefault();
+  if (!homeDraggedWidgetId || homeDraggedWidgetId === targetWidgetId) return;
+  const arr = homeDashboardLayout.widgets;
+  const fromIdx = arr.findIndex(w => w.id === homeDraggedWidgetId);
+  const toIdx = arr.findIndex(w => w.id === targetWidgetId);
+  if (fromIdx === -1 || toIdx === -1) return;
+  const [moved] = arr.splice(fromIdx, 1);
+  arr.splice(toIdx, 0, moved);
+  homeDraggedWidgetId = null;
+  renderHomeView();
+  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+}
+
+function resetHomeDashboard() {
+  homeDashboardLayout = createDefaultHomeDashboardLayout();
+  renderHomeView();
+  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+}
+
+function drawHomeBarChart(canvasId, labels, plannedArr, actualArr) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  const width = Math.max(300, Math.floor(rect.width || 560));
+  const height = 210;
+  canvas.width = width * dpr;
+  canvas.height = height * dpr;
+  canvas.style.width = width + 'px';
+  canvas.style.height = height + 'px';
+  ctx.scale(dpr, dpr);
+
+  const padL = 48, padR = 12, padT = 14, padB = 26;
+  const plotW = width - padL - padR;
+  const plotH = height - padT - padB;
+  const maxVal = Math.max(1000, ...plannedArr, ...actualArr);
+
+  ctx.clearRect(0, 0, width, height);
+  ctx.strokeStyle = '#f1f5f9';
+  ctx.lineWidth = 1;
+  ctx.font = '10px Inter, system-ui, sans-serif';
+  ctx.fillStyle = '#94a3b8';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+
+  for (let i = 0; i <= 4; i++) {
+    const y = padT + (plotH * i) / 4;
+    const val = maxVal * (1 - i / 4);
+    ctx.beginPath();
+    ctx.moveTo(padL, y);
+    ctx.lineTo(width - padR, y);
+    ctx.stroke();
+    const lbl = val >= 1000 ? `${Math.round(val / 1000)}k` : String(Math.round(val));
+    ctx.fillText(lbl, padL - 6, y);
+  }
+
+  const n = labels.length;
+  const slotW = plotW / n;
+  const barW = Math.max(4, Math.min(14, slotW * 0.28));
+
+  for (let i = 0; i < n; i++) {
+    const cx = padL + i * slotW + slotW / 2;
+    const pH = (plannedArr[i] / maxVal) * plotH;
+    const aH = (actualArr[i] / maxVal) * plotH;
+
+    ctx.fillStyle = '#cbd5e1';
+    ctx.fillRect(cx - barW - 1, padT + plotH - pH, barW, pH);
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(cx + 1, padT + plotH - aH, barW, aH);
+
+    ctx.fillStyle = '#64748b';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText(labels[i], cx, padT + plotH + 6);
+  }
+}
+
+function renderHomeView() {
+  const cols = Number(homeDashboardLayout.cols) === 2 ? 2 : 3;
+  const colSel = document.getElementById('home-grid-cols');
+  if (colSel) colSel.value = String(cols);
+  const yrSel = document.getElementById('home-year-select');
+  if (yrSel) yrSel.value = budgetYear;
+
+  const gridEl = document.getElementById('home-widgets-grid');
+  const emptyEl = document.getElementById('home-empty-state');
+  if (!gridEl || !emptyEl) return;
+
+  gridEl.className = cols === 2
+    ? 'grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch'
+    : 'grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch';
+
+  const widgets = homeDashboardLayout.widgets || [];
+  if (widgets.length === 0) {
+    emptyEl.classList.remove('hidden');
+    gridEl.classList.add('hidden');
+    return;
+  }
+  emptyEl.classList.add('hidden');
+  gridEl.classList.remove('hidden');
+
+  const yearObj = budgetData[budgetYear] || {};
+  const chNames = Object.keys(yearObj);
+  let totalPlanned = 0;
+  let totalActual = 0;
+  const monthlyPlanned = Array(12).fill(0);
+  const monthlyActual = Array(12).fill(0);
+  chNames.forEach(ch => {
+    const row = yearObj[ch];
+    for (let m = 0; m < 12; m++) {
+      totalPlanned += row.planned[m] || 0;
+      totalActual += row.actual[m] || 0;
+      monthlyPlanned[m] += row.planned[m] || 0;
+      monthlyActual[m] += row.actual[m] || 0;
+    }
+  });
+  const annualBudget = budgetTotalByYear[budgetYear] || totalPlanned || 0;
+  const totalLeads = leadEntries.length;
+  const totalPipelineVal = leadEntries.reduce((a, l) => a + (l.value || 0), 0);
+
+  const spanClsMap = { 1: 'lg:col-span-1', 2: 'lg:col-span-2', 3: cols === 2 ? 'lg:col-span-2' : 'lg:col-span-3' };
+  const postRenderTasks = [];
+
+  gridEl.innerHTML = widgets.map((w, idx) => {
+    const span = Math.min(cols, Math.max(1, w.span || 1));
+    const spanCls = spanClsMap[span] || 'lg:col-span-1';
+    const def = HOME_WIDGET_CATALOG.find(c => c.type === w.type) || { title: w.type, desc: '' };
+    const canvasId = `home-cv-${w.id}`;
+
+    const editBarHtml = homeEditMode ? `
+      <div class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-[#fbfcfd] border-b border-slate-200/80 text-[11px]">
+        <div class="flex items-center gap-1.5 text-slate-500 font-medium cursor-grab">
+          <span>⋮⋮</span>
+          <span>Widget ${idx + 1}</span>
+        </div>
+        <div class="flex items-center gap-1">
+          <select onchange="setHomeWidgetSpan('${w.id}', this.value)" class="h-6 px-1.5 rounded border border-slate-200 bg-white text-[11px] text-slate-700">
+            <option value="1" ${span === 1 ? 'selected' : ''}>1 col</option>
+            <option value="2" ${span === 2 ? 'selected' : ''}>2 cols</option>
+            ${cols === 3 ? `<option value="3" ${span === 3 ? 'selected' : ''}>Full (3 cols)</option>` : ''}
+          </select>
+          <button type="button" onclick="moveHomeWidget('${w.id}', -1)" ${idx === 0 ? 'disabled' : ''} class="w-6 h-6 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 text-slate-600">←</button>
+          <button type="button" onclick="moveHomeWidget('${w.id}', 1)" ${idx === widgets.length - 1 ? 'disabled' : ''} class="w-6 h-6 rounded border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 text-slate-600">→</button>
+          <button type="button" onclick="removeHomeWidget('${w.id}')" class="w-6 h-6 rounded border border-slate-200 bg-white hover:bg-red-50 hover:text-red-600 text-slate-500">✕</button>
+        </div>
+      </div>
+    ` : '';
+
+    let bodyHtml = '';
+    if (w.type === 'workspace-kpis') {
+      bodyHtml = `
+        <div class="p-5 grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+          <div onclick="openApp('budget')" class="cursor-pointer rounded-xl border border-slate-200/80 bg-[#fbfcfd] p-3.5 hover:border-slate-300 transition-colors">
+            <div class="text-[11px] text-slate-500">Total Budget (${budgetYear})</div>
+            <div class="text-lg font-bold text-slate-900 tabular-nums mt-1">${Math.round(annualBudget).toLocaleString()} NOK</div>
+          </div>
+          <div onclick="openApp('budget')" class="cursor-pointer rounded-xl border border-slate-200/80 bg-[#fbfcfd] p-3.5 hover:border-slate-300 transition-colors">
+            <div class="text-[11px] text-slate-500">Actual Spend (${budgetYear})</div>
+            <div class="text-lg font-bold text-slate-900 tabular-nums mt-1">${Math.round(totalActual).toLocaleString()} NOK</div>
+          </div>
+          <div onclick="openApp('leads')" class="cursor-pointer rounded-xl border border-slate-200/80 bg-[#fbfcfd] p-3.5 hover:border-slate-300 transition-colors">
+            <div class="text-[11px] text-slate-500">Total Leads</div>
+            <div class="text-lg font-bold text-[#7c3aed] tabular-nums mt-1">${totalLeads}</div>
+          </div>
+          <div onclick="openApp('leads')" class="cursor-pointer rounded-xl border border-slate-200/80 bg-[#fbfcfd] p-3.5 hover:border-slate-300 transition-colors">
+            <div class="text-[11px] text-slate-500">Pipeline Value</div>
+            <div class="text-lg font-bold text-[#059669] tabular-nums mt-1">${Math.round(totalPipelineVal).toLocaleString()} NOK</div>
+          </div>
+        </div>
+      `;
+    } else if (w.type === 'budget-monthly-bar') {
+      bodyHtml = `
+        <div class="p-5 space-y-3">
+          <div class="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-200/70">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-900">${def.title} (${budgetYear})</h3>
+              <p class="text-[11px] text-slate-500">${def.desc}</p>
+            </div>
+            <div class="flex items-center gap-3 text-[11px] text-slate-500 pr-8">
+              <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-[#cbd5e1]"></span>Planned</span>
+              <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-[#0f172a]"></span>Actual</span>
+            </div>
+          </div>
+          <canvas id="${canvasId}" height="210" class="w-full"></canvas>
+        </div>
+      `;
+      postRenderTasks.push(() => drawHomeBarChart(canvasId, monthNames, monthlyPlanned, monthlyActual));
+    } else if (w.type === 'budget-channel-pie' || w.type === 'channels-budget-donut' || w.type === 'channels-leads-donut' || w.type === 'leads-pipeline-pie' || w.type === 'integrations-dist-pie' || w.type === 'integrations-lead-pie') {
+      let segments = [];
+      let totalLbl = '';
+      if (w.type === 'budget-channel-pie' || w.type === 'channels-budget-donut') {
+        segments = channelsList.map((ch, i) => {
+          const r = yearObj[ch.name];
+          const val = r ? r.planned.reduce((a, b) => a + b, 0) : 0;
+          return { label: ch.name, value: val, color: ch.color || CHANNEL_PALETTE[i % CHANNEL_PALETTE.length], suffix: ' NOK' };
+        }).filter(s => s.value > 0);
+        totalLbl = `${Math.round(segments.reduce((a, s) => a + s.value, 0)).toLocaleString()} NOK`;
+      } else if (w.type === 'channels-leads-donut') {
+        segments = channelsList.map((ch, i) => ({
+          label: ch.name,
+          value: leadEntries.filter(l => l.channel === ch.name).length,
+          color: ch.color || CHANNEL_PALETTE[i % CHANNEL_PALETTE.length],
+          suffix: ''
+        })).filter(s => s.value > 0);
+        totalLbl = `${totalLeads} leads`;
+      } else if (w.type === 'leads-pipeline-pie') {
+        const shadeHex = ['#7c3aed', '#10b981', '#0ea5e9', '#f59e0b', '#f43f5e'];
+        segments = leadStages.map((s, i) => ({
+          label: s.name,
+          value: leadEntries.filter(l => l.stageId === s.id).length,
+          color: shadeHex[i % shadeHex.length],
+          suffix: ''
+        })).filter(s => s.value > 0);
+        totalLbl = `${totalLeads} deals`;
+      } else if (w.type === 'integrations-dist-pie') {
+        segments = ['ERP', 'TA', 'Other Integration'].map(t => ({
+          label: t,
+          value: integrationsList.filter(i => i.type === t).length,
+          color: INTEGRATION_TYPE_COLORS[t] || '#0ea5e9',
+          suffix: ''
+        })).filter(s => s.value > 0);
+        totalLbl = `${integrationsList.length} integrations`;
+      } else if (w.type === 'integrations-lead-pie') {
+        const pal = ['#6366f1', '#10b981', '#0ea5e9', '#f59e0b', '#ec4899', '#8b5cf6'];
+        segments = integrationsList.map((item, i) => ({
+          label: item.name,
+          value: leadEntries.filter(l => String(l.erp || '').toLowerCase() === item.name.toLowerCase() || String(l.integration || '').toLowerCase() === item.name.toLowerCase()).length,
+          color: pal[i % pal.length],
+          suffix: ''
+        })).filter(s => s.value > 0);
+        totalLbl = `${segments.reduce((a, s) => a + s.value, 0)} leads`;
+      }
+      const segSum = segments.reduce((a, s) => a + s.value, 0);
+      const legendHtml = segments.length === 0
+        ? `<p class="text-xs text-slate-400">No data yet for ${budgetYear}.</p>`
+        : segments.slice(0, 6).map(s => {
+            const pct = segSum > 0 ? ((s.value / segSum) * 100).toFixed(1) : '0.0';
+            return `
+              <div class="flex items-center justify-between gap-2 text-xs">
+                <div class="flex items-center gap-2 min-w-0">
+                  <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${s.color}"></span>
+                  <span class="font-medium text-slate-800 truncate">${s.label}</span>
+                </div>
+                <span class="tabular-nums text-slate-600 shrink-0">${Math.round(s.value).toLocaleString()}${s.suffix} <span class="text-slate-400">(${pct}%)</span></span>
+              </div>
+            `;
+          }).join('');
+      bodyHtml = `
+        <div class="p-5 space-y-4">
+          <div class="flex items-center justify-between gap-2 pb-3 border-b border-slate-200/70">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-900">${def.title}</h3>
+              <p class="text-[11px] text-slate-500">${def.desc}</p>
+            </div>
+            <span class="text-[11px] tabular-nums text-slate-400 pr-8">${totalLbl}</span>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
+            <div class="sm:col-span-5 flex items-center justify-center">
+              <canvas id="${canvasId}" width="150" height="150"></canvas>
+            </div>
+            <div class="sm:col-span-7 space-y-2">${legendHtml}</div>
+          </div>
+        </div>
+      `;
+      postRenderTasks.push(() => drawIntegrationsPieChart(segments, canvasId));
+    } else if (w.type === 'channels-table') {
+      const rowsHtml = channelsList.map((ch, i) => {
+        const bRow = yearObj[ch.name];
+        const bNok = bRow ? bRow.planned.reduce((a, b) => a + b, 0) : 0;
+        const sNok = bRow ? bRow.actual.reduce((a, b) => a + b, 0) : 0;
+        const pct = bNok > 0 ? ((sNok / bNok) * 100).toFixed(1) : '0.0';
+        const lCount = leadEntries.filter(l => l.channel === ch.name).length;
+        return `
+          <tr class="hover:bg-slate-50/70">
+            <td class="py-2.5 px-4 font-semibold text-slate-900"><div class="flex items-center gap-2">${renderChannelIconHtml(ch.name, 'w-5 h-5', ch.color)}<span>${ch.name}</span></div></td>
+            <td class="py-2.5 px-4 text-right tabular-nums text-slate-800">${bNok > 0 ? `${Math.round(bNok).toLocaleString()} NOK` : '—'}</td>
+            <td class="py-2.5 px-4 text-right tabular-nums text-slate-800">${sNok > 0 ? `${Math.round(sNok).toLocaleString()} NOK` : '—'}</td>
+            <td class="py-2.5 px-4 text-right tabular-nums text-slate-600">${bNok > 0 ? `${pct}%` : '—'}</td>
+            <td class="py-2.5 px-4 text-right tabular-nums font-medium text-slate-900">${lCount}</td>
+          </tr>
+        `;
+      }).join('');
+      bodyHtml = `
+        <div class="p-5 pb-3 border-b border-slate-200/70 flex items-center justify-between">
+          <div><h3 class="text-sm font-semibold text-slate-900">${def.title} (${budgetYear})</h3><p class="text-[11px] text-slate-500">${def.desc}</p></div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead><tr class="border-b border-slate-200/80 bg-[#fbfcfd] text-slate-500"><th class="py-2.5 px-4 font-medium">Channel</th><th class="py-2.5 px-4 font-medium text-right">Budget</th><th class="py-2.5 px-4 font-medium text-right">Spend</th><th class="py-2.5 px-4 font-medium text-right">Spend %</th><th class="py-2.5 px-4 font-medium text-right">Leads</th></tr></thead>
+            <tbody class="divide-y divide-slate-200/70">${rowsHtml || '<tr><td colspan="5" class="py-6 text-center text-slate-400">No channels yet</td></tr>'}</tbody>
+          </table>
+        </div>
+      `;
+    } else if (w.type === 'budget-planned-table' || w.type === 'budget-actual-table') {
+      const isActual = w.type === 'budget-actual-table';
+      const rowsHtml = chNames.map(ch => {
+        const row = yearObj[ch];
+        const planned = row.planned.reduce((a, b) => a + b, 0);
+        const actual = row.actual.reduce((a, b) => a + b, 0);
+        const denom = isActual ? Math.max(1, planned) : Math.max(1, annualBudget);
+        const pct = ((isActual ? actual : planned) / denom * 100).toFixed(1);
+        return `
+          <tr class="hover:bg-slate-50/70">
+            <td class="py-2.5 px-4 font-semibold text-slate-900"><div class="flex items-center gap-2">${renderChannelIconHtml(ch, 'w-5 h-5')}<span>${ch}</span></div></td>
+            <td class="py-2.5 px-4 text-right tabular-nums text-slate-800">${Math.round(isActual ? actual : planned).toLocaleString()} NOK</td>
+            <td class="py-2.5 px-4 text-right tabular-nums text-slate-600">${pct}%</td>
+          </tr>
+        `;
+      }).join('');
+      bodyHtml = `
+        <div class="p-5 pb-3 border-b border-slate-200/70"><h3 class="text-sm font-semibold text-slate-900">${def.title} (${budgetYear})</h3></div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead><tr class="border-b border-slate-200/80 bg-[#fbfcfd] text-slate-500"><th class="py-2.5 px-4 font-medium">Channel</th><th class="py-2.5 px-4 font-medium text-right">${isActual ? 'Actual Spend' : 'Planned'}</th><th class="py-2.5 px-4 font-medium text-right">${isActual ? '% of Budget' : '% of Total'}</th></tr></thead>
+            <tbody class="divide-y divide-slate-200/70">${rowsHtml || '<tr><td colspan="3" class="py-6 text-center text-slate-400">No budget entries yet</td></tr>'}</tbody>
+          </table>
+        </div>
+      `;
+    } else if (w.type === 'integrations-table') {
+      const rowsHtml = integrationsList.map(it => {
+        const cnt = leadEntries.filter(l => String(l.erp || '').toLowerCase() === it.name.toLowerCase() || String(l.integration || '').toLowerCase() === it.name.toLowerCase()).length;
+        return `<tr class="hover:bg-slate-50/70"><td class="py-2.5 px-4 font-semibold text-slate-900">${it.name}</td><td class="py-2.5 px-4 text-slate-600">${it.type}</td><td class="py-2.5 px-4 text-right tabular-nums font-medium text-slate-900">${cnt}</td></tr>`;
+      }).join('');
+      bodyHtml = `
+        <div class="p-5 pb-3 border-b border-slate-200/70"><h3 class="text-sm font-semibold text-slate-900">${def.title}</h3></div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead><tr class="border-b border-slate-200/80 bg-[#fbfcfd] text-slate-500"><th class="py-2.5 px-4 font-medium">Name</th><th class="py-2.5 px-4 font-medium">Type</th><th class="py-2.5 px-4 font-medium text-right">Leads</th></tr></thead>
+            <tbody class="divide-y divide-slate-200/70">${rowsHtml || '<tr><td colspan="3" class="py-6 text-center text-slate-400">No integrations yet</td></tr>'}</tbody>
+          </table>
+        </div>
+      `;
+    } else if (w.type === 'wishlist-table') {
+      const top = [...(wishlistItems || [])].sort((a, b) => (b.votes || 0) - (a.votes || 0)).slice(0, 6);
+      const rowsHtml = top.map(it => `
+        <tr class="hover:bg-slate-50/70"><td class="py-2.5 px-4 font-semibold text-slate-900">${it.title}</td><td class="py-2.5 px-4 text-slate-600">${it.category}</td><td class="py-2.5 px-4 text-slate-600">${it.status}</td><td class="py-2.5 px-4 text-right tabular-nums font-semibold text-slate-900">▲ ${it.votes || 0}</td></tr>
+      `).join('');
+      bodyHtml = `
+        <div class="p-5 pb-3 border-b border-slate-200/70"><h3 class="text-sm font-semibold text-slate-900">${def.title}</h3></div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead><tr class="border-b border-slate-200/80 bg-[#fbfcfd] text-slate-500"><th class="py-2.5 px-4 font-medium">Request</th><th class="py-2.5 px-4 font-medium">Category</th><th class="py-2.5 px-4 font-medium">Status</th><th class="py-2.5 px-4 font-medium text-right">Votes</th></tr></thead>
+            <tbody class="divide-y divide-slate-200/70">${rowsHtml || '<tr><td colspan="4" class="py-6 text-center text-slate-400">No wishlist items</td></tr>'}</tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    return `
+      <div
+        data-home-widget="${w.id}"
+        draggable="${homeEditMode ? 'true' : 'false'}"
+        ${homeEditMode ? `ondragstart="onHomeWidgetDragStart(event, '${w.id}')" ondragover="event.preventDefault()" ondrop="onHomeWidgetDrop(event, '${w.id}')"` : ''}
+        class="${spanCls} rounded-2xl border ${homeEditMode ? 'border-slate-300 ring-1 ring-slate-200/70' : 'border-slate-200/80'} bg-white card-shadow overflow-hidden flex flex-col"
+      >
+        ${editBarHtml}
+        <div class="flex-1">${bodyHtml}</div>
+      </div>
+    `;
+  }).join('');
+
+  postRenderTasks.forEach(fn => {
+    try { fn(); } catch (e) {}
+  });
+  if (typeof attachExportMenus === 'function') attachExportMenus();
+}
 
 function openHub() {
   activeGroupViewId = null;
@@ -6726,6 +7258,7 @@ function getWorkspaceSnapshot() {
     competitorsList,
     aeoSeoEntries,
     wishlistItems,
+    homeDashboardLayout,
     appGroups,
     appGroupMap
   };
@@ -6757,6 +7290,7 @@ function applyWorkspaceSnapshot(snap) {
     if (Array.isArray(snap.competitorsList)) competitorsList = snap.competitorsList;
     if (Array.isArray(snap.aeoSeoEntries)) aeoSeoEntries = snap.aeoSeoEntries;
     if (Array.isArray(snap.wishlistItems)) wishlistItems = snap.wishlistItems;
+    if (snap.homeDashboardLayout && Array.isArray(snap.homeDashboardLayout.widgets)) homeDashboardLayout = snap.homeDashboardLayout;
     if (Array.isArray(snap.appGroups)) appGroups = snap.appGroups;
     if (snap.appGroupMap && typeof snap.appGroupMap === 'object') {
       apps.forEach(a => {
