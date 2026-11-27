@@ -1620,7 +1620,6 @@ function switchChannelsHubTab(tab = 'channels') {
   activeChannelsHubTab = tab;
   hideAllViews();
   syncAllYearSelects(budgetYear);
-  document.getElementById('channels-hub-bar')?.classList.remove('hidden');
 
   const tabMap = {
     channels: 'ch-hub-tab-channels',
@@ -1636,18 +1635,27 @@ function switchChannelsHubTab(tab = 'channels') {
       : 'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors text-slate-500 hover:text-slate-900';
   });
 
+  const activeSecId = tab === 'reports' ? 'view-marketing-reports' : tab === 'budget' ? 'view-budget' : 'view-channels';
+  const activeSec = document.getElementById(activeSecId);
+  const hubBar = document.getElementById('channels-hub-bar');
+  const topBar = activeSec?.querySelector(':scope > .border-b');
+  if (hubBar) {
+    if (topBar) topBar.after(hubBar);
+    hubBar.classList.remove('hidden');
+  }
+
   if (tab === 'reports') {
     activeReportChannel = null;
-    document.getElementById('view-marketing-reports')?.classList.remove('hidden');
+    activeSec?.classList.remove('hidden');
     renderMarketingReportsView();
     syncRouteUrl('/marketing-reports');
   } else if (tab === 'budget') {
-    document.getElementById('view-budget')?.classList.remove('hidden');
+    activeSec?.classList.remove('hidden');
     renderBudgetView();
     syncRouteUrl(budgetSubView === 'summary' ? '/budget' : `/budget/${budgetSubView}`);
   } else {
     activeChannelDetailName = null;
-    document.getElementById('view-channels')?.classList.remove('hidden');
+    activeSec?.classList.remove('hidden');
     renderChannelsView();
     syncRouteUrl('/channels');
   }
@@ -1657,7 +1665,6 @@ function switchChannelsHubTab(tab = 'channels') {
 function switchSearchHubTab(tab = 'aeo-seo') {
   activeSearchHubTab = tab;
   hideAllViews();
-  document.getElementById('search-hub-bar')?.classList.remove('hidden');
 
   const tabMap = {
     'aeo-seo': 'search-hub-tab-aeo',
@@ -1672,8 +1679,17 @@ function switchSearchHubTab(tab = 'aeo-seo') {
       : 'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors text-slate-500 hover:text-slate-900';
   });
 
+  const activeSecId = tab === 'seo-audit' ? 'view-seo-audit' : 'view-aeo-seo';
+  const activeSec = document.getElementById(activeSecId);
+  const hubBar = document.getElementById('search-hub-bar');
+  const topBar = activeSec?.querySelector(':scope > .border-b');
+  if (hubBar) {
+    if (topBar) topBar.after(hubBar);
+    hubBar.classList.remove('hidden');
+  }
+
   if (tab === 'seo-audit') {
-    document.getElementById('view-seo-audit')?.classList.remove('hidden');
+    activeSec?.classList.remove('hidden');
     const qEl = document.getElementById('audit-sum-queries');
     const sEl = document.getElementById('audit-sum-seo');
     const cEl = document.getElementById('audit-sum-cited');
@@ -1685,7 +1701,7 @@ function switchSearchHubTab(tab = 'aeo-seo') {
     if (cEl) cEl.textContent = String(aeoSeoEntries.filter(e => e.cited === 'Cited').length);
     syncRouteUrl('/apps/seo-audit');
   } else {
-    document.getElementById('view-aeo-seo')?.classList.remove('hidden');
+    activeSec?.classList.remove('hidden');
     renderAeoSeoView();
     syncRouteUrl('/aeo-seo');
   }
