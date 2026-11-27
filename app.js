@@ -1357,16 +1357,19 @@ function renderHomeView() {
         const bNok = bRow ? bRow.planned.reduce((a, b) => a + b, 0) : 0;
         const sNok = bRow ? bRow.actual.reduce((a, b) => a + b, 0) : 0;
         const pct = bNok > 0 ? ((sNok / bNok) * 100).toFixed(1) : '0.0';
-        const lCount = leadEntries.filter(l => l.channel === ch.name).length;
-        return { ch, bNok, sNok, pct, lCount };
-      }).sort((a, b) => (b.bNok - a.bNok) || (b.sNok - a.sNok) || (b.lCount - a.lCount));
-      const rowsHtml = chRows.map(({ ch, bNok, sNok, pct, lCount }) => `
+        const chLeads = leadEntries.filter(l => l.channel === ch.name);
+        const lCount = chLeads.length;
+        const dealAmount = chLeads.reduce((acc, l) => acc + (Number(l.value) || 0), 0);
+        return { ch, bNok, sNok, pct, lCount, dealAmount };
+      }).sort((a, b) => (b.bNok - a.bNok) || (b.sNok - a.sNok) || (b.dealAmount - a.dealAmount) || (b.lCount - a.lCount));
+      const rowsHtml = chRows.map(({ ch, bNok, sNok, pct, lCount, dealAmount }) => `
           <tr class="hover:bg-slate-50/70">
             <td class="py-2.5 px-4 font-semibold text-slate-900"><div class="flex items-center gap-2">${renderChannelIconHtml(ch.name, 'w-5 h-5', ch.color)}<span>${ch.name}</span></div></td>
             <td class="py-2.5 px-4 text-right tabular-nums text-slate-800">${bNok > 0 ? `${Math.round(bNok).toLocaleString()} NOK` : '—'}</td>
             <td class="py-2.5 px-4 text-right tabular-nums text-slate-800">${sNok > 0 ? `${Math.round(sNok).toLocaleString()} NOK` : '—'}</td>
             <td class="py-2.5 px-4 text-right tabular-nums text-slate-600">${bNok > 0 ? `${pct}%` : '—'}</td>
             <td class="py-2.5 px-4 text-right tabular-nums font-medium text-slate-900">${lCount}</td>
+            <td class="py-2.5 px-4 text-right tabular-nums font-semibold text-slate-900">${dealAmount > 0 ? `${Math.round(dealAmount).toLocaleString()} NOK` : '—'}</td>
           </tr>
         `).join('');
       bodyHtml = `
@@ -1375,8 +1378,8 @@ function renderHomeView() {
         </div>
         <div class="overflow-x-auto">
           <table class="w-full text-left border-collapse text-xs">
-            <thead><tr class="border-b border-slate-200/80 bg-[#fbfcfd] text-slate-500"><th class="py-2.5 px-4 font-medium">Channel</th><th class="py-2.5 px-4 font-medium text-right">Budget</th><th class="py-2.5 px-4 font-medium text-right">Spend</th><th class="py-2.5 px-4 font-medium text-right">Spend %</th><th class="py-2.5 px-4 font-medium text-right">Leads</th></tr></thead>
-            <tbody class="divide-y divide-slate-200/70">${rowsHtml || '<tr><td colspan="5" class="py-6 text-center text-slate-400">No channels yet</td></tr>'}</tbody>
+            <thead><tr class="border-b border-slate-200/80 bg-[#fbfcfd] text-slate-500"><th class="py-2.5 px-4 font-medium">Channel</th><th class="py-2.5 px-4 font-medium text-right">Budget</th><th class="py-2.5 px-4 font-medium text-right">Spend</th><th class="py-2.5 px-4 font-medium text-right">Spend %</th><th class="py-2.5 px-4 font-medium text-right">Leads</th><th class="py-2.5 px-4 font-medium text-right">Deal Amount</th></tr></thead>
+            <tbody class="divide-y divide-slate-200/70">${rowsHtml || '<tr><td colspan="6" class="py-6 text-center text-slate-400">No channels yet</td></tr>'}</tbody>
           </table>
         </div>
       `;
@@ -2711,9 +2714,11 @@ function renderChannelsView() {
     const budgetRow = yearObj[ch.name];
     const budgetNok = budgetRow ? budgetRow.planned.reduce((a, b) => a + b, 0) : 0;
     const spendNok = budgetRow ? budgetRow.actual.reduce((a, b) => a + b, 0) : 0;
-    const leadCount = leadEntries.filter(l => l.channel === ch.name).length;
-    return { ...ch, color: ch.color || CHANNEL_PALETTE[idx % CHANNEL_PALETTE.length], budgetNok, spendNok, leadCount };
-  }).sort((a, b) => (b.budgetNok - a.budgetNok) || (b.spendNok - a.spendNok) || (b.leadCount - a.leadCount));
+    const chLeads = leadEntries.filter(l => l.channel === ch.name);
+    const leadCount = chLeads.length;
+    const dealAmount = chLeads.reduce((acc, l) => acc + (Number(l.value) || 0), 0);
+    return { ...ch, color: ch.color || CHANNEL_PALETTE[idx % CHANNEL_PALETTE.length], budgetNok, spendNok, leadCount, dealAmount };
+  }).sort((a, b) => (b.budgetNok - a.budgetNok) || (b.spendNok - a.spendNok) || (b.dealAmount - a.dealAmount) || (b.leadCount - a.leadCount));
 
   const totalChannelBudget = rows.reduce((a, r) => a + r.budgetNok, 0);
   const totalLeads = rows.reduce((a, r) => a + r.leadCount, 0);
@@ -2787,7 +2792,7 @@ function renderChannelsView() {
                 <span class="font-medium text-slate-800 truncate hover:underline underline-offset-2">${r.name}</span>
               </div>
               <div class="flex items-center gap-2 tabular-nums shrink-0">
-                <span class="text-slate-500">${r.leadCount} lead${r.leadCount === 1 ? '' : 's'}</span>
+                <span class="text-slate-500">${r.leadCount} lead${r.leadCount === 1 ? '' : 's'}${r.dealAmount > 0 ? ` · ${Math.round(r.dealAmount).toLocaleString()} NOK` : ''}</span>
                 <span class="font-semibold text-slate-900 w-11 text-right">${pct.toFixed(1)}%</span>
               </div>
             </div>
@@ -2861,6 +2866,9 @@ function renderChannelsView() {
             </div>
             <span class="tabular-nums font-medium text-slate-700">${leadShare.toFixed(1)}%</span>
           </div>
+        </td>
+        <td class="py-3 px-4 text-right tabular-nums font-semibold text-slate-900">
+          ${r.dealAmount > 0 ? `${Math.round(r.dealAmount).toLocaleString()} NOK` : '—'}
         </td>
         <td class="py-3 px-4 text-right" onclick="event.stopPropagation()">
           ${renderActionMenuHtml(`toggleChannelForm(true, ${r.id})`, `deleteChannel(${r.id})`)}
