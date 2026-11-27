@@ -6718,6 +6718,7 @@ function drawReportsBarChart(canvasId, mode, seriesA, seriesB = null, chartHeigh
     });
   };
 
+  canvas._renderBars = renderBars;
   renderBars(-1);
 
   if (!canvas._hasHoverListeners) {
@@ -6733,14 +6734,14 @@ function drawReportsBarChart(canvasId, mode, seriesA, seriesB = null, chartHeigh
       if (idx < 0 || idx >= count) {
         if (meta.hoverIdx !== -1) {
           meta.hoverIdx = -1;
-          renderBars(-1);
+          canvas._renderBars?.(-1);
         }
         hideChartTooltip();
         return;
       }
       if (meta.hoverIdx !== idx) {
         meta.hoverIdx = idx;
-        renderBars(idx);
+        canvas._renderBars?.(idx);
       }
       const vA = meta.seriesA[idx] || 0;
       const vB = meta.seriesB ? (meta.seriesB[idx] || 0) : 0;
@@ -6759,7 +6760,7 @@ function drawReportsBarChart(canvasId, mode, seriesA, seriesB = null, chartHeigh
     canvas.addEventListener('mouseleave', () => {
       if (canvas._barMeta && canvas._barMeta.hoverIdx !== -1) {
         canvas._barMeta.hoverIdx = -1;
-        renderBars(-1);
+        canvas._renderBars?.(-1);
       }
       hideChartTooltip();
     });
