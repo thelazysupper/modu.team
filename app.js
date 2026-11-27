@@ -4406,7 +4406,42 @@ function closeContactModal() {
   document.getElementById('contact-detail-modal')?.classList.add('hidden');
 }
 
+function syncLeadsToCustomersGroup() {
+  if (!Array.isArray(leadEntries) || leadEntries.length === 0) return;
+  let customersGroup = contactGroups.find(g => String(g.name || '').trim().toLowerCase() === 'customers');
+  if (!customersGroup) {
+    customersGroup = { id: Date.now() + 50, name: 'Customers', partners: [] };
+    contactGroups.push(customersGroup);
+  }
+  if (!Array.isArray(customersGroup.partners)) customersGroup.partners = [];
+
+  leadEntries.forEach((lead, idx) => {
+    const company = String(lead.company || '').trim();
+    if (!company) return;
+    let existing = customersGroup.partners.find(
+      p => (p.leadId && p.leadId === lead.id) || String(p.name || '').trim().toLowerCase() === company.toLowerCase()
+    );
+    if (existing) {
+      existing.leadId = lead.id;
+      if (lead.website && !existing.website) existing.website = lead.website;
+      if (lead.logo && !existing.logo) existing.logo = lead.logo;
+    } else {
+      customersGroup.partners.push({
+        id: Date.now() + idx + 100,
+        leadId: lead.id,
+        name: company,
+        website: lead.website || '',
+        logo: lead.logo || '',
+        countries: [],
+        countryWebsites: {},
+        contacts: []
+      });
+    }
+  });
+}
+
 function renderContactsView() {
+  syncLeadsToCustomersGroup();
   const grp = contactGroups.find(g => g.id === selectedGroupId);
   const isDetail = Boolean(grp);
 
@@ -5190,6 +5225,7 @@ function saveLead() {
     leadEntries.push(data);
   }
 
+  syncLeadsToCustomersGroup();
   toggleLeadForm(false);
   renderLeadsView();
 }
@@ -5333,6 +5369,7 @@ function saveLeadFromDrawer() {
   lead.value = Math.max(0, parseFloat(document.getElementById('ld-value')?.value) || 0);
   lead.notes = (document.getElementById('ld-notes')?.value || '').trim();
 
+  syncLeadsToCustomersGroup();
   closeLeadDrawer();
   renderLeadsView();
   if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
@@ -7900,6 +7937,7 @@ function acceptCsvImport() {
         });
       }
     });
+    syncLeadsToCustomersGroup();
     renderLeadsView();
   } else if (plan.target === 'integrations') {
     plan.ops.forEach(op => ensureIntegrationExists(op.name, op.type));
