@@ -25,6 +25,7 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
   <title>Modu — Marketing Workspace</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script is:inline set:html={supabaseConfigScript}></script>
+  <script defer src="/t.js"></script>
 </head>
 <body class="bg-white text-slate-900 antialiased m-0 p-0">
   <!-- LOGIN SCREEN -->
@@ -2439,7 +2440,8 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
               <button type="button" onclick="setTrafficRange('12m')" data-range="12m" class="traffic-range-btn px-2.5 py-1 rounded-md text-[11px] font-medium text-slate-500 hover:text-slate-900 transition-colors">12m</button>
             </div>
             <button type="button" onclick="toggleTrafficDomainForm()" class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition-colors">+ Domain</button>
-            <button type="button" onclick="toggleTrafficDataForm()" class="h-8 px-3 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-xs font-medium text-white transition-colors">Edit Traffic</button>
+            <button type="button" onclick="fetchTrafficForActiveDomain()" class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition-colors">Refresh</button>
+            <button type="button" onclick="toggleTrafficInstallPanel()" class="h-8 px-3 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-xs font-medium text-white transition-colors">Install Tracker</button>
           </div>
         </div>
 
@@ -2453,6 +2455,47 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
             <input id="traffic-new-domain-input" type="text" placeholder="e.g. modu.team or app.yourdomain.com" class="flex-1 min-w-[220px] h-8 px-3 text-xs rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10" />
             <button type="button" onclick="addTrafficDomain()" class="h-8 px-3.5 rounded-lg bg-[#0f172a] text-white text-xs font-medium hover:bg-slate-800 transition-colors">Add Domain</button>
             <button type="button" id="traffic-remove-domain-btn" onclick="removeSelectedTrafficDomain()" class="h-8 px-3 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-medium transition-colors">Remove Selected</button>
+          </div>
+        </div>
+
+        <!-- Built-in First-Party Tracker Setup Panel -->
+        <div id="traffic-install-panel" class="hidden rounded-2xl border border-slate-200 bg-[#fbfcfd] p-5 space-y-3 animate-fade">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-900">Built-in First-Party Tracker (No External Provider Needed)</h3>
+              <p class="text-[11px] text-slate-500 mt-0.5">Add this 1-line cookie-free script to <code class="px-1 py-0.5 rounded bg-slate-200/60 text-slate-800">&lt;head&gt;</code> on <strong id="traffic-install-domain-label" class="text-slate-800"></strong> to track live visits, AI referrals, top pages, devices, and countries.</p>
+            </div>
+            <button type="button" onclick="toggleTrafficInstallPanel(false)" class="text-slate-400 hover:text-slate-700 text-xs">✕</button>
+          </div>
+          <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <code id="traffic-snippet-code" class="flex-1 px-3 py-2 rounded-lg bg-white border border-slate-200 text-[11px] font-mono text-slate-800 overflow-x-auto whitespace-nowrap"></code>
+            <button type="button" onclick="copyTrafficSnippet(this)" class="h-8 px-3.5 rounded-lg bg-[#0f172a] text-white text-xs font-medium hover:bg-slate-800 transition-colors shrink-0">Copy Script</button>
+            <button type="button" onclick="sendTestTrafficPing(this)" class="h-8 px-3.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 text-xs font-medium transition-colors shrink-0">Send Test Visit</button>
+          </div>
+          <div id="traffic-sql-setup-box" class="hidden pt-2 border-t border-slate-200/80 space-y-2">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-[11px] font-medium text-amber-700">Supabase <code class="font-mono">traffic_events</code> table not detected yet — run this once in Supabase SQL Editor for permanent storage:</span>
+              <button type="button" onclick="copyTrafficSql(this)" class="text-[11px] font-medium text-slate-700 hover:text-slate-900 underline shrink-0">Copy SQL</button>
+            </div>
+            <pre id="traffic-sql-code" class="p-2.5 rounded-lg bg-white border border-slate-200 text-[10px] font-mono text-slate-700 overflow-x-auto">create table if not exists public.traffic_events (
+  id bigserial primary key,
+  domain text not null,
+  event_type text not null default 'pageview',
+  path text not null default '/',
+  title text,
+  channel text not null default 'direct',
+  referrer_host text,
+  device text default 'Desktop',
+  country text default 'Unknown',
+  visitor_id text,
+  session_id text,
+  duration_sec integer default 0,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_traffic_events_domain_created on public.traffic_events (domain, created_at desc);
+alter table public.traffic_events enable row level security;
+create policy "Allow anon insert traffic" on public.traffic_events for insert to anon, authenticated with check (true);
+create policy "Allow anon select traffic" on public.traffic_events for select to anon, authenticated using (true);</pre>
           </div>
         </div>
 

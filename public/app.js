@@ -7954,55 +7954,36 @@ function formatTrafficCompact(n) {
   return Math.round(num).toLocaleString();
 }
 
-function buildDefaultTrafficRecord(domain) {
-  let hash = 0;
-  for (let i = 0; i < domain.length; i++) hash = (hash * 31 + domain.charCodeAt(i)) % 100000;
-  const scale = 0.65 + (hash % 70) / 100;
-  const direct = Math.round(48000 * scale);
-  const ai = Math.round(4200 * scale);
-  const referral = Math.round(13500 * scale);
-  const paid = Math.round(13200 * scale);
-  const social = Math.round(7800 * scale);
-  const search = Math.round(104000 * scale);
-  const total = direct + ai + referral + paid + social + search;
+function buildEmptyTrafficRecord() {
   return {
-    channels: { direct, ai, referral, paid, social, search },
-    uniqueVisitors: Math.round(total * 0.72),
-    avgDurationSec: 158 + (hash % 75),
-    pagesPerSession: Number((2.6 + (hash % 14) / 10).toFixed(1)),
-    bounceRate: Number((34.5 + (hash % 12)).toFixed(1)),
-    deltaPct: Number((8.4 + (hash % 15)).toFixed(1)),
-    topPages: [
-      { path: '/', title: 'Home', visits: Math.round(total * 0.34), avgSec: 145, bounce: 31.2 },
-      { path: '/pricing', title: 'Pricing & Plans', visits: Math.round(total * 0.19), avgSec: 210, bounce: 28.4 },
-      { path: '/product', title: 'Platform Overview', visits: Math.round(total * 0.15), avgSec: 184, bounce: 33.0 },
-      { path: '/blog/aeo-guide', title: 'AEO & AI Search Guide', visits: Math.round(total * 0.11), avgSec: 265, bounce: 41.5 },
-      { path: '/docs', title: 'Documentation', visits: Math.round(total * 0.08), avgSec: 312, bounce: 24.8 }
-    ],
+    hasEvents: false,
+    setupRequired: false,
+    totalVisits: 0,
+    uniqueVisitors: 0,
+    avgDurationSec: 0,
+    pagesPerSession: 0,
+    bounceRate: 0,
+    channels: { direct: 0, ai: 0, referral: 0, paid: 0, social: 0, search: 0 },
+    trend: null,
+    topPages: [],
     devices: [
-      { label: 'Desktop', pct: 64, color: '#0f172a' },
-      { label: 'Mobile', pct: 31, color: '#2563eb' },
-      { label: 'Tablet', pct: 5, color: '#94a3b8' }
+      { label: 'Desktop', pct: 0, color: '#0f172a' },
+      { label: 'Mobile', pct: 0, color: '#2563eb' },
+      { label: 'Tablet', pct: 0, color: '#94a3b8' }
     ],
-    countries: [
-      { name: 'Norway', pct: 46 },
-      { name: 'Sweden', pct: 18 },
-      { name: 'United States', pct: 14 },
-      { name: 'United Kingdom', pct: 11 },
-      { name: 'Denmark', pct: 11 }
-    ],
-    referrers: [
-      { source: 'google.com', type: 'Search', visits: Math.round(search * 0.84) },
-      { source: 'chatgpt.com', type: 'AI Traffic', visits: Math.round(ai * 0.56) },
-      { source: 'perplexity.ai', type: 'AI Traffic', visits: Math.round(ai * 0.31) },
-      { source: 'linkedin.com', type: 'Social', visits: Math.round(social * 0.62) },
-      { source: 'github.com', type: 'Referral', visits: Math.round(referral * 0.38) }
-    ]
+    countries: [],
+    referrers: []
   };
 }
 
+let trafficLiveCache = {};
+let trafficFetchInFlight = null;
+
 function ensureTrafficDomainsInitialized() {
   const discovered = new Set();
+  const curHost = normalizeTrafficDomain(typeof window !== 'undefined' ? window.location.hostname : '');
+  if (curHost && curHost !== 'localhost' && curHost !== '127.0.0.1') discovered.add(curHost);
+
   (trafficDomains || []).forEach(d => {
     const norm = normalizeTrafficDomain(d);
     if (norm) discovered.add(norm);
@@ -8022,52 +8003,61 @@ function ensureTrafficDomainsInitialized() {
 
   if (discovered.size === 0) {
     discovered.add('modu.team');
-    discovered.add('app.modu.team');
   }
   trafficDomains = Array.from(discovered);
   if (!activeTrafficDomain || !trafficDomains.includes(activeTrafficDomain)) {
     activeTrafficDomain = trafficDomains[0];
   }
-  trafficDomains.forEach(d => {
-    if (!trafficDataByDomain[d]) trafficDataByDomain[d] = buildDefaultTrafficRecord(d);
-  });
 }
 
-function getTrafficRangeMultiplier(range) {
-  if (range === '7d') return 0.25;
-  if (range === '90d') return 2.85;
-  if (range === '12m') return 11.4;
-  return 1;
+async function fetchTrafficForActiveDomain() {
+  ensureTrafficDomainsInitialized();
+  const domain = activeTrafficDomain;
+  const range = activeTrafficRange || '30d';
+  const cacheKey = `${domain}|${range}`;
+  if (trafficFetchInFlight === cacheKey) return;
+  trafficFetchInFlight = cacheKey;
+  try {
+    const r = await fetch(`/api/traffic?domain=${encodeURIComponent(domain)}&range=${encodeURIComponent(range)}`);
+    if (r.ok) {
+      const data = await r.json();
+      if (data && data.ok) {
+        trafficLiveCache[cacheKey] = data;
+        if (!document.getElementById('view-traffic')?.classList.contains('hidden')) {
+          renderTrafficView({ skipFetch: true });
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to fetch live traffic:', err);
+  } finally {
+    if (trafficFetchInFlight === cacheKey) trafficFetchInFlight = null;
+  }
 }
 
 function buildTrafficTrendSeries(rec, range) {
-  const mult = getTrafficRangeMultiplier(range);
+  if (rec?.trend?.labels?.length && Array.isArray(rec.trend.buckets)) {
+    const labels = rec.trend.labels;
+    const seriesList = TRAFFIC_CHANNEL_DEFS.map(ch => ({
+      key: ch.key,
+      label: ch.label,
+      color: ch.color,
+      values: rec.trend.buckets.map(b => Number(b?.[ch.key]) || 0)
+    }));
+    return { labels, seriesList };
+  }
   const points = range === '7d' ? 7 : range === '12m' ? 12 : 8;
   const labels = range === '7d'
     ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
     : range === '12m'
       ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
       : Array.from({ length: points }, (_, i) => `W${i + 1}`);
-
-  const curveShapes = {
-    search:   [0.78, 0.82, 0.85, 0.88, 0.98, 0.96, 1.02, 1.05, 1.01, 1.08, 1.12, 1.15],
-    direct:   [0.72, 0.70, 0.71, 0.84, 0.87, 0.91, 1.06, 1.10, 1.04, 1.09, 1.14, 1.18],
-    referral: [1.05, 1.08, 0.96, 0.82, 0.95, 0.88, 0.78, 0.76, 0.84, 0.80, 0.86, 0.82],
-    paid:     [0.52, 0.56, 0.65, 0.78, 0.92, 1.05, 1.12, 1.18, 1.15, 1.20, 1.24, 1.28],
-    social:   [0.95, 0.96, 0.95, 0.96, 0.95, 0.96, 0.95, 0.96, 0.95, 0.96, 0.95, 0.96],
-    ai:       [0.35, 0.45, 0.58, 0.66, 0.72, 0.76, 1.05, 1.18, 1.25, 1.38, 1.48, 1.60]
-  };
-
-  const seriesList = TRAFFIC_CHANNEL_DEFS.map(ch => {
-    const baseVal = (rec.channels?.[ch.key] || 0) * mult;
-    const shape = curveShapes[ch.key] || curveShapes.direct;
-    const values = labels.map((_, idx) => {
-      const f = shape[idx % shape.length];
-      return Math.round((baseVal / points) * f * 1.15);
-    });
-    return { key: ch.key, label: ch.label, color: ch.color, values };
-  });
-
+  const seriesList = TRAFFIC_CHANNEL_DEFS.map(ch => ({
+    key: ch.key,
+    label: ch.label,
+    color: ch.color,
+    values: labels.map(() => 0)
+  }));
   return { labels, seriesList };
 }
 
@@ -8245,7 +8235,6 @@ function addTrafficDomain() {
   const norm = normalizeTrafficDomain(input?.value);
   if (!norm) return;
   if (!trafficDomains.includes(norm)) trafficDomains.push(norm);
-  if (!trafficDataByDomain[norm]) trafficDataByDomain[norm] = buildDefaultTrafficRecord(norm);
   activeTrafficDomain = norm;
   if (input) input.value = '';
   toggleTrafficDomainForm(false);
@@ -8262,51 +8251,77 @@ function removeSelectedTrafficDomain() {
   if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
 }
 
-function toggleTrafficDataForm(forceState) {
-  const panel = document.getElementById('traffic-data-form-panel');
+function getTrafficSnippetHtml(domain) {
+  const origin = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : 'https://modu.team';
+  return `<script defer src="${origin}/t.js" data-domain="${domain}"></script>`;
+}
+
+function toggleTrafficInstallPanel(forceState) {
+  const panel = document.getElementById('traffic-install-panel');
   if (!panel) return;
   const shouldShow = typeof forceState === 'boolean' ? forceState : panel.classList.contains('hidden');
   panel.classList.toggle('hidden', !shouldShow);
   if (shouldShow) {
     ensureTrafficDomainsInitialized();
-    const rec = trafficDataByDomain[activeTrafficDomain] || buildDefaultTrafficRecord(activeTrafficDomain);
-    const lbl = document.getElementById('traffic-edit-domain-label');
-    if (lbl) lbl.textContent = `Domain: ${activeTrafficDomain} (30d baseline)`;
-    document.getElementById('tf-ch-direct').value = rec.channels.direct || 0;
-    document.getElementById('tf-ch-ai').value = rec.channels.ai || 0;
-    document.getElementById('tf-ch-referral').value = rec.channels.referral || 0;
-    document.getElementById('tf-ch-paid').value = rec.channels.paid || 0;
-    document.getElementById('tf-ch-social').value = rec.channels.social || 0;
-    document.getElementById('tf-ch-search').value = rec.channels.search || 0;
-    document.getElementById('tf-unique').value = rec.uniqueVisitors || 0;
-    document.getElementById('tf-duration').value = rec.avgDurationSec || 120;
-    document.getElementById('tf-pages-session').value = rec.pagesPerSession || 2.5;
-    document.getElementById('tf-bounce').value = rec.bounceRate || 35;
+    const lbl = document.getElementById('traffic-install-domain-label');
+    if (lbl) lbl.textContent = activeTrafficDomain;
+    const codeEl = document.getElementById('traffic-snippet-code');
+    if (codeEl) codeEl.textContent = getTrafficSnippetHtml(activeTrafficDomain);
   }
 }
 
-function saveTrafficMetricsFromForm() {
-  ensureTrafficDomainsInitialized();
-  const rec = trafficDataByDomain[activeTrafficDomain] || buildDefaultTrafficRecord(activeTrafficDomain);
-  rec.channels = {
-    direct: Math.max(0, Number(document.getElementById('tf-ch-direct')?.value) || 0),
-    ai: Math.max(0, Number(document.getElementById('tf-ch-ai')?.value) || 0),
-    referral: Math.max(0, Number(document.getElementById('tf-ch-referral')?.value) || 0),
-    paid: Math.max(0, Number(document.getElementById('tf-ch-paid')?.value) || 0),
-    social: Math.max(0, Number(document.getElementById('tf-ch-social')?.value) || 0),
-    search: Math.max(0, Number(document.getElementById('tf-ch-search')?.value) || 0)
-  };
-  rec.uniqueVisitors = Math.max(0, Number(document.getElementById('tf-unique')?.value) || 0);
-  rec.avgDurationSec = Math.max(0, Number(document.getElementById('tf-duration')?.value) || 0);
-  rec.pagesPerSession = Math.max(1, Number(document.getElementById('tf-pages-session')?.value) || 1);
-  rec.bounceRate = Math.min(100, Math.max(0, Number(document.getElementById('tf-bounce')?.value) || 0));
-  trafficDataByDomain[activeTrafficDomain] = rec;
-  toggleTrafficDataForm(false);
-  renderTrafficView();
-  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+function copyTrafficSnippet(btn) {
+  const txt = getTrafficSnippetHtml(activeTrafficDomain);
+  navigator.clipboard?.writeText(txt).catch(() => {});
+  if (btn) {
+    const prev = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = prev; }, 1400);
+  }
 }
 
-function renderTrafficView() {
+function copyTrafficSql(btn) {
+  const sql = document.getElementById('traffic-sql-code')?.textContent || '';
+  navigator.clipboard?.writeText(sql).catch(() => {});
+  if (btn) {
+    const prev = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = prev; }, 1400);
+  }
+}
+
+async function sendTestTrafficPing(btn) {
+  ensureTrafficDomainsInitialized();
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+  }
+  try {
+    await fetch('/api/collect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'pageview',
+        domain: activeTrafficDomain,
+        path: '/',
+        title: `${activeTrafficDomain} — Home`,
+        referrer: 'https://www.google.com/',
+        device: 'Desktop',
+        sid: `test_${Date.now()}`
+      })
+    });
+    await fetchTrafficForActiveDomain();
+  } catch (err) {
+    console.warn('Test ping failed:', err);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Send Test Visit';
+    }
+  }
+}
+
+function renderTrafficView(opts = {}) {
   ensureTrafficDomainsInitialized();
   const sel = document.getElementById('traffic-domain-select');
   if (sel) {
@@ -8322,14 +8337,33 @@ function renderTrafficView() {
       : 'traffic-range-btn px-2.5 py-1 rounded-md text-[11px] font-medium text-slate-500 hover:text-slate-900 transition-colors';
   });
 
-  const rec = trafficDataByDomain[activeTrafficDomain] || buildDefaultTrafficRecord(activeTrafficDomain);
-  const mult = getTrafficRangeMultiplier(activeTrafficRange);
+  const cacheKey = `${activeTrafficDomain}|${activeTrafficRange}`;
+  const cached = trafficLiveCache[cacheKey];
+  const rec = cached || buildEmptyTrafficRecord();
+
+  if (!opts.skipFetch) {
+    fetchTrafficForActiveDomain();
+  }
+
+  const installPanel = document.getElementById('traffic-install-panel');
+  const sqlBox = document.getElementById('traffic-sql-setup-box');
+  if (cached && !cached.hasEvents && installPanel) {
+    installPanel.classList.remove('hidden');
+    const lbl = document.getElementById('traffic-install-domain-label');
+    if (lbl) lbl.textContent = activeTrafficDomain;
+    const codeEl = document.getElementById('traffic-snippet-code');
+    if (codeEl) codeEl.textContent = getTrafficSnippetHtml(activeTrafficDomain);
+  }
+  if (sqlBox) {
+    sqlBox.classList.toggle('hidden', !(cached && cached.setupRequired));
+  }
+
   const chTotals = TRAFFIC_CHANNEL_DEFS.map(ch => ({
     ...ch,
-    value: Math.round((rec.channels?.[ch.key] || 0) * mult)
+    value: Number(rec.channels?.[ch.key]) || 0
   }));
   const grandTotal = chTotals.reduce((a, c) => a + c.value, 0);
-  const uniqueTotal = Math.round((rec.uniqueVisitors || 0) * mult);
+  const uniqueTotal = Number(rec.uniqueVisitors) || 0;
   const uniqueRatio = grandTotal > 0 ? Math.round((uniqueTotal / grandTotal) * 100) : 0;
   const aiItem = chTotals.find(c => c.key === 'ai');
   const aiShare = grandTotal > 0 && aiItem ? ((aiItem.value / grandTotal) * 100).toFixed(1) : '0.0';
@@ -8338,7 +8372,7 @@ function renderTrafficView() {
 
   const setTxt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
   setTxt('traffic-kpi-visits', formatTrafficCompact(grandTotal));
-  setTxt('traffic-kpi-visits-delta', `+${rec.deltaPct || 0}%`);
+  setTxt('traffic-kpi-visits-delta', cached ? (cached.hasEvents ? 'Live' : 'No visits yet') : 'Loading...');
   setTxt('traffic-kpi-unique', formatTrafficCompact(uniqueTotal));
   setTxt('traffic-kpi-unique-ratio', `${uniqueRatio}% of visits`);
   setTxt('traffic-kpi-duration', `${durMin}m ${durSec}s`);
@@ -8386,33 +8420,37 @@ function renderTrafficView() {
 
   const pagesBody = document.getElementById('traffic-top-pages-body');
   if (pagesBody) {
-    const pages = (rec.topPages || []).map(p => ({ ...p, scaledVisits: Math.round((p.visits || 0) * mult) }));
-    const maxP = Math.max(1, ...pages.map(p => p.scaledVisits));
-    pagesBody.innerHTML = pages.map(p => {
-      const m = Math.floor((p.avgSec || 0) / 60);
-      const s = String((p.avgSec || 0) % 60).padStart(2, '0');
-      const share = grandTotal > 0 ? Math.round((p.scaledVisits / grandTotal) * 100) : 0;
-      const barW = Math.round((p.scaledVisits / maxP) * 100);
-      return `
-        <tr class="hover:bg-slate-50/70 transition-colors">
-          <td class="py-3 px-4">
-            <div class="font-medium text-slate-900">${p.path}</div>
-            <div class="text-[11px] text-slate-400">${p.title || ''}</div>
-          </td>
-          <td class="py-3 px-4 text-right font-semibold text-slate-800 tabular-nums">${formatTrafficCompact(p.scaledVisits)}</td>
-          <td class="py-3 px-4 text-right text-slate-600 tabular-nums">${m}m ${s}s</td>
-          <td class="py-3 px-4 text-right text-slate-600 tabular-nums">${p.bounce}%</td>
-          <td class="py-3 px-4">
-            <div class="flex items-center gap-2">
-              <div class="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                <div class="h-full rounded-full bg-[#0f172a]" style="width:${barW}%"></div>
+    const pages = rec.topPages || [];
+    if (pages.length === 0) {
+      pagesBody.innerHTML = `<tr><td colspan="5" class="py-8 px-4 text-center text-xs text-slate-400">No tracked pageviews yet for ${activeTrafficDomain}.</td></tr>`;
+    } else {
+      const maxP = Math.max(1, ...pages.map(p => p.visits || 0));
+      pagesBody.innerHTML = pages.map(p => {
+        const m = Math.floor((p.avgSec || 0) / 60);
+        const s = String((p.avgSec || 0) % 60).padStart(2, '0');
+        const share = grandTotal > 0 ? Math.round(((p.visits || 0) / grandTotal) * 100) : 0;
+        const barW = Math.round(((p.visits || 0) / maxP) * 100);
+        return `
+          <tr class="hover:bg-slate-50/70 transition-colors">
+            <td class="py-3 px-4">
+              <div class="font-medium text-slate-900">${p.path}</div>
+              <div class="text-[11px] text-slate-400">${p.title || ''}</div>
+            </td>
+            <td class="py-3 px-4 text-right font-semibold text-slate-800 tabular-nums">${formatTrafficCompact(p.visits || 0)}</td>
+            <td class="py-3 px-4 text-right text-slate-600 tabular-nums">${m}m ${s}s</td>
+            <td class="py-3 px-4 text-right text-slate-600 tabular-nums">${p.bounce || 0}%</td>
+            <td class="py-3 px-4">
+              <div class="flex items-center gap-2">
+                <div class="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                  <div class="h-full rounded-full bg-[#0f172a]" style="width:${barW}%"></div>
+                </div>
+                <span class="text-[10px] text-slate-400 tabular-nums w-7 text-right">${share}%</span>
               </div>
-              <span class="text-[10px] text-slate-400 tabular-nums w-7 text-right">${share}%</span>
-            </div>
-          </td>
-        </tr>
-      `;
-    }).join('');
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
   }
 
   const devicesEl = document.getElementById('traffic-devices-list');
@@ -8432,30 +8470,36 @@ function renderTrafficView() {
 
   const countriesEl = document.getElementById('traffic-countries-list');
   if (countriesEl) {
-    countriesEl.innerHTML = (rec.countries || []).map(c => `
-      <div class="flex items-center justify-between gap-3 text-xs">
-        <span class="text-slate-700 font-medium">${c.name}</span>
-        <div class="flex items-center gap-2 w-36">
-          <div class="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
-            <div class="h-full rounded-full bg-blue-500" style="width:${c.pct}%"></div>
+    const countries = rec.countries || [];
+    countriesEl.innerHTML = countries.length === 0
+      ? `<div class="text-xs text-slate-400">No country data yet.</div>`
+      : countries.map(c => `
+        <div class="flex items-center justify-between gap-3 text-xs">
+          <span class="text-slate-700 font-medium">${c.name}</span>
+          <div class="flex items-center gap-2 w-36">
+            <div class="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+              <div class="h-full rounded-full bg-blue-500" style="width:${c.pct}%"></div>
+            </div>
+            <span class="text-[11px] text-slate-500 tabular-nums w-8 text-right">${c.pct}%</span>
           </div>
-          <span class="text-[11px] text-slate-500 tabular-nums w-8 text-right">${c.pct}%</span>
         </div>
-      </div>
-    `).join('');
+      `).join('');
   }
 
   const refEl = document.getElementById('traffic-referrers-list');
   if (refEl) {
-    refEl.innerHTML = (rec.referrers || []).map(r => `
-      <div class="flex items-center justify-between gap-2 text-xs">
-        <div class="flex items-center gap-2 min-w-0">
-          <span class="font-medium text-slate-800 truncate">${r.source}</span>
-          <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-500">${r.type}</span>
+    const refs = rec.referrers || [];
+    refEl.innerHTML = refs.length === 0
+      ? `<div class="text-xs text-slate-400">No external referrers yet.</div>`
+      : refs.map(r => `
+        <div class="flex items-center justify-between gap-2 text-xs">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="font-medium text-slate-800 truncate">${r.source}</span>
+            <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-500">${r.type}</span>
+          </div>
+          <span class="font-semibold text-slate-900 tabular-nums">${formatTrafficCompact(r.visits || 0)}</span>
         </div>
-        <span class="font-semibold text-slate-900 tabular-nums">${formatTrafficCompact(Math.round((r.visits || 0) * mult))}</span>
-      </div>
-    `).join('');
+      `).join('');
   }
 }
 
