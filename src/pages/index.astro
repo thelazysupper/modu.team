@@ -2495,7 +2495,9 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
 );
 create index if not exists idx_traffic_events_domain_created on public.traffic_events (domain, created_at desc);
 alter table public.traffic_events enable row level security;
+drop policy if exists "Allow anon insert traffic" on public.traffic_events;
 create policy "Allow anon insert traffic" on public.traffic_events for insert to anon, authenticated with check (true);
+drop policy if exists "Allow anon select traffic" on public.traffic_events;
 create policy "Allow anon select traffic" on public.traffic_events for select to anon, authenticated using (true);</pre>
           </div>
         </div>
