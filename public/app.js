@@ -6932,6 +6932,10 @@ function drawMultiLineChart(canvasId, labels, seriesList, opts = {}) {
   if (!canvas) return;
   const maxVal = opts.maxVal || 100;
   const suffix = opts.suffix !== undefined ? opts.suffix : '%';
+  if (!canvas.dataset.baseHeight) {
+    canvas.dataset.baseHeight = String(Number(canvas.getAttribute('height')) || 210);
+  }
+  const baseHeight = Number(canvas.dataset.baseHeight) || 210;
   canvas._lineMeta = { labels, seriesList, maxVal, suffix, hoverIdx: -1 };
 
   const renderLines = (hoverIdx = -1) => {
@@ -6939,7 +6943,7 @@ function drawMultiLineChart(canvasId, labels, seriesList, opts = {}) {
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
     const width = Math.max(300, Math.floor(rect.width || 520));
-    const height = Number(canvas.getAttribute('height')) || 210;
+    const height = baseHeight;
     canvas.width = width * dpr;
     canvas.height = height * dpr;
     canvas.style.width = '100%';
