@@ -169,18 +169,10 @@ const illustrations = {
 const apps = [
   {
     id: 'channels',
-    title: 'Channels',
+    title: 'Channels & Performance',
     status: 'Active',
-    description: 'Manage marketing channels and track channel share and lead share across all apps.',
+    description: 'Unified hub for marketing channels, monthly budgets, KPIs, and performance reports.',
     illustration: illustrations.channels,
-    actionType: 'open'
-  },
-  {
-    id: 'budget',
-    title: 'Budget',
-    status: 'Active',
-    description: 'Plan and track monthly marketing budgets by channel and year.',
-    illustration: illustrations.budget,
     actionType: 'open'
   },
   {
@@ -208,18 +200,10 @@ const apps = [
     actionType: 'open'
   },
   {
-    id: 'marketing-reports',
-    title: 'Marketing Reports',
-    status: 'In progress',
-    description: 'End-to-end marketing performance reporting and customizable summaries.',
-    illustration: illustrations.reports,
-    actionType: 'open'
-  },
-  {
     id: 'aeo-seo',
-    title: 'AEO & SEO Comparison',
+    title: 'Search & AI Visibility',
     status: 'Active',
-    description: 'Compare visibility across AI answer engines and traditional search rankings.',
+    description: 'Compare AI Answer Engine (AEO) vs. SEO visibility and run technical SEO audits.',
     illustration: illustrations.aeoSeo,
     actionType: 'open'
   },
@@ -237,14 +221,6 @@ const apps = [
     status: 'Planned',
     description: 'Unified AI assistant for automating repetitive marketing workflows and tasks.',
     illustration: illustrations.assistant,
-    actionType: 'open'
-  },
-  {
-    id: 'seo-audit',
-    title: 'SEO Audit',
-    status: 'Planned',
-    description: 'Automated technical and on-page SEO auditing for your web properties.',
-    illustration: illustrations.seoAudit,
     actionType: 'open'
   }
 ];
