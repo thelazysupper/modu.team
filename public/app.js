@@ -2170,8 +2170,9 @@ function renderChannelsView() {
   const rows = channelsList.map((ch, idx) => {
     const budgetRow = yearObj[ch.name];
     const budgetNok = budgetRow ? budgetRow.planned.reduce((a, b) => a + b, 0) : 0;
+    const spendNok = budgetRow ? budgetRow.actual.reduce((a, b) => a + b, 0) : 0;
     const leadCount = leadEntries.filter(l => l.channel === ch.name).length;
-    return { ...ch, color: ch.color || CHANNEL_PALETTE[idx % CHANNEL_PALETTE.length], budgetNok, leadCount };
+    return { ...ch, color: ch.color || CHANNEL_PALETTE[idx % CHANNEL_PALETTE.length], budgetNok, spendNok, leadCount };
   });
 
   const totalChannelBudget = rows.reduce((a, r) => a + r.budgetNok, 0);
@@ -2270,6 +2271,9 @@ function renderChannelsView() {
 
   tbody.innerHTML = rows.map(r => {
     const budgetShare = totalChannelBudget > 0 ? (r.budgetNok / totalChannelBudget) * 100 : 0;
+    const spendPctOfBudget = r.budgetNok > 0 ? (r.spendNok / r.budgetNok) * 100 : 0;
+    const spendBarPct = Math.min(100, Math.max(0, spendPctOfBudget));
+    const spendBarColor = spendPctOfBudget > 100 ? '#ef4444' : r.color;
     const leadShare = totalLeads > 0 ? (r.leadCount / totalLeads) * 100 : 0;
     const escName = r.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     return `
@@ -2293,6 +2297,19 @@ function renderChannelsView() {
             </div>
             <span class="tabular-nums font-medium text-slate-700">${budgetShare.toFixed(1)}%</span>
           </div>
+        </td>
+        <td class="py-3 px-4 text-right tabular-nums font-medium text-slate-900">
+          ${r.spendNok > 0 ? `${Math.round(r.spendNok).toLocaleString()} NOK` : '—'}
+        </td>
+        <td class="py-3 px-4">
+          ${r.budgetNok > 0 ? `
+            <div class="flex items-center gap-2">
+              <div class="w-20 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                <div class="h-full rounded-full" style="width:${spendBarPct.toFixed(1)}%; background:${spendBarColor}"></div>
+              </div>
+              <span class="tabular-nums font-medium ${spendPctOfBudget > 100 ? 'text-red-600' : 'text-slate-700'}">${spendPctOfBudget.toFixed(1)}%</span>
+            </div>
+          ` : `<span class="text-slate-400">—</span>`}
         </td>
         <td class="py-3 px-4 text-right tabular-nums font-medium text-slate-900">
           ${r.leadCount}
