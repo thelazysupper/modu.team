@@ -1424,6 +1424,69 @@ function getChannelColor(name, fallbackIdx = 0) {
   return found?.color || CHANNEL_PALETTE[fallbackIdx % CHANNEL_PALETTE.length];
 }
 
+function renderChannelIconHtml(name, sizeClass = 'w-6 h-6', colorOverride = '') {
+  const n = String(name || '').trim().toLowerCase();
+  const color = colorOverride || getChannelColor(name);
+  const isSmall = sizeClass.includes('w-3.5') || sizeClass.includes('w-4');
+  const iconPad = isSmall ? 'p-0.5' : 'p-1';
+  const radius = isSmall ? 'rounded' : 'rounded-lg';
+
+  let svg = '';
+  let bg = '#ffffff';
+  let border = 'border-slate-200/80';
+
+  if (n.includes('linkedin')) {
+    bg = '#0A66C2';
+    border = 'border-[#0A66C2]';
+    svg = `<svg viewBox="0 0 24 24" class="w-full h-full fill-white"><path d="M6.94 8.5H3.56V19.5H6.94V8.5ZM5.25 3.5C4.14 3.5 3.25 4.39 3.25 5.5C3.25 6.6 4.14 7.5 5.25 7.5C6.35 7.5 7.25 6.6 7.25 5.5C7.25 4.39 6.35 3.5 5.25 3.5ZM20.44 13.02C20.44 9.88 18.76 8.22 16.16 8.22C14.37 8.22 13.48 9.2 13.02 9.93V8.5H9.65C9.7 9.48 9.65 19.5 9.65 19.5H13.02V13.36C13.02 13.02 13.05 12.69 13.15 12.45C13.42 11.78 14.03 11.09 15.07 11.09C16.41 11.09 17.06 12.11 17.06 13.6V19.5H20.44V13.02Z"/></svg>`;
+  } else if (n.includes('instagram')) {
+    bg = '#E1306C';
+    border = 'border-[#E1306C]';
+    svg = `<svg viewBox="0 0 24 24" class="w-full h-full stroke-white fill-none" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" class="fill-white stroke-none"/></svg>`;
+  } else if (n.includes('meta') || n.includes('facebook')) {
+    bg = '#0866FF';
+    border = 'border-[#0866FF]';
+    svg = `<svg viewBox="0 0 24 24" class="w-full h-full fill-white"><path d="M13.5 21v-7.5h2.5l.4-3h-2.9V8.6c0-.87.24-1.46 1.5-1.46h1.6V4.45c-.28-.04-1.23-.12-2.34-.12-2.31 0-3.89 1.41-3.89 4v2.17H7.8v3h2.57V21h3.13Z"/></svg>`;
+  } else if (n.includes('google')) {
+    bg = '#ffffff';
+    border = 'border-slate-200';
+    svg = `<svg viewBox="0 0 24 24" class="w-full h-full"><path fill="#4285F4" d="M21.8 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.5c-.2 1.2-1 2.3-2.1 3v2.5h3.4c2-1.8 3-4.5 3-7.3Z"/><path fill="#34A853" d="M12 22c2.8 0 5.1-.9 6.8-2.5l-3.4-2.5c-.9.6-2.1 1-3.4 1-2.6 0-4.9-1.8-5.7-4.2H2.8v2.6C4.5 19.8 8 22 12 22Z"/><path fill="#FBBC05" d="M6.3 13.8c-.2-.6-.3-1.2-.3-1.8s.1-1.2.3-1.8V7.6H2.8C2.3 8.9 2 10.4 2 12s.3 3.1.8 4.4l3.5-2.6Z"/><path fill="#EA4335" d="M12 6c1.5 0 2.9.5 4 1.5l3-3C17.1 2.8 14.8 2 12 2 8 2 4.5 4.2 2.8 7.6l3.5 2.6C7.1 7.8 9.4 6 12 6Z"/></svg>`;
+  } else if (n.includes('youtube')) {
+    bg = '#FF0000';
+    border = 'border-[#FF0000]';
+    svg = `<svg viewBox="0 0 24 24" class="w-full h-full fill-white"><path d="M21.6 7.2a2.7 2.7 0 0 0-1.9-1.9C18 4.8 12 4.8 12 4.8s-6 0-7.7.5a2.7 2.7 0 0 0-1.9 1.9C2 8.9 2 12 2 12s0 3.1.4 4.8a2.7 2.7 0 0 0 1.9 1.9c1.7.5 7.7.5 7.7.5s6 0 7.7-.5a2.7 2.7 0 0 0 1.9-1.9c.4-1.7.4-4.8.4-4.8s0-3.1-.4-4.8ZM10 15.2V8.8l5.2 3.2-5.2 3.2Z"/></svg>`;
+  } else if (n.includes('tiktok')) {
+    bg = '#0f172a';
+    border = 'border-[#0f172a]';
+    svg = `<svg viewBox="0 0 24 24" class="w-full h-full fill-white"><path d="M16.6 5.8A4.3 4.3 0 0 1 15.5 3h-3.1v12.4a2.6 2.6 0 1 1-1.9-2.5V9.7a5.7 5.7 0 1 0 5.1 5.7V9.1a7.4 7.4 0 0 0 4.3 1.4V7.4a4.3 4.3 0 0 1-3.3-1.6Z"/></svg>`;
+  } else if (n.includes('twitter') || n === 'x' || n.includes('x /')) {
+    bg = '#0f172a';
+    border = 'border-[#0f172a]';
+    svg = `<svg viewBox="0 0 24 24" class="w-full h-full fill-white"><path d="M18.2 3H21l-6.5 7.4L22 21h-5.9l-4.6-6-5.3 6H3.4l7-8L3 3h6l4.2 5.5L18.2 3Zm-1 16.2h1.6L8 4.7H6.3l10.9 14.5Z"/></svg>`;
+  } else if (n.includes('email') || n.includes('mail') || n.includes('newsletter')) {
+    bg = color;
+    border = 'border-transparent';
+    svg = `<svg viewBox="0 0 24 24" class="w-full h-full stroke-white fill-none" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>`;
+  } else if (n.includes('seo') || n.includes('aeo') || n.includes('organic') || n.includes('web')) {
+    bg = color;
+    border = 'border-transparent';
+    svg = `<svg viewBox="0 0 24 24" class="w-full h-full stroke-white fill-none" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>`;
+  } else if (n.includes('event') || n.includes('webinar') || n.includes('messe')) {
+    bg = color;
+    border = 'border-transparent';
+    svg = `<svg viewBox="0 0 24 24" class="w-full h-full stroke-white fill-none" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>`;
+  } else if (n.includes('partner') || n.includes('referral') || n.includes('affiliate')) {
+    bg = color;
+    border = 'border-transparent';
+    svg = `<svg viewBox="0 0 24 24" class="w-full h-full stroke-white fill-none" stroke-width="2"><circle cx="9" cy="7" r="3"/><path d="M3 20c0-3 2.7-5 6-5s6 2 6 5"/><circle cx="17" cy="9" r="2.5"/><path d="M17 14c2.5 0 4.5 1.5 4.5 4"/></svg>`;
+  } else {
+    const mono = (String(name || '?').trim().slice(0, 2) || '?').toUpperCase();
+    return `<span class="${sizeClass} ${radius} inline-flex items-center justify-center text-[10px] font-bold text-white shrink-0" style="background:${color}">${mono}</span>`;
+  }
+
+  return `<span class="${sizeClass} ${radius} ${iconPad} inline-flex items-center justify-center border ${border} shrink-0 overflow-hidden" style="background:${bg}">${svg}</span>`;
+}
+
 function ensureChannelExists(name, type = 'Other') {
   const trimmed = String(name || '').trim();
   if (!trimmed) return null;
@@ -1976,7 +2039,11 @@ function renderChannelDetailView() {
   document.getElementById('ch-add-btn')?.classList.add('hidden');
 
   const dotEl = document.getElementById('ch-detail-dot');
-  if (dotEl) dotEl.style.background = ch.color || '#0f172a';
+  if (dotEl) {
+    dotEl.className = 'shrink-0';
+    dotEl.style.background = 'transparent';
+    dotEl.innerHTML = renderChannelIconHtml(ch.name, 'w-8 h-8', ch.color);
+  }
   const nameEl = document.getElementById('ch-detail-name');
   if (nameEl) nameEl.textContent = ch.name;
   const typeEl = document.getElementById('ch-detail-type');
@@ -2205,7 +2272,7 @@ function renderChannelsView() {
       <tr onclick="openChannelDetail('${escName}')" class="group cursor-pointer hover:bg-slate-50/80 transition-colors">
         <td class="py-3 px-4">
           <div class="flex items-center gap-2.5">
-            <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${r.color}"></span>
+            ${renderChannelIconHtml(r.name, 'w-6 h-6', r.color)}
             <span class="font-semibold text-slate-900 group-hover:underline underline-offset-2">${r.name}</span>
           </div>
         </td>
@@ -3076,7 +3143,12 @@ function renderBudgetAllocated(channels, yearObj) {
 
     return `
       <tr class="hover:bg-slate-50/70 transition-colors">
-        <td class="py-3 px-4 font-semibold text-slate-900 whitespace-nowrap sticky left-0 bg-white">${ch}</td>
+        <td class="py-3 px-4 font-semibold text-slate-900 whitespace-nowrap sticky left-0 bg-white">
+          <div class="flex items-center gap-2">
+            ${renderChannelIconHtml(ch, 'w-5 h-5')}
+            <span>${ch}</span>
+          </div>
+        </td>
         ${monthCells}
         <td class="py-3 px-3 text-right font-semibold tabular-nums text-slate-900 whitespace-nowrap">${Math.round(rowPlanned).toLocaleString()} NOK</td>
         <td class="py-2.5 px-3 text-right tabular-nums whitespace-nowrap">
@@ -4998,7 +5070,10 @@ function renderLeadsView() {
               ` : ''}
 
               <div class="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-100">
-                <span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-700">${l.channel}</span>
+                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-700">
+                  ${renderChannelIconHtml(l.channel, 'w-3.5 h-3.5')}
+                  <span>${l.channel}</span>
+                </span>
                 ${l.value > 0 ? `<span class="text-[11px] font-semibold tabular-nums text-slate-900">${Math.round(l.value).toLocaleString()} NOK</span>` : ''}
               </div>
             </div>
@@ -6320,7 +6395,7 @@ function renderMarketingReportsView() {
       <div onclick="openReportChannelDetail('${escName}')" class="cursor-pointer rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow flex flex-col justify-between gap-4 hover:border-slate-300 hover:shadow-md transition-all">
         <div class="flex items-start justify-between gap-2">
           <div class="flex items-center gap-2.5 min-w-0">
-            <span class="w-3 h-3 rounded-full shrink-0" style="background:${color}"></span>
+            ${renderChannelIconHtml(name, 'w-7 h-7', color)}
             <div class="min-w-0">
               <h4 class="text-sm font-semibold text-slate-900 truncate">${name}</h4>
               <div class="text-[11px] text-slate-400">${typeLabel}</div>
