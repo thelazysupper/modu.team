@@ -8222,12 +8222,12 @@ async function fetchTrafficForActiveDomain(opts = {}) {
   const domain = activeTrafficDomain;
   const range = activeTrafficRange || '30d';
   const cacheKey = `${domain}|${range}`;
-  if (trafficFetchInFlight === cacheKey) return;
+  if (!opts.force && !opts.manual && trafficFetchInFlight === cacheKey) return;
   trafficFetchInFlight = cacheKey;
   try {
     let resolvedData = null;
     try {
-      const r = await fetch(`/api/traffic?domain=${encodeURIComponent(domain)}&range=${encodeURIComponent(range)}`);
+      const r = await fetch(`/api/traffic?domain=${encodeURIComponent(domain)}&range=${encodeURIComponent(range)}&_t=${Date.now()}`);
       if (r.ok) {
         const data = await r.json();
         if (data && data.ok) resolvedData = data;
@@ -8247,7 +8247,12 @@ async function fetchTrafficForActiveDomain(opts = {}) {
           .gte('created_at', sinceIso)
           .order('created_at', { ascending: true })
           .limit(5000);
-        if (!sbErr && Array.isArray(sbRows)) {
+        if (sbErr) {
+          console.warn('Supabase traffic_events select error:', sbErr);
+          if (opts.manual && typeof showToast === 'function') {
+            showToast(`Supabase error: ${sbErr.message}`, 'error');
+          }
+        } else if (Array.isArray(sbRows)) {
           resolvedData = aggregateTrafficRowsClient(sbRows, range);
         }
       }
@@ -8259,7 +8264,7 @@ async function fetchTrafficForActiveDomain(opts = {}) {
         renderTrafficView({ skipFetch: true });
       }
       if (opts.manual && typeof showToast === 'function') {
-        showToast(`Traffic refreshed for ${domain}`, 'success');
+        showToast(`Traffic refreshed for ${domain} (${resolvedData.totalVisits || 0} visits)`, 'success');
       }
     }
   } catch (err) {
@@ -8535,7 +8540,8 @@ async function sendTestTrafficPing(btn) {
   }
   try {
     const sid = `test_${Date.now()}`;
-    let storedViaApi = false;
+    let stored = false;
+    let errMsg = '';
     try {
       const r = await fetch('/api/collect', {
         method: 'POST',
@@ -8552,14 +8558,19 @@ async function sendTestTrafficPing(btn) {
       });
       if (r.ok) {
         const res = await r.json();
-        if (res?.stored === 'supabase') storedViaApi = true;
+        if (res?.stored === 'supabase' || res?.stored === 'memory') {
+          if (res.stored === 'supabase') stored = true;
+          else if (res.detail) errMsg = res.detail;
+        }
       }
-    } catch {}
+    } catch (e) {
+      errMsg = e?.message || '';
+    }
 
-    if (!storedViaApi) {
+    if (!stored) {
       const client = typeof initSupabaseClient === 'function' ? initSupabaseClient() : null;
       if (client) {
-        await client.from('traffic_events').insert({
+        const { error: insErr } = await client.from('traffic_events').insert({
           domain: activeTrafficDomain,
           event_type: 'pageview',
           path: '/',
@@ -8572,11 +8583,22 @@ async function sendTestTrafficPing(btn) {
           session_id: sid,
           duration_sec: 45
         });
+        if (insErr) {
+          errMsg = insErr.message;
+        } else {
+          stored = true;
+        }
       }
     }
-    await fetchTrafficForActiveDomain();
-    if (btn) btn.textContent = 'Sent!';
-    if (typeof showToast === 'function') showToast(`Test visit recorded for ${activeTrafficDomain}`, 'success');
+
+    await fetchTrafficForActiveDomain({ force: true });
+    if (!stored) {
+      if (btn) btn.textContent = 'Error';
+      if (typeof showToast === 'function') showToast(errMsg || 'Could not save visit to Supabase', 'error');
+    } else {
+      if (btn) btn.textContent = 'Sent!';
+      if (typeof showToast === 'function') showToast(`Test visit recorded for ${activeTrafficDomain}`, 'success');
+    }
   } catch (err) {
     console.warn('Test ping failed:', err);
     if (btn) btn.textContent = 'Failed';
