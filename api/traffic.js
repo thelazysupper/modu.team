@@ -9,8 +9,8 @@ function normalizeDomain(raw) {
 }
 
 function getSupabaseEnv() {
-  const url = process.env.SUPABASE_URL || process.env.PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+  const url = process.env.SUPABASE_URL || process.env.PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
   return { url: url.replace(/\/$/, ''), key };
 }
 
@@ -180,6 +180,7 @@ export default async function handler(req, res) {
   let rows = [];
   let setupRequired = false;
   let storage = 'supabase';
+  let errorDetail = '';
 
   if (url && key) {
     try {
@@ -192,14 +193,17 @@ export default async function handler(req, res) {
       } else {
         setupRequired = true;
         storage = 'memory';
+        errorDetail = `Supabase HTTP ${r.status}: ${(await r.text()).slice(0, 140)}`;
       }
-    } catch {
+    } catch (err) {
       setupRequired = true;
       storage = 'memory';
+      errorDetail = err?.message || 'Supabase fetch failed';
     }
   } else {
     setupRequired = true;
     storage = 'memory';
+    errorDetail = 'Missing SUPABASE_URL / SUPABASE_ANON_KEY in Vercel env vars';
   }
 
   if (setupRequired) {
@@ -214,6 +218,7 @@ export default async function handler(req, res) {
     range,
     storage,
     setupRequired,
+    errorDetail,
     hasEvents: agg.totalVisits > 0,
     ...agg
   });

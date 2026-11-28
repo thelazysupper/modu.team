@@ -8112,6 +8112,111 @@ function ensureTrafficDomainsInitialized() {
   }
 }
 
+function aggregateTrafficRowsClient(rows, range) {
+  const pageviews = (rows || []).filter(r => r.event_type !== 'duration');
+  const durations = (rows || []).filter(r => r.event_type === 'duration' && r.duration_sec > 0);
+  const totalVisits = pageviews.length;
+  const visitors = new Set(pageviews.map(r => r.visitor_id).filter(Boolean));
+  const sessions = {};
+  pageviews.forEach(r => {
+    const sid = r.session_id || r.visitor_id || String(Math.random());
+    if (!sessions[sid]) sessions[sid] = { count: 0, duration: 0 };
+    sessions[sid].count += 1;
+  });
+  durations.forEach(r => {
+    if (r.session_id && sessions[r.session_id]) {
+      sessions[r.session_id].duration = Math.max(sessions[r.session_id].duration, Number(r.duration_sec) || 0);
+    }
+  });
+  const sessionVals = Object.values(sessions);
+  const sessionCount = sessionVals.length;
+  const singlePage = sessionVals.filter(s => s.count <= 1).length;
+  const bounceRate = sessionCount > 0 ? Number(((singlePage / sessionCount) * 100).toFixed(1)) : 0;
+  const pagesPerSession = sessionCount > 0 ? Number((totalVisits / sessionCount).toFixed(1)) : 0;
+  const durSessions = sessionVals.filter(s => s.duration > 0);
+  const avgDurationSec = durSessions.length ? Math.round(durSessions.reduce((a, s) => a + s.duration, 0) / durSessions.length) : 0;
+
+  const channels = { direct: 0, ai: 0, referral: 0, paid: 0, social: 0, search: 0 };
+  const pageMap = {};
+  const deviceMap = { Desktop: 0, Mobile: 0, Tablet: 0 };
+  const countryMap = {};
+  const refMap = {};
+
+  pageviews.forEach(r => {
+    const ch = channels[r.channel] !== undefined ? r.channel : 'direct';
+    channels[ch] += 1;
+    const pKey = r.path || '/';
+    if (!pageMap[pKey]) pageMap[pKey] = { path: pKey, title: r.title || pKey, visits: 0 };
+    pageMap[pKey].visits += 1;
+    const dev = deviceMap[r.device] !== undefined ? r.device : 'Desktop';
+    deviceMap[dev] += 1;
+    const cName = r.country && r.country !== 'Unknown' ? r.country : 'Unknown';
+    countryMap[cName] = (countryMap[cName] || 0) + 1;
+    if (r.referrer_host) {
+      const rk = `${r.referrer_host}|${ch}`;
+      if (!refMap[rk]) refMap[rk] = { source: r.referrer_host, type: ch, visits: 0 };
+      refMap[rk].visits += 1;
+    }
+  });
+
+  const topPages = Object.values(pageMap).sort((a, b) => b.visits - a.visits).slice(0, 8).map(p => ({
+    ...p, avgSec: avgDurationSec, bounce: bounceRate
+  }));
+  const devices = [
+    { label: 'Desktop', count: deviceMap.Desktop, color: '#0f172a' },
+    { label: 'Mobile', count: deviceMap.Mobile, color: '#2563eb' },
+    { label: 'Tablet', count: deviceMap.Tablet, color: '#94a3b8' }
+  ].map(d => ({ label: d.label, pct: totalVisits > 0 ? Math.round((d.count / totalVisits) * 100) : 0, color: d.color }));
+  const countries = Object.entries(countryMap).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name, cnt]) => ({
+    name, pct: totalVisits > 0 ? Math.round((cnt / totalVisits) * 100) : 0
+  }));
+  const chLabelMap = { direct: 'Direct', ai: 'AI Traffic', referral: 'Referral', paid: 'Paid', social: 'Social', search: 'Search' };
+  const referrers = Object.values(refMap).sort((a, b) => b.visits - a.visits).slice(0, 6).map(r => ({
+    source: r.source, type: chLabelMap[r.type] || 'Referral', visits: r.visits
+  }));
+
+  const days = range === '7d' ? 7 : range === '90d' ? 90 : range === '12m' ? 365 : 30;
+  const bucketCount = range === '7d' ? 7 : range === '12m' ? 12 : 8;
+  const now = Date.now();
+  const spanMs = days * 86400 * 1000;
+  const startMs = now - spanMs;
+  const stepMs = spanMs / bucketCount;
+  const labels = [];
+  const buckets = [];
+  for (let i = 0; i < bucketCount; i++) {
+    const t = new Date(startMs + (i + 0.5) * stepMs);
+    labels.push(range === '12m' ? t.toLocaleDateString('en-US', { month: 'short' }) : t.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+    buckets.push({ direct: 0, ai: 0, referral: 0, paid: 0, social: 0, search: 0 });
+  }
+  pageviews.forEach(r => {
+    const ts = new Date(r.created_at).getTime();
+    if (isNaN(ts)) return;
+    let bIdx = Math.floor((ts - startMs) / stepMs);
+    if (bIdx < 0) bIdx = 0;
+    if (bIdx >= bucketCount) bIdx = bucketCount - 1;
+    const ch = channels[r.channel] !== undefined ? r.channel : 'direct';
+    buckets[bIdx][ch] += 1;
+  });
+
+  return {
+    ok: true,
+    storage: 'supabase-client',
+    setupRequired: false,
+    hasEvents: totalVisits > 0,
+    totalVisits,
+    uniqueVisitors: visitors.size,
+    avgDurationSec,
+    pagesPerSession,
+    bounceRate,
+    channels,
+    trend: { labels, buckets },
+    topPages,
+    devices,
+    countries,
+    referrers
+  };
+}
+
 async function fetchTrafficForActiveDomain() {
   ensureTrafficDomainsInitialized();
   const domain = activeTrafficDomain;
@@ -8120,14 +8225,38 @@ async function fetchTrafficForActiveDomain() {
   if (trafficFetchInFlight === cacheKey) return;
   trafficFetchInFlight = cacheKey;
   try {
-    const r = await fetch(`/api/traffic?domain=${encodeURIComponent(domain)}&range=${encodeURIComponent(range)}`);
-    if (r.ok) {
-      const data = await r.json();
-      if (data && data.ok) {
-        trafficLiveCache[cacheKey] = data;
-        if (!document.getElementById('view-traffic')?.classList.contains('hidden')) {
-          renderTrafficView({ skipFetch: true });
+    let resolvedData = null;
+    try {
+      const r = await fetch(`/api/traffic?domain=${encodeURIComponent(domain)}&range=${encodeURIComponent(range)}`);
+      if (r.ok) {
+        const data = await r.json();
+        if (data && data.ok) resolvedData = data;
+      }
+    } catch {}
+
+    // Fallback to authenticated browser Supabase client if API route lacked server env vars
+    if (!resolvedData || resolvedData.setupRequired) {
+      const client = typeof initSupabaseClient === 'function' ? initSupabaseClient() : null;
+      if (client) {
+        const days = range === '7d' ? 7 : range === '90d' ? 90 : range === '12m' ? 365 : 30;
+        const sinceIso = new Date(Date.now() - days * 86400 * 1000).toISOString();
+        const { data: sbRows, error: sbErr } = await client
+          .from('traffic_events')
+          .select('event_type,path,title,channel,referrer_host,device,country,visitor_id,session_id,duration_sec,created_at')
+          .eq('domain', domain)
+          .gte('created_at', sinceIso)
+          .order('created_at', { ascending: true })
+          .limit(5000);
+        if (!sbErr && Array.isArray(sbRows)) {
+          resolvedData = aggregateTrafficRowsClient(sbRows, range);
         }
+      }
+    }
+
+    if (resolvedData) {
+      trafficLiveCache[cacheKey] = resolvedData;
+      if (!document.getElementById('view-traffic')?.classList.contains('hidden')) {
+        renderTrafficView({ skipFetch: true });
       }
     }
   } catch (err) {
@@ -8399,27 +8528,58 @@ async function sendTestTrafficPing(btn) {
     btn.textContent = 'Sending...';
   }
   try {
-    await fetch('/api/collect', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        type: 'pageview',
-        domain: activeTrafficDomain,
-        path: '/',
-        title: `${activeTrafficDomain} — Home`,
-        referrer: 'https://www.google.com/',
-        device: 'Desktop',
-        sid: `test_${Date.now()}`
-      })
-    });
+    const sid = `test_${Date.now()}`;
+    let storedViaApi = false;
+    try {
+      const r = await fetch('/api/collect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'pageview',
+          domain: activeTrafficDomain,
+          path: '/',
+          title: `${activeTrafficDomain} — Home`,
+          referrer: 'https://www.google.com/',
+          device: 'Desktop',
+          sid
+        })
+      });
+      if (r.ok) {
+        const res = await r.json();
+        if (res?.stored === 'supabase') storedViaApi = true;
+      }
+    } catch {}
+
+    if (!storedViaApi) {
+      const client = typeof initSupabaseClient === 'function' ? initSupabaseClient() : null;
+      if (client) {
+        await client.from('traffic_events').insert({
+          domain: activeTrafficDomain,
+          event_type: 'pageview',
+          path: '/',
+          title: `${activeTrafficDomain} — Home`,
+          channel: 'search',
+          referrer_host: 'google.com',
+          device: 'Desktop',
+          country: 'NO',
+          visitor_id: `v_${Date.now()}`,
+          session_id: sid,
+          duration_sec: 45
+        });
+      }
+    }
     await fetchTrafficForActiveDomain();
+    if (btn) btn.textContent = 'Sent!';
   } catch (err) {
     console.warn('Test ping failed:', err);
+    if (btn) btn.textContent = 'Failed';
   } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = 'Send Test Visit';
-    }
+    setTimeout(() => {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Send Test Visit';
+      }
+    }, 1000);
   }
 }
 
