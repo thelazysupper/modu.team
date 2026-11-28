@@ -23,35 +23,43 @@ function findFirstMentionIndex(textLower, terms) {
 }
 
 async function runGeminiPrompt(prompt, apiKey) {
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 20000);
-  try {
-    const r = await fetch(endpoint, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        tools: [{ google_search: {} }]
-      })
-    });
-    const data = await r.json();
-    if (!r.ok) {
-      return { error: data?.error?.message || `Gemini HTTP ${r.status}`, text: '', groundingChunks: [], webSearchQueries: [] };
+  const models = ['gemini-3.8-flash', 'gemini-2.5-flash'];
+  let lastErr = '';
+  for (const model of models) {
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20000);
+    try {
+      const r = await fetch(endpoint, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          tools: [{ google_search: {} }]
+        })
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        lastErr = data?.error?.message || `Gemini HTTP ${r.status}`;
+        clearTimeout(timer);
+        if (/no longer available|not found|not supported/i.test(lastErr)) continue;
+        return { error: lastErr, text: '', groundingChunks: [], webSearchQueries: [] };
+      }
+      const cand = data?.candidates?.[0] || {};
+      const parts = cand?.content?.parts || [];
+      const text = parts.map(p => p.text || '').join('\n').trim();
+      const gm = cand?.groundingMetadata || {};
+      const groundingChunks = Array.isArray(gm.groundingChunks) ? gm.groundingChunks : [];
+      const webSearchQueries = Array.isArray(gm.webSearchQueries) ? gm.webSearchQueries : [];
+      return { text, groundingChunks, webSearchQueries };
+    } catch (err) {
+      lastErr = err?.message || 'Request failed';
+    } finally {
+      clearTimeout(timer);
     }
-    const cand = data?.candidates?.[0] || {};
-    const parts = cand?.content?.parts || [];
-    const text = parts.map(p => p.text || '').join('\n').trim();
-    const gm = cand?.groundingMetadata || {};
-    const groundingChunks = Array.isArray(gm.groundingChunks) ? gm.groundingChunks : [];
-    const webSearchQueries = Array.isArray(gm.webSearchQueries) ? gm.webSearchQueries : [];
-    return { text, groundingChunks, webSearchQueries };
-  } catch (err) {
-    return { error: err?.message || 'Request failed', text: '', groundingChunks: [], webSearchQueries: [] };
-  } finally {
-    clearTimeout(timer);
   }
+  return { error: lastErr || 'Gemini request failed', text: '', groundingChunks: [], webSearchQueries: [] };
 }
 
 export default async function handler(req, res) {
