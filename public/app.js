@@ -7990,6 +7990,8 @@ async function runLiveAeoScan() {
     renderAeoTrendChart();
     if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
 
+    const firstErr = (data.aeo_results || []).find(r => r.error)?.error || '';
+
     if (resEl) {
       resEl.classList.remove('hidden');
       const sovHtml = (data.share_of_voice || []).map(s => `
@@ -8005,20 +8007,25 @@ async function runLiveAeoScan() {
         </div>
         <div class="space-y-2">
           ${(data.aeo_results || []).map(r => `
-            <div class="p-3 rounded-xl bg-white border border-slate-200/80 text-xs space-y-1">
+            <div class="p-3 rounded-xl bg-white border ${r.error ? 'border-rose-200' : 'border-slate-200/80'} text-xs space-y-1">
               <div class="flex items-center justify-between gap-2">
                 <span class="font-semibold text-slate-900">${r.prompt}</span>
-                <span class="tabular-nums font-semibold ${r.primaryCited ? 'text-emerald-600' : r.primaryMentioned ? 'text-amber-600' : 'text-slate-400'}">
-                  ${r.primaryRank ? `#${r.primaryRank} Mention` : 'Not mentioned'} · ${r.citations.length} sources
+                <span class="tabular-nums font-semibold ${r.error ? 'text-rose-600' : r.primaryCited ? 'text-emerald-600' : r.primaryMentioned ? 'text-amber-600' : 'text-slate-400'}">
+                  ${r.error ? 'Error' : `${r.primaryRank ? `#${r.primaryRank} Mention` : 'Not mentioned'} · ${r.citations.length} sources`}
                 </span>
               </div>
+              ${r.error ? `<div class="text-[11px] text-rose-600">${r.error}</div>` : ''}
               ${r.webSearchQueries?.length ? `<div class="text-[10px] text-slate-400">Gemini Search Queries: ${r.webSearchQueries.join(' · ')}</div>` : ''}
             </div>
           `).join('')}
         </div>
       `;
     }
-    if (statusEl) statusEl.textContent = `Completed (${data.aeo_results.length} prompts)`;
+    if (statusEl) statusEl.textContent = firstErr ? `Error: ${firstErr}` : `Completed (${data.aeo_results.length} prompts)`;
+    if (typeof showToast === 'function') {
+      if (firstErr) showToast(firstErr, 'error');
+      else showToast(`AEO scan completed (${data.aeo_results.length} prompts)`, 'success');
+    }
   } catch (err) {
     if (statusEl) statusEl.textContent = err?.message || 'Network error';
   } finally {
