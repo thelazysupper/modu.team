@@ -7904,6 +7904,14 @@ function toggleLiveAeoPanel(force = null) {
     const savedKey = localStorage.getItem('modu_gemini_key') || '';
     const keyInput = document.getElementById('aeo-live-apikey');
     if (keyInput && savedKey && !keyInput.value) keyInput.value = savedKey;
+    const domEl = document.getElementById('aeo-live-domain');
+    if (domEl && !domEl.value.trim()) {
+      const seoDom = (document.getElementById('audit-primary-domain')?.value || '').trim();
+      const snapDom = (typeof getLatestSearchSnapshot === 'function' ? getLatestSearchSnapshot()?.primaryDomain : '') || '';
+      const aeoSnapDom = (typeof aeoReportRuns !== 'undefined' && aeoReportRuns.length ? aeoReportRuns[aeoReportRuns.length - 1]?.primaryDomain : '') || '';
+      const fallbackDom = seoDom || snapDom || aeoSnapDom || (typeof activeTrafficDomain !== 'undefined' ? activeTrafficDomain : '');
+      if (fallbackDom) domEl.value = fallbackDom;
+    }
     if (typeof prefillAeoCompetitors === 'function') prefillAeoCompetitors();
   }
 }
@@ -7946,6 +7954,8 @@ async function runLiveAeoScan() {
     const today = getTodayDateKey();
     const runSnap = {
       dateKey: today,
+      primaryDomain,
+      brandName,
       created_at: data.created_at,
       share_of_voice: data.share_of_voice || [],
       citations_summary: data.citations_summary || { own: 0, competitor: 0, third_party: 0 },
