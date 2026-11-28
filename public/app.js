@@ -8217,7 +8217,7 @@ function aggregateTrafficRowsClient(rows, range) {
   };
 }
 
-async function fetchTrafficForActiveDomain() {
+async function fetchTrafficForActiveDomain(opts = {}) {
   ensureTrafficDomainsInitialized();
   const domain = activeTrafficDomain;
   const range = activeTrafficRange || '30d';
@@ -8258,9 +8258,15 @@ async function fetchTrafficForActiveDomain() {
       if (!document.getElementById('view-traffic')?.classList.contains('hidden')) {
         renderTrafficView({ skipFetch: true });
       }
+      if (opts.manual && typeof showToast === 'function') {
+        showToast(`Traffic refreshed for ${domain}`, 'success');
+      }
     }
   } catch (err) {
     console.warn('Failed to fetch live traffic:', err);
+    if (opts.manual && typeof showToast === 'function') {
+      showToast('Failed to refresh traffic', 'error');
+    }
   } finally {
     if (trafficFetchInFlight === cacheKey) trafficFetchInFlight = null;
   }
@@ -8570,9 +8576,11 @@ async function sendTestTrafficPing(btn) {
     }
     await fetchTrafficForActiveDomain();
     if (btn) btn.textContent = 'Sent!';
+    if (typeof showToast === 'function') showToast(`Test visit recorded for ${activeTrafficDomain}`, 'success');
   } catch (err) {
     console.warn('Test ping failed:', err);
     if (btn) btn.textContent = 'Failed';
+    if (typeof showToast === 'function') showToast('Failed to send test visit', 'error');
   } finally {
     setTimeout(() => {
       if (btn) {
@@ -8607,15 +8615,26 @@ function renderTrafficView(opts = {}) {
     fetchTrafficForActiveDomain();
   }
 
-  const installPanel = document.getElementById('traffic-install-panel');
-  const sqlBox = document.getElementById('traffic-sql-setup-box');
-  if (cached && !cached.hasEvents && installPanel) {
-    installPanel.classList.remove('hidden');
-    const lbl = document.getElementById('traffic-install-domain-label');
-    if (lbl) lbl.textContent = activeTrafficDomain;
-    const codeEl = document.getElementById('traffic-snippet-code');
-    if (codeEl) codeEl.textContent = getTrafficSnippetHtml(activeTrafficDomain);
+  const pillEl = document.getElementById('traffic-status-pill');
+  if (pillEl) {
+    if (!cached) {
+      pillEl.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 hover:bg-slate-200/70 transition-colors';
+      pillEl.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span><span>Checking...</span>';
+    } else if (cached.hasEvents) {
+      pillEl.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/80 hover:bg-emerald-100/70 transition-colors';
+      pillEl.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span>Live</span>';
+    } else {
+      pillEl.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200/80 hover:bg-amber-100/70 transition-colors';
+      pillEl.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span><span>No visits yet · Setup →</span>';
+    }
   }
+
+  const lbl = document.getElementById('traffic-install-domain-label');
+  if (lbl) lbl.textContent = activeTrafficDomain;
+  const codeEl = document.getElementById('traffic-snippet-code');
+  if (codeEl) codeEl.textContent = getTrafficSnippetHtml(activeTrafficDomain);
+
+  const sqlBox = document.getElementById('traffic-sql-setup-box');
   if (sqlBox) {
     sqlBox.classList.toggle('hidden', !(cached && cached.setupRequired));
   }
@@ -11330,6 +11349,82 @@ async function downloadCurrentExportPdf() {
   closeExportPdfModal();
   showExportToast(`Exported PDF (${bg} background)`);
 }
+
+function showToast(message, type = 'success') {
+  const container = document.getElementById('modu-toast-container');
+  if (!container) return;
+  const dotCls = type === 'error' ? 'bg-rose-500' : type === 'info' ? 'bg-blue-500' : 'bg-emerald-500';
+  const el = document.createElement('div');
+  el.className = 'pointer-events-auto flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-white border border-slate-200/90 shadow-lg text-xs font-medium text-slate-900 animate-fade';
+  el.innerHTML = `<span class="w-2 h-2 rounded-full shrink-0 ${dotCls}"></span><span>${String(message || '')}</span>`;
+  container.appendChild(el);
+  setTimeout(() => {
+    el.style.opacity = '0';
+    el.style.transition = 'opacity 180ms ease';
+    setTimeout(() => el.remove(), 200);
+  }, 2800);
+}
+
+function toggleQuickJump(forceState) {
+  const modal = document.getElementById('modu-quick-jump');
+  if (!modal) return;
+  const show = typeof forceState === 'boolean' ? forceState : modal.classList.contains('hidden');
+  modal.classList.toggle('hidden', !show);
+  if (show) {
+    const inp = document.getElementById('modu-quick-jump-input');
+    if (inp) {
+      inp.value = '';
+      inp.focus();
+    }
+    renderQuickJumpResults('');
+  }
+}
+
+function renderQuickJumpResults(query = '') {
+  const list = document.getElementById('modu-quick-jump-list');
+  if (!list) return;
+  const q = String(query || '').trim().toLowerCase();
+  const items = [
+    { label: 'Home', sub: 'Workspace overview', action: () => openHome() },
+    { label: 'Apps Hub', sub: 'All workspace apps', action: () => openHub() },
+    ...apps.filter(a => a.status === 'Active').map(a => ({
+      label: a.title,
+      sub: 'App',
+      action: () => openApp(a.id)
+    })),
+    ...(trafficDomains || []).map(d => ({
+      label: d,
+      sub: 'Traffic domain',
+      action: () => {
+        activeTrafficDomain = d;
+        openApp('traffic');
+      }
+    }))
+  ].filter(it => !q || it.label.toLowerCase().includes(q) || it.sub.toLowerCase().includes(q));
+
+  if (items.length === 0) {
+    list.innerHTML = `<div class="px-3 py-6 text-center text-xs text-slate-400">No matches found</div>`;
+    return;
+  }
+  window.__quickJumpActions = items;
+  list.innerHTML = items.slice(0, 10).map((it, i) => `
+    <button type="button" onclick="window.__quickJumpActions[${i}]?.action(); toggleQuickJump(false)" class="w-full flex items-center justify-between px-3 py-2 rounded-xl text-left hover:bg-slate-100/80 transition-colors">
+      <span class="text-xs font-medium text-slate-900">${it.label}</span>
+      <span class="text-[10px] text-slate-400">${it.sub}</span>
+    </button>
+  `).join('');
+}
+
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    toggleQuickJump();
+  } else if (e.key === 'Escape') {
+    toggleQuickJump(false);
+    if (typeof toggleTrafficInstallPanel === 'function') toggleTrafficInstallPanel(false);
+    if (typeof closeExportPdfModal === 'function') closeExportPdfModal();
+  }
+});
 
 window.addEventListener('DOMContentLoaded', () => {
   const savedYear = readSavedWorkspaceYear();

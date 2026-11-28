@@ -2015,8 +2015,8 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
               <div class="lg:col-span-7 rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-3">
                 <div class="flex items-center justify-between gap-2 pb-2 border-b border-slate-200/70">
                   <h3 class="text-sm font-semibold text-slate-900">Competitor Readiness Comparison</h3>
-                  <div id="audit-compare-legend" class="flex flex-wrap items-center gap-2.5 text-[11px] text-slate-600"></div>
                 </div>
+                <div id="audit-compare-legend" class="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-slate-600"></div>
                 <canvas id="auditCompareCanvas" height="220" class="w-full"></canvas>
               </div>
 
@@ -2041,8 +2041,8 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
             <div class="rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-3">
               <div class="flex items-center justify-between gap-2 pb-2 border-b border-slate-200/70">
                 <h3 class="text-sm font-semibold text-slate-900">Daily Readiness Trend</h3>
-                <div id="audit-trend-legend" class="flex flex-wrap items-center gap-2.5 text-[11px] text-slate-600"></div>
               </div>
+              <div id="audit-trend-legend" class="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-slate-600"></div>
               <canvas id="auditTrendCanvas" height="200" class="w-full"></canvas>
             </div>
           </div>
@@ -2248,10 +2248,10 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
             </div>
 
             <div class="lg:col-span-7 rounded-2xl border border-slate-200/80 bg-white p-5 card-shadow space-y-3">
-              <div class="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200/70">
+              <div class="flex items-center justify-between gap-2 pb-2 border-b border-slate-200/70">
                 <h3 class="text-sm font-semibold text-slate-900">Competitor Visibility</h3>
-                <div id="aeo-trend-legend" class="flex flex-wrap items-center gap-2.5 text-[11px] text-slate-600"></div>
               </div>
+              <div id="aeo-trend-legend" class="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-slate-600"></div>
               <canvas id="aeoCompTrendCanvas" height="220" class="w-full"></canvas>
             </div>
           </div>
@@ -2423,9 +2423,17 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
       <!-- VIEW: TRAFFIC -->
       <section id="view-traffic" class="hidden max-w-6xl mx-auto space-y-6 animate-fade">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80">
-          <div>
-            <h1 class="text-xl font-bold text-slate-900 tracking-tight">Traffic</h1>
-            <p class="text-xs text-slate-500 mt-0.5">Monitor website traffic, channel trends, and page performance across your domains.</p>
+          <div class="flex items-center gap-3 flex-wrap">
+            <div>
+              <div class="flex items-center gap-2.5">
+                <h1 class="text-xl font-bold text-slate-900 tracking-tight">Traffic</h1>
+                <button id="traffic-status-pill" type="button" onclick="toggleTrafficInstallPanel(true)" class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 hover:bg-slate-200/70 transition-colors">
+                  <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                  <span>Checking...</span>
+                </button>
+              </div>
+              <p class="text-xs text-slate-500 mt-0.5">Website traffic, channel trends, and page performance across your domains.</p>
+            </div>
           </div>
           <div class="flex flex-wrap items-center gap-2">
             <div class="relative flex items-center">
@@ -2440,9 +2448,11 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
               <button type="button" onclick="setTrafficRange('90d')" data-range="90d" class="traffic-range-btn px-2.5 py-1 rounded-md text-[11px] font-medium text-slate-500 hover:text-slate-900 transition-colors">90d</button>
               <button type="button" onclick="setTrafficRange('12m')" data-range="12m" class="traffic-range-btn px-2.5 py-1 rounded-md text-[11px] font-medium text-slate-500 hover:text-slate-900 transition-colors">12m</button>
             </div>
-            <button type="button" onclick="toggleTrafficDomainForm()" class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition-colors">+ Domain</button>
-            <button type="button" onclick="fetchTrafficForActiveDomain()" class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition-colors">Refresh</button>
-            <button type="button" onclick="toggleTrafficInstallPanel()" class="h-8 px-3 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-xs font-medium text-white transition-colors">Install Tracker</button>
+            <button type="button" onclick="toggleTrafficDomainForm()" class="h-8 px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition-colors">+ Domain</button>
+            <button type="button" onclick="fetchTrafficForActiveDomain({ manual: true })" title="Refresh traffic data" class="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 transition-colors">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+            </button>
+            <button type="button" onclick="toggleTrafficInstallPanel(true)" class="h-8 px-3 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-xs font-medium text-white transition-colors">Install Tracker</button>
           </div>
         </div>
 
@@ -2459,26 +2469,27 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
           </div>
         </div>
 
-        <!-- Built-in First-Party Tracker Setup Panel -->
-        <div id="traffic-install-panel" class="hidden rounded-2xl border border-slate-200 bg-[#fbfcfd] p-5 space-y-3 animate-fade">
-          <div class="flex items-start justify-between gap-3">
-            <div>
-              <h3 class="text-sm font-semibold text-slate-900">Built-in First-Party Tracker (No External Provider Needed)</h3>
-              <p class="text-[11px] text-slate-500 mt-0.5">Add this 1-line cookie-free script to <code class="px-1 py-0.5 rounded bg-slate-200/60 text-slate-800">&lt;head&gt;</code> on <strong id="traffic-install-domain-label" class="text-slate-800"></strong> to track live visits, AI referrals, top pages, devices, and countries.</p>
+        <!-- Built-in First-Party Tracker Setup Modal -->
+        <div id="traffic-install-panel" onclick="if(event.target===this) toggleTrafficInstallPanel(false)" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-slate-900/35 backdrop-blur-[2px] p-4">
+          <div class="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl space-y-4 animate-fade">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <h3 class="text-sm font-semibold text-slate-900">Built-in First-Party Tracker</h3>
+                <p class="text-xs text-slate-500 mt-0.5">Add this 1-line cookie-free script to <code class="px-1 py-0.5 rounded bg-slate-100 text-slate-800">&lt;head&gt;</code> on <strong id="traffic-install-domain-label" class="text-slate-800"></strong> to track live visits, AI referrals, top pages, devices, and countries.</p>
+              </div>
+              <button type="button" onclick="toggleTrafficInstallPanel(false)" class="w-7 h-7 rounded-lg inline-flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 text-xs">✕</button>
             </div>
-            <button type="button" onclick="toggleTrafficInstallPanel(false)" class="text-slate-400 hover:text-slate-700 text-xs">✕</button>
-          </div>
-          <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-            <code id="traffic-snippet-code" class="flex-1 px-3 py-2 rounded-lg bg-white border border-slate-200 text-[11px] font-mono text-slate-800 overflow-x-auto whitespace-nowrap"></code>
-            <button type="button" onclick="copyTrafficSnippet(this)" class="h-8 px-3.5 rounded-lg bg-[#0f172a] text-white text-xs font-medium hover:bg-slate-800 transition-colors shrink-0">Copy Script</button>
-            <button type="button" onclick="sendTestTrafficPing(this)" class="h-8 px-3.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 text-xs font-medium transition-colors shrink-0">Send Test Visit</button>
-          </div>
-          <div id="traffic-sql-setup-box" class="hidden pt-2 border-t border-slate-200/80 space-y-2">
-            <div class="flex items-center justify-between gap-2">
-              <span class="text-[11px] font-medium text-amber-700">Supabase <code class="font-mono">traffic_events</code> table not detected yet — run this once in Supabase SQL Editor for permanent storage:</span>
-              <button type="button" onclick="copyTrafficSql(this)" class="text-[11px] font-medium text-slate-700 hover:text-slate-900 underline shrink-0">Copy SQL</button>
+            <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <code id="traffic-snippet-code" class="flex-1 px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-[11px] font-mono text-slate-800 overflow-x-auto whitespace-nowrap"></code>
+              <button type="button" onclick="copyTrafficSnippet(this)" class="h-8 px-3.5 rounded-lg bg-[#0f172a] text-white text-xs font-medium hover:bg-slate-800 transition-colors shrink-0">Copy Script</button>
+              <button type="button" onclick="sendTestTrafficPing(this)" class="h-8 px-3.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 text-xs font-medium transition-colors shrink-0">Send Test Visit</button>
             </div>
-            <pre id="traffic-sql-code" class="p-2.5 rounded-lg bg-white border border-slate-200 text-[10px] font-mono text-slate-700 overflow-x-auto">create table if not exists public.traffic_events (
+            <div id="traffic-sql-setup-box" class="hidden pt-3 border-t border-slate-200/80 space-y-2">
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-[11px] font-medium text-amber-700">Optional: If <code class="font-mono">traffic_events</code> isn't in Supabase yet, run this once in SQL Editor:</span>
+                <button type="button" onclick="copyTrafficSql(this)" class="text-[11px] font-medium text-slate-700 hover:text-slate-900 underline shrink-0">Copy SQL</button>
+              </div>
+              <pre id="traffic-sql-code" class="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-[10px] font-mono text-slate-700 overflow-x-auto max-h-40">create table if not exists public.traffic_events (
   id bigserial primary key,
   domain text not null,
   event_type text not null default 'pageview',
@@ -2499,65 +2510,7 @@ drop policy if exists "Allow anon insert traffic" on public.traffic_events;
 create policy "Allow anon insert traffic" on public.traffic_events for insert to anon, authenticated with check (true);
 drop policy if exists "Allow anon select traffic" on public.traffic_events;
 create policy "Allow anon select traffic" on public.traffic_events for select to anon, authenticated using (true);</pre>
-          </div>
-        </div>
-
-        <!-- Inline Edit Traffic Data Panel -->
-        <div id="traffic-data-form-panel" class="hidden rounded-2xl border border-slate-200 bg-[#fbfcfd] p-5 space-y-4 animate-fade">
-          <div class="flex items-center justify-between">
-            <div>
-              <h3 class="text-sm font-semibold text-slate-900">Update Traffic Metrics</h3>
-              <p id="traffic-edit-domain-label" class="text-[11px] text-slate-500 mt-0.5"></p>
             </div>
-            <button type="button" onclick="toggleTrafficDataForm(false)" class="text-slate-400 hover:text-slate-700 text-xs">✕</button>
-          </div>
-          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            <div>
-              <label class="block text-[11px] text-slate-500 mb-1">Direct</label>
-              <input id="tf-ch-direct" type="number" min="0" class="w-full h-8 px-2.5 text-xs rounded-lg border border-slate-200 bg-white tabular-nums" />
-            </div>
-            <div>
-              <label class="block text-[11px] text-slate-500 mb-1">AI Traffic</label>
-              <input id="tf-ch-ai" type="number" min="0" class="w-full h-8 px-2.5 text-xs rounded-lg border border-slate-200 bg-white tabular-nums" />
-            </div>
-            <div>
-              <label class="block text-[11px] text-slate-500 mb-1">Referral</label>
-              <input id="tf-ch-referral" type="number" min="0" class="w-full h-8 px-2.5 text-xs rounded-lg border border-slate-200 bg-white tabular-nums" />
-            </div>
-            <div>
-              <label class="block text-[11px] text-slate-500 mb-1">Paid</label>
-              <input id="tf-ch-paid" type="number" min="0" class="w-full h-8 px-2.5 text-xs rounded-lg border border-slate-200 bg-white tabular-nums" />
-            </div>
-            <div>
-              <label class="block text-[11px] text-slate-500 mb-1">Social</label>
-              <input id="tf-ch-social" type="number" min="0" class="w-full h-8 px-2.5 text-xs rounded-lg border border-slate-200 bg-white tabular-nums" />
-            </div>
-            <div>
-              <label class="block text-[11px] text-slate-500 mb-1">Search</label>
-              <input id="tf-ch-search" type="number" min="0" class="w-full h-8 px-2.5 text-xs rounded-lg border border-slate-200 bg-white tabular-nums" />
-            </div>
-          </div>
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div>
-              <label class="block text-[11px] text-slate-500 mb-1">Unique Visitors</label>
-              <input id="tf-unique" type="number" min="0" class="w-full h-8 px-2.5 text-xs rounded-lg border border-slate-200 bg-white tabular-nums" />
-            </div>
-            <div>
-              <label class="block text-[11px] text-slate-500 mb-1">Avg. Duration (sec)</label>
-              <input id="tf-duration" type="number" min="0" class="w-full h-8 px-2.5 text-xs rounded-lg border border-slate-200 bg-white tabular-nums" />
-            </div>
-            <div>
-              <label class="block text-[11px] text-slate-500 mb-1">Pages / Session</label>
-              <input id="tf-pages-session" type="number" step="0.1" min="1" class="w-full h-8 px-2.5 text-xs rounded-lg border border-slate-200 bg-white tabular-nums" />
-            </div>
-            <div>
-              <label class="block text-[11px] text-slate-500 mb-1">Bounce Rate (%)</label>
-              <input id="tf-bounce" type="number" step="0.1" min="0" max="100" class="w-full h-8 px-2.5 text-xs rounded-lg border border-slate-200 bg-white tabular-nums" />
-            </div>
-          </div>
-          <div class="flex items-center justify-end gap-2">
-            <button type="button" onclick="toggleTrafficDataForm(false)" class="h-8 px-3 rounded-lg border border-slate-200 bg-white text-xs text-slate-600 hover:text-slate-900">Cancel</button>
-            <button type="button" onclick="saveTrafficMetricsFromForm()" class="h-8 px-4 rounded-lg bg-[#0f172a] text-white text-xs font-medium hover:bg-slate-800">Save Metrics</button>
           </div>
         </div>
 
@@ -3453,6 +3406,19 @@ create policy "Allow anon select traffic" on public.traffic_events for select to
   </div>
 
   <div id="export-toast" class="hidden fixed bottom-5 right-5 z-[60] px-4 py-2.5 rounded-xl bg-[#0f172a] text-white text-xs font-medium shadow-lg"></div>
+  <div id="modu-toast-container" class="fixed bottom-5 right-5 z-[70] flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- Global Quick Jump (Cmd/Ctrl+K) -->
+  <div id="modu-quick-jump" onclick="if(event.target===this) toggleQuickJump(false)" class="fixed inset-0 z-[65] hidden flex items-start justify-center pt-24 bg-slate-900/30 backdrop-blur-[2px] p-4">
+    <div class="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden animate-fade">
+      <div class="flex items-center gap-2.5 px-4 py-3 border-b border-slate-100">
+        <svg class="w-4 h-4 text-slate-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="modu-quick-jump-input" type="text" oninput="renderQuickJumpResults(this.value)" placeholder="Jump to app or domain..." class="flex-1 text-xs text-slate-900 placeholder-slate-400 focus:outline-none bg-transparent" />
+        <span class="text-[10px] text-slate-400 border border-slate-200 rounded px-1.5 py-0.5">ESC</span>
+      </div>
+      <div id="modu-quick-jump-list" class="max-h-72 overflow-y-auto p-1.5 space-y-0.5"></div>
+    </div>
+  </div>
 
   <script is:inline set:html={appJs}></script>
 </body>
