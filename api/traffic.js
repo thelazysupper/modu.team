@@ -174,7 +174,9 @@ export default async function handler(req, res) {
   if (!domain) return res.status(400).json({ ok: false, error: 'Missing domain' });
 
   const days = getRangeDays(range);
-  const sinceIso = new Date(Date.now() - days * 86400 * 1000).toISOString();
+  const nowMs = Date.now();
+  const splitIso = new Date(nowMs - days * 86400 * 1000).toISOString();
+  const prevSinceIso = new Date(nowMs - days * 2 * 86400 * 1000).toISOString();
 
   const { url, key } = getSupabaseEnv();
   let rows = [];
@@ -184,7 +186,7 @@ export default async function handler(req, res) {
 
   if (url && key) {
     try {
-      const q = `${url}/rest/v1/traffic_events?domain=eq.${encodeURIComponent(domain)}&created_at=gte.${encodeURIComponent(sinceIso)}&select=event_type,path,title,channel,referrer_host,device,country,visitor_id,session_id,duration_sec,created_at&order=created_at.asc&limit=5000`;
+      const q = `${url}/rest/v1/traffic_events?domain=eq.${encodeURIComponent(domain)}&created_at=gte.${encodeURIComponent(prevSinceIso)}&select=event_type,path,title,channel,referrer_host,device,country,visitor_id,session_id,duration_sec,created_at&order=created_at.asc&limit=5000`;
       const r = await fetch(q, {
         headers: { apikey: key, Authorization: `Bearer ${key}` }
       });
@@ -208,10 +210,19 @@ export default async function handler(req, res) {
 
   if (setupRequired) {
     const mem = globalThis.__moduTrafficMem || [];
-    rows = mem.filter(r => r.domain === domain && r.created_at >= sinceIso);
+    rows = mem.filter(r => r.domain === domain && r.created_at >= prevSinceIso);
   }
 
-  const agg = aggregateTrafficRows(rows, range);
+  const currentRows = rows.filter(r => (r.created_at || '') >= splitIso);
+  const prevRows = rows.filter(r => (r.created_at || '') < splitIso);
+
+  const agg = aggregateTrafficRows(currentRows, range);
+  const prevShifted = prevRows.map(r => ({
+    ...r,
+    created_at: new Date(new Date(r.created_at).getTime() + days * 86400 * 1000).toISOString()
+  }));
+  const prevAgg = aggregateTrafficRows(prevShifted, range);
+
   return res.status(200).json({
     ok: true,
     domain,
@@ -220,6 +231,16 @@ export default async function handler(req, res) {
     setupRequired,
     errorDetail,
     hasEvents: agg.totalVisits > 0,
-    ...agg
+    ...agg,
+    previous: {
+      totalVisits: prevAgg.totalVisits,
+      uniqueVisitors: prevAgg.uniqueVisitors,
+      bounceRate: prevAgg.bounceRate,
+      avgDurationSec: prevAgg.avgDurationSec,
+      aiVisits: prevAgg.channels?.ai || 0,
+      bucketTotals: (prevAgg.trend?.buckets || []).map(b =>
+        (b.direct || 0) + (b.ai || 0) + (b.referral || 0) + (b.paid || 0) + (b.social || 0) + (b.search || 0)
+      )
+    }
   });
 }

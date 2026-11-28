@@ -1739,8 +1739,24 @@ function switchSeoTab(tab = 'overview') {
   if (snap && typeof renderSeoAuditResults === 'function') renderSeoAuditResults(snap);
 }
 
+function syncSearchHubBar(activeTab) {
+  const bar = document.getElementById('search-hub-bar');
+  if (bar) bar.classList.remove('hidden');
+  ['traffic', 'seo-audit', 'aeo-seo', 'competitors'].forEach(t => {
+    const btn = document.getElementById(`sh-hub-tab-${t}`);
+    if (btn) {
+      btn.className = t === activeTab
+        ? 'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors bg-white text-slate-900 shadow-xs'
+        : 'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors text-slate-500 hover:text-slate-900';
+    }
+  });
+}
+
 function switchSearchHubTab(tab = 'aeo-seo') {
+  activeSearchHubTab = tab;
+  if (tab === 'traffic') return openApp('traffic');
   if (tab === 'seo-audit') return openApp('seo-audit');
+  if (tab === 'competitors') return openApp('competitors');
   return openApp('aeo-seo');
 }
 
@@ -1751,6 +1767,7 @@ function openApp(appId) {
 
   if (appId === 'aeo-seo') {
     hideAllViews();
+    syncSearchHubBar('aeo-seo');
     document.getElementById('view-aeo-seo')?.classList.remove('hidden');
     if (typeof prefillAeoCompetitors === 'function') prefillAeoCompetitors();
     renderAeoSeoView();
@@ -1761,6 +1778,7 @@ function openApp(appId) {
   }
   if (appId === 'seo-audit') {
     hideAllViews();
+    syncSearchHubBar('seo-audit');
     document.getElementById('view-seo-audit')?.classList.remove('hidden');
     if (typeof prefillAuditCompetitors === 'function') prefillAuditCompetitors();
     const latestSnap = typeof getLatestSearchSnapshot === 'function' ? getLatestSearchSnapshot() : null;
@@ -1776,6 +1794,7 @@ function openApp(appId) {
   }
   if (appId === 'traffic') {
     hideAllViews();
+    syncSearchHubBar('traffic');
     document.getElementById('view-traffic')?.classList.remove('hidden');
     if (typeof renderTrafficView === 'function') renderTrafficView();
     setActiveNavHighlight('side-app-traffic');
@@ -1801,6 +1820,7 @@ function openApp(appId) {
     renderIntegrationsView();
     syncRouteUrl('/integrations');
   } else if (appId === 'competitors') {
+    syncSearchHubBar('competitors');
     document.getElementById('view-competitors').classList.remove('hidden');
     renderCompetitorsView();
     syncRouteUrl('/competitors');
@@ -6598,6 +6618,7 @@ function renderCompetitorsView() {
               <div class="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 mt-0.5">
                 ${c.positioning ? `<span class="truncate">${c.positioning}</span>` : ''}
                 ${c.website ? `<a href="${c.website}" target="_blank" rel="noopener noreferrer" class="underline underline-offset-2 hover:text-slate-900 shrink-0">${domain || 'Website'} ↗</a>` : ''}
+                ${domain ? `<button type="button" onclick="drillDownCompetitorTo('seo-audit', '${domain}')" class="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200/80 text-[10px] font-medium text-slate-700 transition-colors">SEO →</button><button type="button" onclick="drillDownCompetitorTo('aeo-seo', '${domain}')" class="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200/80 text-[10px] font-medium text-slate-700 transition-colors">AEO →</button>` : ''}
                 ${c.socialUrl ? `<a href="${c.socialUrl}" target="_blank" rel="noopener noreferrer" class="underline underline-offset-2 hover:text-slate-900 shrink-0">${socialDomain || 'Social'} ↗</a>` : ''}
               </div>
             </div>
@@ -6894,11 +6915,15 @@ function renderAeoSeoView() {
       : e.cited === 'Mentioned'
         ? 'bg-[#fef3c7] text-[#b45309]'
         : 'bg-slate-100 text-slate-600';
+    const checked = selectedAeoPromptIds.has(e.id);
     return `
-      <tr class="group hover:bg-slate-50/80 transition-colors">
-        <td class="py-3 px-4 font-semibold text-slate-900">${e.query}</td>
+      <tr class="group hover:bg-slate-50/80 transition-colors ${checked ? 'bg-slate-50/90' : ''}">
+        <td class="py-3 pl-4 pr-2 w-8">
+          <input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleAeoPromptRow(${e.id}, this.checked)" class="rounded border-slate-300 accent-slate-900 cursor-pointer" />
+        </td>
+        <td class="py-3 px-4 font-semibold text-slate-900 cursor-text hover:text-indigo-700" title="Click to edit inline" onclick="startInlineEditAeoPrompt(${e.id}, 'query', this)">${e.query}</td>
         <td class="py-3 px-4">
-          <span class="px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200/70">${e.intent}</span>
+          <button type="button" title="Click to change intent" onclick="startInlineEditAeoPrompt(${e.id}, 'intent', this)" class="px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 hover:bg-slate-200/80 text-slate-600 border border-slate-200/70 transition-colors">${e.intent}</button>
         </td>
         <td class="py-3 px-4">
           <div class="flex items-center gap-2">
@@ -6930,6 +6955,95 @@ function renderAeoSeoView() {
       </tr>
     `;
   }).join('');
+  updateAeoBulkBar();
+}
+
+const selectedAeoPromptIds = new Set();
+
+function updateAeoBulkBar() {
+  const bar = document.getElementById('aeo-bulk-bar');
+  const cnt = document.getElementById('aeo-bulk-count');
+  const allCb = document.getElementById('aeo-select-all-cb');
+  const n = selectedAeoPromptIds.size;
+  if (bar) bar.classList.toggle('hidden', n === 0);
+  if (cnt) cnt.textContent = `${n} selected`;
+  if (allCb) {
+    allCb.checked = aeoSeoEntries.length > 0 && n === aeoSeoEntries.length;
+  }
+}
+
+function toggleAeoPromptRow(id, checked) {
+  if (checked) selectedAeoPromptIds.add(id);
+  else selectedAeoPromptIds.delete(id);
+  updateAeoBulkBar();
+}
+
+function toggleAllAeoPrompts(checked) {
+  selectedAeoPromptIds.clear();
+  if (checked) aeoSeoEntries.forEach(e => selectedAeoPromptIds.add(e.id));
+  renderAeoSeoView();
+}
+
+function clearAeoSelection() {
+  selectedAeoPromptIds.clear();
+  renderAeoSeoView();
+}
+
+function deleteSelectedAeoPrompts() {
+  if (selectedAeoPromptIds.size === 0) return;
+  const count = selectedAeoPromptIds.size;
+  aeoSeoEntries = aeoSeoEntries.filter(e => !selectedAeoPromptIds.has(e.id));
+  selectedAeoPromptIds.clear();
+  renderAeoSeoView();
+  if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+  if (typeof showToast === 'function') showToast(`Deleted ${count} prompt${count === 1 ? '' : 's'}`, 'success');
+}
+
+function startInlineEditAeoPrompt(id, field, el) {
+  if (!el || el.querySelector('input, select')) return;
+  const entry = aeoSeoEntries.find(e => e.id === id);
+  if (!entry) return;
+
+  if (field === 'intent') {
+    const intents = ['Commercial', 'Informational', 'Navigational', 'Transactional'];
+    const curIdx = intents.indexOf(entry.intent);
+    entry.intent = intents[(curIdx + 1) % intents.length];
+    renderAeoSeoView();
+    if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+    if (typeof showToast === 'function') showToast(`Intent updated to ${entry.intent}`, 'info');
+    return;
+  }
+
+  const prev = entry.query || '';
+  const inp = document.createElement('input');
+  inp.type = 'text';
+  inp.value = prev;
+  inp.className = 'w-full h-7 px-2 text-xs font-medium text-slate-900 bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-900/15';
+  inp.onclick = ev => ev.stopPropagation();
+
+  let done = false;
+  const commit = save => {
+    if (done) return;
+    done = true;
+    const next = inp.value.trim();
+    if (save && next && next !== prev) {
+      entry.query = next;
+      if (typeof scheduleWorkspaceSave === 'function') scheduleWorkspaceSave();
+      if (typeof showToast === 'function') showToast('Prompt updated', 'success');
+    }
+    renderAeoSeoView();
+  };
+
+  inp.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter') { ev.preventDefault(); commit(true); }
+    else if (ev.key === 'Escape') { ev.preventDefault(); commit(false); }
+  });
+  inp.addEventListener('blur', () => commit(true));
+
+  el.textContent = '';
+  el.appendChild(inp);
+  inp.focus();
+  inp.select();
 }
 
 const SEARCH_RUNS_STORAGE_KEY = 'modu_search_report_runs_v1';
@@ -7330,6 +7444,7 @@ async function runTechnicalSeoAudit(opts = {}) {
     btn.textContent = 'Auditing...';
   }
   if (statusEl) statusEl.textContent = 'Crawling primary domain & competitors...';
+  document.getElementById('audit-loading-skeleton')?.classList.remove('hidden');
 
   try {
     const resp = await fetch('/api/seo-audit', {
@@ -7345,6 +7460,7 @@ async function runTechnicalSeoAudit(opts = {}) {
     const data = await resp.json();
     if (!resp.ok || !data.ok) {
       if (statusEl) statusEl.textContent = data.error || 'Audit failed';
+      if (typeof showToast === 'function') showToast(data.error || 'SEO audit failed', 'error');
       return;
     }
 
@@ -7368,9 +7484,12 @@ async function runTechnicalSeoAudit(opts = {}) {
     renderSeoAuditResults(snapshot);
     updateAuditDailyBadge(snapshot);
     if (statusEl) statusEl.textContent = `Synced ${snapshot.seo_comparison.length} domain(s) · cached for today`;
+    if (typeof showToast === 'function') showToast(`SEO audit complete (${snapshot.seo_comparison.length} domains)`, 'success');
   } catch (err) {
     if (statusEl) statusEl.textContent = err?.message || 'Network error';
+    if (typeof showToast === 'function') showToast(err?.message || 'SEO audit failed', 'error');
   } finally {
+    document.getElementById('audit-loading-skeleton')?.classList.add('hidden');
     if (btn) {
       btn.disabled = false;
       btn.innerHTML = '<span>Run Live Audit</span>';
@@ -7938,6 +8057,7 @@ async function runLiveAeoScan() {
     btn.textContent = 'Scanning Gemini...';
   }
   if (statusEl) statusEl.textContent = `Running ${prompts.length} prompt(s) with Google Search Grounding...`;
+  document.getElementById('aeo-loading-skeleton')?.classList.remove('hidden');
 
   try {
     const resp = await fetch('/api/aeo-check', {
@@ -8029,6 +8149,7 @@ async function runLiveAeoScan() {
   } catch (err) {
     if (statusEl) statusEl.textContent = err?.message || 'Network error';
   } finally {
+    document.getElementById('aeo-loading-skeleton')?.classList.add('hidden');
     if (btn) {
       btn.disabled = false;
       btn.textContent = 'Run Live AEO Scan';
@@ -8320,7 +8441,45 @@ function buildTrafficTrendSeries(rec, range) {
   return { labels, seriesList };
 }
 
-function drawTrafficChannelTrendChart(canvasId, labels, seriesList) {
+let trafficCompareMode = false;
+
+function toggleTrafficCompare() {
+  trafficCompareMode = !trafficCompareMode;
+  renderTrafficView({ skipFetch: true });
+}
+
+function drillDownTrafficPageToSeo(pagePath) {
+  const dom = activeTrafficDomain || '';
+  const targetUrl = dom ? `${dom}${pagePath === '/' ? '' : pagePath}` : '';
+  openApp('seo-audit');
+  const primEl = document.getElementById('audit-primary-domain');
+  if (primEl && targetUrl) primEl.value = targetUrl;
+  if (typeof showToast === 'function' && targetUrl) {
+    showToast(`Loaded ${targetUrl} in SEO — click Run Live Audit`, 'info');
+  }
+}
+
+function drillDownCompetitorTo(appId, domain) {
+  openApp(appId);
+  const inputId = appId === 'aeo-seo' ? 'aeo-live-competitors' : 'audit-competitor-domains';
+  const el = document.getElementById(inputId);
+  if (el && domain) {
+    const cur = el.value.split(',').map(s => s.trim()).filter(Boolean);
+    if (!cur.some(d => d.toLowerCase() === domain.toLowerCase())) {
+      cur.push(domain);
+      el.value = cur.join(', ');
+    }
+    if (appId === 'aeo-seo') {
+      if (typeof toggleLiveAeoPanel === 'function') toggleLiveAeoPanel(true);
+      if (typeof renderAeoCompetitorChips === 'function') renderAeoCompetitorChips();
+    } else if (typeof renderAuditCompetitorChips === 'function') {
+      renderAuditCompetitorChips();
+    }
+  }
+  if (typeof showToast === 'function') showToast(`Focused ${domain} in ${appId === 'aeo-seo' ? 'AEO' : 'SEO'}`, 'info');
+}
+
+function drawTrafficChannelTrendChart(canvasId, labels, seriesList, prevTotals = null) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
   if (!canvas.dataset.baseHeight) {
@@ -8329,12 +8488,16 @@ function drawTrafficChannelTrendChart(canvasId, labels, seriesList) {
   const baseHeight = Number(canvas.dataset.baseHeight) || 230;
 
   const visibleSeries = seriesList.filter(s => !trafficHiddenChannels.has(s.key));
-  const allVals = visibleSeries.flatMap(s => s.values || []);
+  const hasPrev = trafficCompareMode && Array.isArray(prevTotals) && prevTotals.length > 0;
+  const allVals = [
+    ...visibleSeries.flatMap(s => s.values || []),
+    ...(hasPrev ? prevTotals : [])
+  ];
   const rawMax = Math.max(10, ...allVals);
   const mag = Math.pow(10, Math.floor(Math.log10(rawMax)));
   const niceMax = Math.ceil((rawMax * 1.12) / mag) * mag;
 
-  canvas._trafficMeta = { labels, visibleSeries, maxVal: niceMax, hoverIdx: -1 };
+  canvas._trafficMeta = { labels, visibleSeries, prevTotals: hasPrev ? prevTotals : null, maxVal: niceMax, hoverIdx: -1 };
 
   const renderTrend = (hoverIdx = -1) => {
     const ctx = canvas.getContext('2d');
@@ -8384,6 +8547,25 @@ function drawTrafficChannelTrendChart(canvasId, labels, seriesList) {
       ctx.lineTo(hx, padT + plotH);
       ctx.stroke();
       ctx.setLineDash([]);
+    }
+
+    if (hasPrev) {
+      const prevPts = prevTotals.map((v, i) => ({ x: getX(i), y: getY(v), v }));
+      ctx.save();
+      ctx.strokeStyle = '#94a3b8';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      prevPts.forEach((p, i) => {
+        if (i === 0) ctx.moveTo(p.x, p.y);
+        else {
+          const prev = prevPts[i - 1];
+          const cx = (prev.x + p.x) / 2;
+          ctx.bezierCurveTo(cx, prev.y, cx, p.y, p.x, p.y);
+        }
+      });
+      ctx.stroke();
+      ctx.restore();
     }
 
     visibleSeries.forEach(s => {
@@ -8452,6 +8634,9 @@ function drawTrafficChannelTrendChart(canvasId, labels, seriesList) {
         const v = s.values?.[idx] ?? 0;
         html += `<div class="flex items-center justify-between gap-4"><span style="color:${s.color}">${s.label}</span><span class="tabular-nums font-medium">${formatTrafficCompact(v)}</span></div>`;
       });
+      if (meta.prevTotals) {
+        html += `<div class="flex items-center justify-between gap-4 pt-1 mt-1 border-t border-slate-100 text-slate-500"><span>Previous Period</span><span class="tabular-nums font-medium">${formatTrafficCompact(meta.prevTotals[idx] ?? 0)}</span></div>`;
+      }
       showChartTooltip(e.clientX, e.clientY, html);
     });
     canvas.addEventListener('mouseleave', () => {
@@ -8690,9 +8875,28 @@ function renderTrafficView(opts = {}) {
   const durMin = Math.floor((rec.avgDurationSec || 0) / 60);
   const durSec = String((rec.avgDurationSec || 0) % 60).padStart(2, '0');
 
+  const cmpBtn = document.getElementById('traffic-compare-btn');
+  if (cmpBtn) {
+    cmpBtn.className = trafficCompareMode
+      ? 'h-8 px-2.5 rounded-lg border border-[#0f172a] bg-[#0f172a] text-white text-xs font-medium transition-colors'
+      : 'h-8 px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-600 transition-colors';
+  }
+
   const setTxt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
   setTxt('traffic-kpi-visits', formatTrafficCompact(grandTotal));
-  setTxt('traffic-kpi-visits-delta', cached ? (cached.hasEvents ? 'Live' : 'No visits yet') : 'Loading...');
+  const deltaEl = document.getElementById('traffic-kpi-visits-delta');
+  if (deltaEl) {
+    const prevVisits = rec.previous?.totalVisits;
+    if (cached && typeof prevVisits === 'number' && prevVisits > 0) {
+      const pct = ((grandTotal - prevVisits) / prevVisits) * 100;
+      const sign = pct >= 0 ? '+' : '';
+      deltaEl.textContent = `${sign}${pct.toFixed(1)}% vs prev`;
+      deltaEl.className = `text-[11px] font-semibold tabular-nums ${pct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`;
+    } else {
+      deltaEl.textContent = cached ? (cached.hasEvents ? 'Live' : 'No visits yet') : 'Loading...';
+      deltaEl.className = `text-[11px] font-semibold tabular-nums ${cached?.hasEvents ? 'text-emerald-600' : 'text-slate-400'}`;
+    }
+  }
   setTxt('traffic-kpi-unique', formatTrafficCompact(uniqueTotal));
   setTxt('traffic-kpi-unique-ratio', `${uniqueRatio}% of visits`);
   setTxt('traffic-kpi-duration', `${durMin}m ${durSec}s`);
@@ -8713,7 +8917,7 @@ function renderTrafficView(opts = {}) {
           <span>${ch.label}</span>
         </button>
       `;
-    }).join('');
+    }).join('') + (trafficCompareMode ? `<span class="inline-flex items-center gap-1.5 text-xs font-medium text-slate-400"><span class="w-3 border-t-2 border-dashed border-slate-400"></span>Previous Period</span>` : '');
   }
 
   const barsEl = document.getElementById('traffic-channel-bars');
@@ -8736,7 +8940,7 @@ function renderTrafficView(opts = {}) {
   }
 
   const { labels, seriesList } = buildTrafficTrendSeries(rec, activeTrafficRange);
-  drawTrafficChannelTrendChart('trafficChannelTrendCanvas', labels, seriesList);
+  drawTrafficChannelTrendChart('trafficChannelTrendCanvas', labels, seriesList, rec.previous?.bucketTotals || null);
 
   const pagesBody = document.getElementById('traffic-top-pages-body');
   if (pagesBody) {
@@ -8750,10 +8954,14 @@ function renderTrafficView(opts = {}) {
         const s = String((p.avgSec || 0) % 60).padStart(2, '0');
         const share = grandTotal > 0 ? Math.round(((p.visits || 0) / grandTotal) * 100) : 0;
         const barW = Math.round(((p.visits || 0) / maxP) * 100);
+        const safePath = String(p.path || '/').replace(/'/g, "\\'");
         return `
-          <tr class="hover:bg-slate-50/70 transition-colors">
+          <tr onclick="drillDownTrafficPageToSeo('${safePath}')" title="Click to inspect in SEO" class="group cursor-pointer hover:bg-slate-50/90 transition-colors">
             <td class="py-3 px-4">
-              <div class="font-medium text-slate-900">${p.path}</div>
+              <div class="flex items-center gap-1.5">
+                <span class="font-medium text-slate-900 group-hover:text-indigo-700">${p.path}</span>
+                <span class="opacity-0 group-hover:opacity-100 text-[10px] text-indigo-600 transition-opacity">SEO →</span>
+              </div>
               <div class="text-[11px] text-slate-400">${p.title || ''}</div>
             </td>
             <td class="py-3 px-4 text-right font-semibold text-slate-800 tabular-nums">${formatTrafficCompact(p.visits || 0)}</td>

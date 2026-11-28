@@ -431,6 +431,17 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
         <span class="text-[11px] text-slate-400">Unified Channels, Budget &amp; Performance</span>
       </div>
 
+      <!-- UNIFIED SEARCH & GROWTH HUB BAR -->
+      <div id="search-hub-bar" class="hidden max-w-6xl mx-auto mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div class="inline-flex items-center gap-1 p-1 rounded-xl bg-slate-100 border border-slate-200/70">
+          <button type="button" id="sh-hub-tab-traffic" onclick="switchSearchHubTab('traffic')" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors text-slate-500 hover:text-slate-900">Traffic</button>
+          <button type="button" id="sh-hub-tab-seo-audit" onclick="switchSearchHubTab('seo-audit')" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors text-slate-500 hover:text-slate-900">SEO</button>
+          <button type="button" id="sh-hub-tab-aeo-seo" onclick="switchSearchHubTab('aeo-seo')" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors bg-white text-slate-900 shadow-xs">AEO</button>
+          <button type="button" id="sh-hub-tab-competitors" onclick="switchSearchHubTab('competitors')" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors text-slate-500 hover:text-slate-900">Competitors</button>
+        </div>
+        <span class="text-[11px] text-slate-400">Unified Traffic, SEO, AEO &amp; Competitors</span>
+      </div>
+
       <!-- VIEW 2: CHANNELS APP -->
       <section id="view-channels" class="hidden max-w-6xl mx-auto space-y-6 animate-fade">
         <div class="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-200/80">
@@ -1988,6 +1999,19 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
           </div>
         </div>
 
+        <div id="audit-loading-skeleton" class="hidden space-y-5 animate-pulse">
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <div class="h-24 rounded-2xl bg-slate-100 border border-slate-200/60"></div>
+            <div class="h-24 rounded-2xl bg-slate-100 border border-slate-200/60"></div>
+            <div class="h-24 rounded-2xl bg-slate-100 border border-slate-200/60"></div>
+            <div class="h-24 rounded-2xl bg-slate-100 border border-slate-200/60"></div>
+          </div>
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+            <div class="lg:col-span-7 h-72 rounded-2xl bg-slate-100 border border-slate-200/60"></div>
+            <div class="lg:col-span-5 h-72 rounded-2xl bg-slate-100 border border-slate-200/60"></div>
+          </div>
+        </div>
+
         <div id="audit-results-container" class="hidden space-y-6">
           <!-- SEO TAB 1: OVERVIEW -->
           <div id="seo-tab-panel-overview" class="space-y-5">
@@ -2182,6 +2206,15 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
             <span id="aeo-live-status" class="text-[11px] text-slate-500"></span>
             <button type="button" id="aeo-live-run-btn" onclick="runLiveAeoScan()" class="h-8 px-4 rounded-lg bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-medium">Run Live AEO Scan</button>
           </div>
+          <div id="aeo-loading-skeleton" class="hidden space-y-2.5 pt-2 border-t border-slate-200/70 animate-pulse">
+            <div class="flex gap-2">
+              <div class="h-6 w-28 rounded-full bg-slate-200/70"></div>
+              <div class="h-6 w-28 rounded-full bg-slate-200/70"></div>
+              <div class="h-6 w-24 rounded-full bg-slate-200/70"></div>
+            </div>
+            <div class="h-14 rounded-xl bg-slate-100 border border-slate-200/60"></div>
+            <div class="h-14 rounded-xl bg-slate-100 border border-slate-200/60"></div>
+          </div>
           <div id="aeo-live-results" class="hidden space-y-3 pt-2 border-t border-slate-200/70"></div>
         </div>
 
@@ -2339,11 +2372,19 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
           </div>
 
           <div id="aeo-seo-table-wrapper" class="hidden rounded-2xl border border-slate-200/80 bg-white overflow-hidden card-shadow">
+            <div id="aeo-bulk-bar" class="hidden px-4 py-2 bg-slate-50 border-b border-slate-200/80 flex items-center justify-between gap-3 text-xs">
+              <span id="aeo-bulk-count" class="font-medium text-slate-700">0 selected</span>
+              <div class="flex items-center gap-2">
+                <button type="button" onclick="clearAeoSelection()" class="text-slate-500 hover:text-slate-900 text-[11px]">Clear</button>
+                <button type="button" onclick="deleteSelectedAeoPrompts()" class="h-7 px-2.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-medium">Delete Selected</button>
+              </div>
+            </div>
             <div class="overflow-x-auto">
               <table class="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr class="border-b border-slate-200/80 bg-[#fbfcfd] text-slate-500">
-                    <th class="py-3 px-4 font-medium">Prompt</th>
+                    <th class="py-3 pl-4 pr-2 w-8"><input id="aeo-select-all-cb" type="checkbox" onchange="toggleAllAeoPrompts(this.checked)" class="rounded border-slate-300 accent-slate-900 cursor-pointer" /></th>
+                    <th class="py-3 px-4 font-medium">Prompt <span class="text-[10px] font-normal text-slate-400">(click to edit)</span></th>
                     <th class="py-3 px-4 font-medium">Intent</th>
                     <th class="py-3 px-4 font-medium">AEO Visibility</th>
                     <th class="py-3 px-4 font-medium">SEO Visibility</th>
@@ -2451,6 +2492,7 @@ const supabaseConfigScript = `window.__MODU_SUPABASE__ = ${JSON.stringify({ url:
               <button type="button" onclick="setTrafficRange('90d')" data-range="90d" class="traffic-range-btn px-2.5 py-1 rounded-md text-[11px] font-medium text-slate-500 hover:text-slate-900 transition-colors">90d</button>
               <button type="button" onclick="setTrafficRange('12m')" data-range="12m" class="traffic-range-btn px-2.5 py-1 rounded-md text-[11px] font-medium text-slate-500 hover:text-slate-900 transition-colors">12m</button>
             </div>
+            <button id="traffic-compare-btn" type="button" onclick="toggleTrafficCompare()" class="h-8 px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-600 transition-colors">Compare</button>
             <button type="button" onclick="toggleTrafficDomainForm()" class="h-8 px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition-colors">+ Domain</button>
             <button type="button" onclick="fetchTrafficForActiveDomain({ manual: true })" title="Refresh traffic data" class="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 transition-colors">
               <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
